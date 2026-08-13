@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-08-14
+
+- Verified the five core AI analytical tools together on `УФ 005Б` for a 30-day period: `OZON Analytics`, `OZON Regional Analytics`, `OZON Price History`, `OZON Returns Analytics`, and `OZON Stock History`.
+- Confirmed that regional profit reconciles with the overall product profit returned by `OZON Analytics`.
+- Resolved tool integration issues involving duplicate `offer_id` definitions, SQL quoting/type handling, and the `days` argument type.
+- Identified a remaining correctness issue in the legacy `Tool — Анализ проблем товаров`: its `orders_count`, `avg_profit`, and `commission_rate` do not match the verified financial source of truth.
+- Established `OZON Analytics` as the source of truth for product financial metrics: `profit`, `profit_per_unit`, `revenue`, `commission`, `logistics`, `payout`, and `cost`.
+- Defined the next work session: fix only the legacy problem-analysis tool, retest, and audit the AI response before adding new analytical layers.
+
 ## 2026-08-13
 
 - Established GitHub repository as the project source-control layer.
