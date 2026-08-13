@@ -40,3 +40,14 @@ Phase A is the established working baseline. The next development work should ex
 - Financial rows without positive `accruals_for_sale` are excluded from regional sales analysis.
 - Verified end-to-end through `OZON AI Analyst`: the agent correctly called `OZON Regional Analytics` and returned the top five regions for `УФ 005Б` by logistics per unit together with profit per unit.
 - Current regional analytics implementation is considered `v1` and should be extended without duplicating the existing analytics tool architecture.
+
+### Price history — OZON AI Analyst
+
+- Added `OZON Price History` as a dedicated Postgres AI Tool connected to `OZON AI Analyst`.
+- Uses the existing `ozon_price_history` table and does not introduce a new storage layer or duplicate the existing price-history workflow.
+- Supports `offer_id` filtering and a configurable analysis period through the `days` parameter; `ALL` is supported for cross-product analysis.
+- Returns observations, number of price changes, minimum, maximum and average price, first and current price, absolute and percentage price change, and the latest observation timestamp.
+- The tool calculates the first/current price from the ordered history and aggregates the result before returning it to the AI Analyst.
+- Verified directly for `УФ 005Б` over 30 days: 15 observations, 1 price change, minimum 667 ₽, maximum 901 ₽, average 791.80 ₽, current 667 ₽, first 901 ₽, total change −234 ₽ / −25.97%.
+- Verified end-to-end through `OZON AI Analyst`: the agent correctly called `OZON Price History` and returned the same price-history metrics.
+- Current price-history analytics implementation is considered `v1` and should be extended without duplicating the existing tool architecture.
