@@ -404,14 +404,14 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT\n    table_name,\n    view_definition\nFROM information_schema.views\nWHERE table_schema = 'public'\n  AND table_name LIKE '%region%'\nORDER BY table_name;",
+        "query": "SELECT\n    posting_key,\n    offer_id,\n    cost_price,\n    payout,\n    profit\nFROM vw_orders_profit\nWHERE posting_key IN (\n    '95451725-0233',\n    '37574836-0207',\n    '32400735-0154',\n    '05547577-2118'\n)\nORDER BY posting_key;",
         "options": {}
       },
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.7,
       "position": [
-        -2608,
-        912
+        -2464,
+        640
       ],
       "id": "4887cf84-5218-4fdb-9f66-da17ede57121",
       "name": "Execute a SQL query",
@@ -1797,8 +1797,8 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.7,
       "position": [
-        -2608,
-        1136
+        -2464,
+        864
       ],
       "id": "0d007ee7-fee1-461d-8fa1-1374ac89d073",
       "name": "Execute a SQL query1",
@@ -1818,8 +1818,8 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.7,
       "position": [
-        -2608,
-        1360
+        -2464,
+        1088
       ],
       "id": "4456cb0c-decf-4c51-86c5-c29bb5997082",
       "name": "Execute a SQL query2",
@@ -1839,8 +1839,8 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.7,
       "position": [
-        -2608,
-        1584
+        -2464,
+        1312
       ],
       "id": "f5bd8b3f-5ec6-4391-a901-ac96cddba8ae",
       "name": "Execute a SQL query3",
@@ -1860,8 +1860,8 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.7,
       "position": [
-        -2288,
-        912
+        -2144,
+        640
       ],
       "id": "ba94c4d7-0be1-4e77-9dcd-1106eb9f9f83",
       "name": "Execute a SQL query4",
@@ -1881,8 +1881,8 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.7,
       "position": [
-        -2288,
-        1136
+        -2144,
+        864
       ],
       "id": "83f06f73-b603-4466-9db6-c7a044efe119",
       "name": "Execute a SQL query5",
@@ -1902,8 +1902,8 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.7,
       "position": [
-        -2288,
-        1360
+        -2144,
+        1088
       ],
       "id": "f73b124f-826a-4744-8d78-e8ed44ba6628",
       "name": "Execute a SQL query6",
@@ -1923,8 +1923,8 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.7,
       "position": [
-        -2608,
-        688
+        -1712,
+        736
       ],
       "id": "9c5ccdf0-1c6a-4ba5-a621-8b115307fca4",
       "name": "Get Product Alerts",
@@ -1942,8 +1942,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -2384,
-        688
+        -1488,
+        736
       ],
       "id": "045e496e-d67e-466f-93b9-d3c720203ed1",
       "name": "Decision Engine"
@@ -2049,8 +2049,8 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.7,
       "position": [
-        -2160,
-        688
+        -1264,
+        736
       ],
       "id": "78f452d4-ad13-4ed1-b0c9-a75407a27351",
       "name": "Get Product Alerts Report",
@@ -2179,8 +2179,8 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.7,
       "position": [
-        -2288,
-        1584
+        -2144,
+        1312
       ],
       "id": "30f98b85-a768-4f42-88f5-cd380ef7986c",
       "name": "Execute a SQL query7",
@@ -2200,8 +2200,8 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.7,
       "position": [
-        -2288,
-        1808
+        -2144,
+        1536
       ],
       "id": "2cc11dc7-1b73-4614-a02f-22ce9a0aadcc",
       "name": "Execute a SQL query8",
@@ -2766,7 +2766,7 @@
     "binaryMode": "separate",
     "availableInMCP": false
   },
-  "versionId": "fa06d9c0-3114-483c-af39-713ae752d933",
+  "versionId": "b14b92f4-1637-45e4-9abd-3ce97231316d",
   "meta": {
     "instanceId": "a1c5b8ae00ab65096f4efdfde15addf3de4578210e14dece35559089eaaed06d"
   },
