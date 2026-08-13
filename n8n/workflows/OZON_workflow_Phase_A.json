@@ -1,5 +1,5 @@
 {
-  "name": "OZON workflow",
+  "name": "OZON workflow - Phase A - GitHub baseline",
   "nodes": [
     {
       "parameters": {},
@@ -7,25 +7,23 @@
       "typeVersion": 1,
       "position": [
         -2608,
-        272
+        368
       ],
-      "id": "2f48a8cb-f6f0-4189-894f-ca57322a7044",
+      "id": "888d6e91-5fb3-4764-951a-60a867a1bf17",
       "name": "When clicking ‘Execute workflow’"
     },
     {
       "parameters": {
         "method": "POST",
         "url": "https://api-seller.ozon.ru/v3/product/list",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
               "name": "Client-Id",
               "value": "4767584"
-            },
-            {
-              "name": "Api-Key",
-              "value": "__OZON_API_KEY__"
             },
             {
               "name": "Content-Type",
@@ -41,26 +39,30 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        -2400,
-        272
+        -2384,
+        368
       ],
-      "id": "467f97bb-5658-4559-b0ed-62c7ba7b39fe",
-      "name": "Get Products"
+      "id": "3713f44a-d5e6-4e8f-b093-b9f9cf606f0e",
+      "name": "Get Products",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "VKCN9mlqrD9VzcmL",
+          "name": "Header Auth account"
+        }
+      }
     },
     {
       "parameters": {
         "method": "POST",
         "url": "https://api-seller.ozon.ru/v3/product/info/list",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
               "name": "Client-Id",
               "value": "4767584"
-            },
-            {
-              "name": "Api-Key",
-              "value": "__OZON_API_KEY__"
             },
             {
               "name": "Content-Type",
@@ -76,11 +78,17 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        -2192,
-        272
+        -2160,
+        368
       ],
-      "id": "7bce9e8d-e548-4f2f-bd03-090fcde0f8e6",
-      "name": "Get Product Info"
+      "id": "5ae069ee-39e3-4f2b-b714-a3ce6cd25805",
+      "name": "Get Product Info",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "VKCN9mlqrD9VzcmL",
+          "name": "Header Auth account"
+        }
+      }
     },
     {
       "parameters": {
@@ -89,10 +97,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -1984,
-        272
+        -1936,
+        368
       ],
-      "id": "5e0ca6df-370e-421e-a965-10dfd783c65a",
+      "id": "56797fbe-66ac-451c-a8d9-b4b324bad212",
       "name": "Prepare Products"
     },
     {
@@ -104,10 +112,10 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.7,
       "position": [
-        -2432,
-        976
+        -992,
+        1472
       ],
-      "id": "a11ea5a9-8456-4d7e-a5fc-b87cdbbbaea8",
+      "id": "bccb6412-b786-4cd4-aa33-8e633595f022",
       "name": "Upsert Products",
       "credentials": {
         "postgres": {
@@ -381,10 +389,10 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.7,
       "position": [
-        -1760,
-        272
+        -1712,
+        368
       ],
-      "id": "b8b6dd06-7d49-48bf-a317-63ebd75a64a3",
+      "id": "e16858e2-64c5-40f4-8148-59a18207da18",
       "name": "Save Products",
       "credentials": {
         "postgres": {
@@ -402,10 +410,10 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.7,
       "position": [
-        -1728,
-        608
+        -2608,
+        912
       ],
-      "id": "9e1b5072-9790-4873-beb1-b8acfdf27a36",
+      "id": "4887cf84-5218-4fdb-9f66-da17ede57121",
       "name": "Execute a SQL query",
       "credentials": {
         "postgres": {
@@ -423,10 +431,10 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.7,
       "position": [
-        -2208,
-        976
+        -992,
+        1696
       ],
-      "id": "27efcacb-d947-4c13-a10b-29bbff74b5cb",
+      "id": "fdb45b49-5efa-4168-8f16-8cbf4f6c8d2a",
       "name": "Verify Products",
       "credentials": {
         "postgres": {
@@ -440,16 +448,14 @@
       "parameters": {
         "method": "POST",
         "url": "https://api-seller.ozon.ru/v4/product/info/stocks",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
               "name": "Client-Id",
               "value": "4767584"
-            },
-            {
-              "name": "Api-Key",
-              "value": "__OZON_API_KEY__"
             }
           ]
         },
@@ -461,11 +467,17 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        -1552,
-        272
+        -1488,
+        368
       ],
-      "id": "3147bcc2-57c9-49ec-a12e-3538a9c96875",
-      "name": "Get Stocks"
+      "id": "5773dd94-501c-4fd7-a2c1-1925b40a4529",
+      "name": "Get Stocks",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "VKCN9mlqrD9VzcmL",
+          "name": "Header Auth account"
+        }
+      }
     },
     {
       "parameters": {
@@ -474,26 +486,24 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -1344,
-        272
+        -1264,
+        368
       ],
-      "id": "1621d821-e25b-4783-961f-b64a9b759477",
+      "id": "0edb21e5-5eb8-4b4b-934e-d441ea1a7710",
       "name": "Prepare Stocks"
     },
     {
       "parameters": {
         "method": "POST",
         "url": "https://api-seller.ozon.ru/v3/finance/transaction/list",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
               "name": "Client-Id",
               "value": "4767584"
-            },
-            {
-              "name": "Api-Key",
-              "value": "__OZON_API_KEY__"
             }
           ]
         },
@@ -505,12 +515,18 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        -752,
-        272
+        -592,
+        368
       ],
-      "id": "49b465c9-63c7-41ac-a12c-86a882dda064",
+      "id": "8fd07d91-1b61-40e4-a844-0cbad45777e5",
       "name": "Get Financial Operations",
-      "executeOnce": true
+      "executeOnce": true,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "VKCN9mlqrD9VzcmL",
+          "name": "Header Auth account"
+        }
+      }
     },
     {
       "parameters": {
@@ -519,26 +535,24 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -544,
-        272
+        -368,
+        368
       ],
-      "id": "e3ae65cb-e4a3-4a94-8971-bb8cd612cea6",
+      "id": "88934202-237f-4f6d-9e2a-599440dbaacb",
       "name": "Prepare Financial Operations"
     },
     {
       "parameters": {
         "method": "POST",
         "url": "https://api-seller.ozon.ru/v3/posting/fbs/list",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
               "name": "Client-Id",
               "value": "4767584"
-            },
-            {
-              "name": "Api-Key",
-              "value": "__OZON_API_KEY__"
             }
           ]
         },
@@ -550,12 +564,18 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        -128,
-        272
+        80,
+        368
       ],
-      "id": "3be8c37b-3626-41f1-9fa0-bcbdfa65e6e9",
+      "id": "ebda3940-b33f-469b-96bd-545a87b99abb",
       "name": "Get Postings",
-      "executeOnce": true
+      "executeOnce": true,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "VKCN9mlqrD9VzcmL",
+          "name": "Header Auth account"
+        }
+      }
     },
     {
       "parameters": {
@@ -564,10 +584,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        496,
+        304,
         272
       ],
-      "id": "bfeaffc9-84bf-45ae-9f7e-979e548ed984",
+      "id": "d2d3d606-7379-4919-ba25-30a7472edda4",
       "name": "Prepare Postings"
     },
     {
@@ -580,7 +600,7 @@
         80
       ],
       "typeVersion": 1,
-      "id": "bc93ae9f-3e28-4cb4-8e12-e1bcce9a74e1",
+      "id": "02c42ab5-ffde-4a2d-baad-ef81f3541fd8",
       "name": "Sticky Note"
     },
     {
@@ -593,7 +613,7 @@
         80
       ],
       "typeVersion": 1,
-      "id": "26c1b6c2-5e1b-410a-b8a0-33703ab1ad08",
+      "id": "527e349c-a8ab-499a-9dcb-1cd3c9a61c43",
       "name": "Sticky Note1"
     },
     {
@@ -606,7 +626,7 @@
         80
       ],
       "typeVersion": 1,
-      "id": "f22bb590-ca78-4799-8eaf-cf94be8ba405",
+      "id": "fbbf4fd5-8e0d-43a7-9793-10cadb9acaea",
       "name": "Sticky Note2"
     },
     {
@@ -620,7 +640,7 @@
         0
       ],
       "typeVersion": 1,
-      "id": "acdf73b1-6777-4237-bf31-c330ff1c8574",
+      "id": "e204f3ac-4f1f-4f36-a618-99c076604f5f",
       "name": "Sticky Note3"
     },
     {
@@ -757,10 +777,10 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.7,
       "position": [
-        704,
+        528,
         272
       ],
-      "id": "772cdf52-9204-45dc-bc34-00f84ffed1b2",
+      "id": "e1d693a6-229d-4aac-b4ce-8f1b6ec445cb",
       "name": "Save Postings",
       "credentials": {
         "postgres": {
@@ -776,10 +796,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1120,
+        976,
         272
       ],
-      "id": "c667b0c0-fa94-450f-a862-354a912a3eed",
+      "id": "2e30486e-56b6-4b9f-ae60-4781c00288bb",
       "name": "Prepare Price History"
     },
     {
@@ -911,10 +931,10 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.7,
       "position": [
-        1328,
+        1200,
         272
       ],
-      "id": "1b9569f3-dd13-4e5f-8ee6-501ad6418690",
+      "id": "2d1e2243-c530-421f-973d-61c7a232b51a",
       "name": "Save Price History",
       "credentials": {
         "postgres": {
@@ -1138,10 +1158,10 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.7,
       "position": [
-        -336,
-        272
+        -144,
+        368
       ],
-      "id": "e1f66519-63c8-45d1-97c2-a47f9dfc518a",
+      "id": "2ac06ddd-1ae8-42ec-a9fd-c46f2844bad4",
       "name": "Save Finance Operations",
       "credentials": {
         "postgres": {
@@ -1454,10 +1474,10 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.7,
       "position": [
-        -1136,
-        272
+        -1040,
+        368
       ],
-      "id": "d3b48938-257a-4063-8c03-b699d6aeb966",
+      "id": "a3f6898e-ffef-4956-9f29-fa7dd688d3a4",
       "name": "Save Stocks",
       "credentials": {
         "postgres": {
@@ -1476,23 +1496,21 @@
         80
       ],
       "typeVersion": 1,
-      "id": "c00df5fd-32d2-42cb-bd55-bf2a97d540f3",
+      "id": "7de241ec-1a01-4b8f-9f8b-23bbe56c20b5",
       "name": "Sticky Note4"
     },
     {
       "parameters": {
         "method": "POST",
         "url": "https://api-seller.ozon.ru/v1/returns/list",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
               "name": "Client-Id",
               "value": "4767584"
-            },
-            {
-              "name": "Api-Key",
-              "value": "__OZON_API_KEY__"
             }
           ]
         },
@@ -1504,11 +1522,17 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        1536,
+        1424,
         272
       ],
-      "id": "093ced61-26d6-46f7-8bc9-853476ce2b99",
-      "name": "Get Returns"
+      "id": "c1d3137d-650d-4594-98b6-520140be7e25",
+      "name": "Get Returns",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "VKCN9mlqrD9VzcmL",
+          "name": "Header Auth account"
+        }
+      }
     },
     {
       "parameters": {
@@ -1517,10 +1541,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1744,
+        1648,
         272
       ],
-      "id": "30dd4bc6-01b6-45da-9948-7585b3af5b0d",
+      "id": "fa391857-7f21-45f4-9558-46e10aa45464",
       "name": "Prepare Returns"
     },
     {
@@ -1752,10 +1776,10 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.7,
       "position": [
-        1952,
+        1872,
         272
       ],
-      "id": "b0bc0625-95d4-4f13-a6c6-2d02e76d066a",
+      "id": "ca1607fe-6353-49b6-a249-12f807e9e26c",
       "name": "Save Returns",
       "credentials": {
         "postgres": {
@@ -1773,10 +1797,10 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.7,
       "position": [
-        -1488,
-        608
+        -2608,
+        1136
       ],
-      "id": "699a8a0f-515c-49ca-b0f6-a67ee565bfd8",
+      "id": "0d007ee7-fee1-461d-8fa1-1374ac89d073",
       "name": "Execute a SQL query1",
       "credentials": {
         "postgres": {
@@ -1794,10 +1818,10 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.7,
       "position": [
-        -1248,
-        608
+        -2608,
+        1360
       ],
-      "id": "63a7871f-d1d0-41d8-abe1-c175c08193f6",
+      "id": "4456cb0c-decf-4c51-86c5-c29bb5997082",
       "name": "Execute a SQL query2",
       "credentials": {
         "postgres": {
@@ -1815,10 +1839,10 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.7,
       "position": [
-        -1008,
-        608
+        -2608,
+        1584
       ],
-      "id": "54a19677-edcf-4d65-89e6-a2d64d13b1a3",
+      "id": "f5bd8b3f-5ec6-4391-a901-ac96cddba8ae",
       "name": "Execute a SQL query3",
       "credentials": {
         "postgres": {
@@ -1836,10 +1860,10 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.7,
       "position": [
-        -784,
-        608
+        -2288,
+        912
       ],
-      "id": "1c508a10-fd5c-479d-adee-9dc790369537",
+      "id": "ba94c4d7-0be1-4e77-9dcd-1106eb9f9f83",
       "name": "Execute a SQL query4",
       "credentials": {
         "postgres": {
@@ -1857,10 +1881,10 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.7,
       "position": [
-        -544,
-        608
+        -2288,
+        1136
       ],
-      "id": "9451d550-9552-4c92-aee2-a659c80e2d6e",
+      "id": "83f06f73-b603-4466-9db6-c7a044efe119",
       "name": "Execute a SQL query5",
       "credentials": {
         "postgres": {
@@ -1878,10 +1902,10 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.7,
       "position": [
-        -320,
-        608
+        -2288,
+        1360
       ],
-      "id": "e19a48d7-d173-45b0-b462-be1311b40cb5",
+      "id": "f73b124f-826a-4744-8d78-e8ed44ba6628",
       "name": "Execute a SQL query6",
       "credentials": {
         "postgres": {
@@ -1899,10 +1923,10 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.7,
       "position": [
-        1104,
-        592
+        -2608,
+        688
       ],
-      "id": "dbdbe4e7-0855-439a-9269-42d8f6a64922",
+      "id": "9c5ccdf0-1c6a-4ba5-a621-8b115307fca4",
       "name": "Get Product Alerts",
       "credentials": {
         "postgres": {
@@ -1918,10 +1942,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1312,
-        592
+        -2384,
+        688
       ],
-      "id": "8f1bfcd7-16e0-4fb3-8f8d-25251586ff7e",
+      "id": "045e496e-d67e-466f-93b9-d3c720203ed1",
       "name": "Decision Engine"
     },
     {
@@ -1931,10 +1955,10 @@
       "type": "@n8n/n8n-nodes-langchain.chatTrigger",
       "typeVersion": 1.4,
       "position": [
-        1920,
-        608
+        -976,
+        736
       ],
-      "id": "c1a6aef3-9734-43d4-8606-4aac17936ba5",
+      "id": "3f8c2543-e438-48e4-aa58-2c508b9afff4",
       "name": "When chat message received",
       "webhookId": "78a835f6-1409-447f-8875-b2cbc50c687d"
     },
@@ -1945,10 +1969,10 @@
       "type": "@n8n/n8n-nodes-langchain.chainLlm",
       "typeVersion": 1.9,
       "position": [
-        -1984,
-        976
+        -992,
+        1920
       ],
-      "id": "f79b51f9-6762-49c8-a775-a3776138990d",
+      "id": "73e8884a-5744-4c06-9149-7ad72fd7addf",
       "name": "Basic LLM Chain",
       "disabled": true
     },
@@ -1965,10 +1989,10 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
       "typeVersion": 1.5,
       "position": [
-        -1616,
-        976
+        -976,
+        2160
       ],
-      "id": "db4bdd68-65f9-4d0e-9dc4-3f9b52091c02",
+      "id": "65bcdb57-a08c-44b8-8e93-e96d57d7cd9c",
       "name": "Claude Analyst",
       "credentials": {
         "anthropicApi": {
@@ -1987,10 +2011,10 @@
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 3.1,
       "position": [
-        2144,
-        608
+        -688,
+        736
       ],
-      "id": "aa2c0efb-8018-4c4e-a2d6-73a3e5ad9ed5",
+      "id": "b59ee8f7-f4ee-4548-87be-1b1ff2ab86b9",
       "name": "OZON AI Analyst"
     },
     {
@@ -2004,10 +2028,10 @@
       "type": "n8n-nodes-base.postgresTool",
       "typeVersion": 2.7,
       "position": [
-        2528,
-        848
+        -624,
+        944
       ],
-      "id": "5fd60c4f-7753-4a7c-9f00-1b2fdf4b1be7",
+      "id": "801408a2-e7dc-412c-9fcd-69032008c4d2",
       "name": "Tool — Анализ проблем товаров",
       "credentials": {
         "postgres": {
@@ -2025,10 +2049,10 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.7,
       "position": [
-        1520,
-        592
+        -2160,
+        688
       ],
-      "id": "48a08a98-f575-4928-acf2-6ba134ac0d29",
+      "id": "78f452d4-ad13-4ed1-b0c9-a75407a27351",
       "name": "Get Product Alerts Report",
       "executeOnce": true,
       "credentials": {
@@ -2042,16 +2066,14 @@
       "parameters": {
         "method": "POST",
         "url": "https://api-seller.ozon.ru/v5/product/info/prices",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
               "name": "Client-Id",
               "value": "4767584"
-            },
-            {
-              "name": "Api-Key",
-              "value": "__OZON_API_KEY__"
             }
           ]
         },
@@ -2063,12 +2085,18 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        912,
+        752,
         272
       ],
-      "id": "e4607b99-68f3-4212-b370-466f7ae26399",
+      "id": "1e5c4031-d942-40fe-83f2-a08a34cb6ef8",
       "name": "Get Current Prices",
-      "executeOnce": true
+      "executeOnce": true,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "VKCN9mlqrD9VzcmL",
+          "name": "Header Auth account"
+        }
+      }
     },
     {
       "parameters": {
@@ -2079,10 +2107,10 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.7,
       "position": [
-        2176,
+        2096,
         272
       ],
-      "id": "f19dcc44-4293-4162-b3ca-72c13debe80f",
+      "id": "d0b8e8fc-5f3b-4aa5-bac2-e6d03d8c6d19",
       "name": "Get Sales Returns Analysis",
       "executeOnce": true,
       "credentials": {
@@ -2105,10 +2133,10 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
       "typeVersion": 1.3,
       "position": [
-        2144,
-        864
+        -752,
+        944
       ],
-      "id": "a707b0e4-504a-4124-991c-96f8b6d10ec5",
+      "id": "eacb92aa-f4fc-465e-b8eb-a01ec76219c1",
       "name": "OpenAI Chat Model",
       "credentials": {
         "openAiApi": {
@@ -2130,10 +2158,10 @@
       "type": "n8n-nodes-base.postgresTool",
       "typeVersion": 2.7,
       "position": [
-        2336,
-        848
+        -496,
+        944
       ],
-      "id": "7dd5c837-ef0c-4693-96f6-549b2cabf454",
+      "id": "1bb870f9-317f-4874-acc9-cef415f555b9",
       "name": "OZON Analytics",
       "credentials": {
         "postgres": {
@@ -2151,10 +2179,10 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.7,
       "position": [
-        -96,
-        608
+        -2288,
+        1584
       ],
-      "id": "f452779f-b48f-45f6-9d49-2b5168e50c65",
+      "id": "30f98b85-a768-4f42-88f5-cd380ef7986c",
       "name": "Execute a SQL query7",
       "credentials": {
         "postgres": {
@@ -2172,10 +2200,10 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.7,
       "position": [
-        112,
-        608
+        -2288,
+        1808
       ],
-      "id": "1c7e0570-dca9-405a-aac1-1b8b2618589c",
+      "id": "2cc11dc7-1b73-4614-a02f-22ce9a0aadcc",
       "name": "Execute a SQL query8",
       "credentials": {
         "postgres": {
@@ -2193,10 +2221,10 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.7,
       "position": [
-        -944,
-        272
+        -816,
+        368
       ],
-      "id": "51cfe41b-183b-4ae0-bbe6-5b007a5bcff3",
+      "id": "7014b303-d3e8-4d0b-a685-e6bb1d363461",
       "name": "Execute a SQL query9",
       "executeOnce": true,
       "credentials": {
@@ -2213,10 +2241,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        80,
-        416
+        304,
+        464
       ],
-      "id": "e213bd61-9dd6-44e8-aade-ece57a5bb3c6",
+      "id": "e8d2d4bc-ffbf-4bfb-a812-0167e30263c8",
       "name": "Prepare Posting Logistics"
     },
     {
@@ -2382,10 +2410,10 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.7,
       "position": [
-        288,
-        416
+        528,
+        464
       ],
-      "id": "f78f0ab1-1109-4c50-ae13-8801f154ec20",
+      "id": "61daea1d-2ce1-4669-9176-dc9bbc0b328c",
       "name": "Save Posting Logistics",
       "credentials": {
         "postgres": {
@@ -2403,10 +2431,10 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.7,
       "position": [
-        608,
-        624
+        -976,
+        1056
       ],
-      "id": "158690ff-c672-4d36-a922-da8c9c52aa79",
+      "id": "74eaa1ce-bc28-4b8d-be95-861fe15a09ad",
       "name": "Verify Posting Logistics",
       "credentials": {
         "postgres": {
@@ -2730,11 +2758,6 @@
           }
         ]
       ]
-    },
-    "Save Posting Logistics": {
-      "main": [
-        []
-      ]
     }
   },
   "active": false,
@@ -2743,20 +2766,11 @@
     "binaryMode": "separate",
     "availableInMCP": false
   },
-  "versionId": "2b069584-6423-4fd6-a849-6f9b4769c94d",
+  "versionId": "fa06d9c0-3114-483c-af39-713ae752d933",
   "meta": {
-    "templateCredsSetupCompleted": true
+    "instanceId": "a1c5b8ae00ab65096f4efdfde15addf3de4578210e14dece35559089eaaed06d"
   },
   "nodeGroups": [],
-  "id": "q0yXnbt8BqFnukQj",
-  "tags": [],
-  "_repository": {
-    "sanitized": true,
-    "credential_placeholders": [
-      "__OZON_API_KEY__"
-    ],
-    "source": "local n8n export",
-    "workflow_id": "q0yXnbt8BqFnukQj",
-    "version_id": "2b069584-6423-4fd6-a849-6f9b4769c94d"
-  }
+  "id": "B2DiIq630Yb2fXR8",
+  "tags": []
 }
