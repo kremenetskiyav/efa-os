@@ -22,3 +22,11 @@ Current architectural baseline for the OZON automation project:
 ### Current project state
 
 Phase A is the established working baseline. The next development work should extend the existing architecture rather than rebuild it.
+
+### Analytical fixes completed
+
+- Multi-unit posting cost calculation fixed.
+- `vw_orders_finance_final` now derives posting-level cost as `cost_price × total quantity` from `postings`.
+- `vw_orders_finance_summary` and downstream profit views use the corrected posting-level cost.
+- Verified on four delivered multi-unit postings.
+- Audit confirmed no delivered posting currently contains multiple SKUs.
