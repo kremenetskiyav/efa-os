@@ -2115,6 +2115,2807 @@
       "type": "n8n-nodes-base.postgresTool",
       "typeVersion": 2.7,
       "position": [
+        -464,
+        944
+      ],
+      "id": "1bb870f9-317f-4874-acc9-cef415f555b9",
+      "name": "OZON Analytics",
+      "credentials": {
+        "postgres": {
+          "id": "nw1S6OrTyc326IJL",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "CREATE TABLE public.stock_history (\n    id BIGSERIAL PRIMARY KEY,\n    snapshot_at TIMESTAMPTZ NOT NULL DEFAULT date_trunc('minute', now()),\n    offer_id TEXT NOT NULL,\n    product_id BIGINT,\n    type TEXT NOT NULL,\n    present INTEGER NOT NULL DEFAULT 0,\n    reserved INTEGER NOT NULL DEFAULT 0,\n    sku BIGINT\n);\n\nCREATE UNIQUE INDEX ux_stock_history_snapshot\nON public.stock_history (snapshot_at, offer_id, type);",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        -2144,
+        1312
+      ],
+      "id": "30f98b85-a768-4f42-88f5-cd380ef7986c",
+      "name": "Execute a SQL query7",
+      "credentials": {
+        "postgres": {
+          "id": "nw1S6OrTyc326IJL",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "CREATE TABLE IF NOT EXISTS public.posting_logistics (\n    posting_number TEXT PRIMARY KEY,\n    order_number TEXT,\n\n    city TEXT,\n    region TEXT,\n    district TEXT,\n\n    delivery_type TEXT,\n\n    warehouse TEXT,\n    warehouse_id BIGINT,\n\n    tpl_provider TEXT,\n    tpl_provider_id BIGINT,\n\n    cluster_from TEXT,\n    cluster_to TEXT,\n\n    updated_from_ozon TIMESTAMPTZ NOT NULL DEFAULT NOW()\n);",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        -2144,
+        1536
+      ],
+      "id": "2cc11dc7-1b73-4614-a02f-22ce9a0aadcc",
+      "name": "Execute a SQL query8",
+      "credentials": {
+        "postgres": {
+          "id": "nw1S6OrTyc326IJL",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO public.stock_history (\n    snapshot_at,\n    offer_id,\n    product_id,\n    type,\n    present,\n    reserved,\n    sku\n)\nSELECT\n    date_trunc('minute', now()),\n    offer_id,\n    product_id,\n    type,\n    COALESCE(present, 0),\n    COALESCE(reserved, 0),\n    sku\nFROM public.stocks\nON CONFLICT (snapshot_at, offer_id, type)\nDO NOTHING;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        -816,
+        368
+      ],
+      "id": "7014b303-d3e8-4d0b-a685-e6bb1d363461",
+      "name": "Execute a SQL query9",
+      "executeOnce": true,
+      "credentials": {
+        "postgres": {
+          "id": "nw1S6OrTyc326IJL",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = [];\n\nconst postings = $input.first().json.result?.postings ?? [];\n\nfor (const posting of postings) {\n\n  const analytics = posting.analytics_data ?? {};\n  const financial = posting.financial_data ?? {};\n\n  rows.push({\n    json: {\n      posting_number: posting.posting_number ?? null,\n      order_number: posting.order_number ?? null,\n\n      city: analytics.city ?? null,\n      region: analytics.region ?? null,\n      district: analytics.district ?? null,\n\n      delivery_type: analytics.delivery_type ?? null,\n\n      warehouse: analytics.warehouse ?? null,\n      warehouse_id: analytics.warehouse_id ?? null,\n\n      tpl_provider: analytics.tpl_provider ?? null,\n      tpl_provider_id: analytics.tpl_provider_id ?? null,\n\n      cluster_from: financial.cluster_from ?? null,\n      cluster_to: financial.cluster_to ?? null,\n\n      updated_from_ozon: new Date().toISOString()\n    }\n  });\n}\n\nreturn rows;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        304,
+        464
+      ],
+      "id": "e8d2d4bc-ffbf-4bfb-a812-0167e30263c8",
+      "name": "Prepare Posting Logistics"
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "value": "posting_logistics",
+          "mode": "list",
+          "cachedResultName": "posting_logistics"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {
+            "warehouse_id": 0,
+            "tpl_provider_id": 0
+          },
+          "matchingColumns": [
+            "posting_number"
+          ],
+          "schema": [
+            {
+              "id": "posting_number",
+              "displayName": "posting_number",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "order_number",
+              "displayName": "order_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "city",
+              "displayName": "city",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "region",
+              "displayName": "region",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "district",
+              "displayName": "district",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "delivery_type",
+              "displayName": "delivery_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "warehouse",
+              "displayName": "warehouse",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "warehouse_id",
+              "displayName": "warehouse_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "tpl_provider",
+              "displayName": "tpl_provider",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "tpl_provider_id",
+              "displayName": "tpl_provider_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "cluster_from",
+              "displayName": "cluster_from",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "cluster_to",
+              "displayName": "cluster_to",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "updated_from_ozon",
+              "displayName": "updated_from_ozon",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        528,
+        464
+      ],
+      "id": "61daea1d-2ce1-4669-9176-dc9bbc0b328c",
+      "name": "Save Posting Logistics",
+      "credentials": {
+        "postgres": {
+          "id": "nw1S6OrTyc326IJL",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n    DATE(p.updated_from_ozon) AS updated_date,\n    p.status,\n    COUNT(*) AS postings_count\nFROM public.postings p\nLEFT JOIN public.posting_logistics pl\n    ON pl.posting_number = p.posting_number\nWHERE pl.posting_number IS NULL\nGROUP BY DATE(p.updated_from_ozon), p.status\nORDER BY updated_date, p.status;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        -976,
+        1104
+      ],
+      "id": "74eaa1ce-bc28-4b8d-be95-861fe15a09ad",
+      "name": "Verify Posting Logistics",
+      "credentials": {
+        "postgres": {
+          "id": "nw1S6OrTyc326IJL",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Региональная аналитика продаж Ozon.\n\nИспользуй этот инструмент, когда пользователь спрашивает:\n- в каких регионах продается товар;\n- где самая высокая или низкая логистика;\n- сравнение логистики по регионам;\n- прибыль товара по регионам;\n- выручку по регионам;\n- количество проданных единиц по регионам;\n- эффективность товара в разных регионах.\n\nИнструмент возвращает:\nregion,\noffer_id,\nunits,\npostings_count,\nrevenue,\ncommission,\nlogistics,\npayout,\nprofit,\nlogistics_per_unit,\nprofit_per_unit.\n\nДля конкретного товара обязательно передавай точный offer_id.\nДля общей региональной аналитики используй ALL.\n\nНе делай выводов о регионах, которых нет в результате инструмента.",
+        "operation": "executeQuery",
+        "query": "WITH posting_data AS (\n    SELECT\n        p.posting_number,\n        p.offer_id,\n        SUM(COALESCE(p.quantity, 0)) AS units,\n        MAX(COALESCE(pr.cost_price, 0)) AS cost_price\n    FROM postings p\n    LEFT JOIN products pr\n        ON pr.offer_id = p.offer_id\n    GROUP BY\n        p.posting_number,\n        p.offer_id\n),\n\nfinance_data AS (\n    SELECT\n        f.posting_number,\n        SUM(COALESCE(f.accruals_for_sale, 0)) AS revenue,\n        SUM(COALESCE(f.service_amount, 0)) AS logistics,\n        SUM(COALESCE(f.sale_commission, 0)) AS commission,\n        SUM(COALESCE(f.amount, 0)) AS payout\n    FROM finance_operations f\n    WHERE\n    f.operation_type = 'OperationAgentDeliveredToCustomer'\n    AND f.posting_number IS NOT NULL\n    AND f.accruals_for_sale > 0\n    GROUP BY\n        f.posting_number\n),\n\nlogistics_data AS (\n    SELECT\n        pl.posting_number,\n        MAX(\n            COALESCE(\n                NULLIF(pl.cluster_to, ''),\n                NULLIF(pl.region, ''),\n                NULLIF(pl.city, ''),\n                'Не указан'\n            )\n        ) AS region\n    FROM posting_logistics pl\n    GROUP BY\n        pl.posting_number\n)\n\nSELECT\n    ld.region,\n    p.offer_id,\n\n    SUM(p.units) AS units,\n    COUNT(DISTINCT p.posting_number) AS postings_count,\n\n    ROUND(SUM(f.revenue), 2) AS revenue,\n    ROUND(SUM(f.commission), 2) AS commission,\n    ROUND(SUM(f.logistics), 2) AS logistics,\n    ROUND(SUM(f.payout), 2) AS payout,\n\n    ROUND(\n        SUM(f.payout)\n        - SUM(p.units * p.cost_price),\n        2\n    ) AS profit,\n\n    ROUND(\n        SUM(ABS(f.logistics))\n        / NULLIF(SUM(p.units), 0),\n        2\n    ) AS logistics_per_unit,\n\n    ROUND(\n        (\n            SUM(f.payout)\n            - SUM(p.units * p.cost_price)\n        )\n        / NULLIF(SUM(p.units), 0),\n        2\n    ) AS profit_per_unit\n\nFROM posting_data p\n\nINNER JOIN finance_data f\n    ON f.posting_number = p.posting_number\n\nLEFT JOIN logistics_data ld\n    ON ld.posting_number = p.posting_number\n\nWHERE\n    (\n        p.offer_id = '{{ $fromAI(\"offer_id\", \"Артикул Ozon (offer_id). Для общей аналитики передай ALL.\", \"string\", \"ALL\") }}'\n        OR '{{ $fromAI(\"offer_id\", \"Артикул Ozon (offer_id). Для общей аналитики передай ALL.\", \"string\", \"ALL\") }}' = 'ALL'\n    )\n\nGROUP BY\n    ld.region,\n    p.offer_id\n\nORDER BY\n    logistics_per_unit DESC,\n    ld.region;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgresTool",
+      "typeVersion": 2.7,
+      "position": [
+        -320,
+        944
+      ],
+      "id": "633b2039-948c-42c0-83b9-9bba39eba39e",
+      "name": "OZON Regional Analytics",
+      "credentials": {
+        "postgres": {
+          "id": "nw1S6OrTyc326IJL",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Анализирует историю цен товаров Ozon. Используй для вопросов об изменении цены, текущей и предыдущей цене, минимальной и максимальной цене, количестве изменений и динамике цены за период. Для конкретного товара передавай offer_id. Если offer_id не указан, используй ALL. Параметр days задаёт количество последних дней для анализа, по умолчанию 30. Не используй этот инструмент для анализа продаж, прибыли, логистики или остатков.",
+        "operation": "executeQuery",
+        "query": "WITH params AS (\n    SELECT\n        '{{ $fromAI(\"offer_id\", \"Артикул Ozon (offer_id). Для общей аналитики передай ALL.\", \"string\", \"ALL\") }}' AS offer_id,\n        '{{ $fromAI(\"days\", \"Количество последних дней для анализа истории цены. По умолчанию 30.\", \"string\", \"30\") }}'::integer AS days\n),\n\nprice_history AS (\n    SELECT\n        h.offer_id,\n        h.price,\n        h.old_price,\n        h.min_price,\n        h.marketing_price,\n        h.marketing_seller_price,\n        h.updated_from_ozon,\n        LAG(h.price) OVER (\n            PARTITION BY h.offer_id\n            ORDER BY h.updated_from_ozon\n        ) AS previous_price\n    FROM ozon_price_history h\n    CROSS JOIN params p\n    WHERE\n        h.updated_from_ozon >= NOW() - (p.days || ' days')::interval\n        AND (\n            h.offer_id = p.offer_id\n            OR p.offer_id = 'ALL'\n        )\n),\n\nprice_stats AS (\n    SELECT\n        offer_id,\n        COUNT(*) AS observations,\n\n        COUNT(*) FILTER (\n            WHERE previous_price IS NOT NULL\n              AND price <> previous_price\n        ) AS price_changes,\n\n        ROUND(MIN(price), 2) AS min_price,\n        ROUND(MAX(price), 2) AS max_price,\n        ROUND(AVG(price), 2) AS avg_price,\n\n        ROUND(\n            (ARRAY_AGG(price ORDER BY updated_from_ozon DESC))[1],\n            2\n        ) AS current_price,\n\n        ROUND(\n            (ARRAY_AGG(price ORDER BY updated_from_ozon ASC))[1],\n            2\n        ) AS first_price,\n\n        MAX(updated_from_ozon) AS last_updated\n\n    FROM price_history\n    GROUP BY offer_id\n)\n\nSELECT\n    offer_id,\n    observations,\n    price_changes,\n    min_price,\n    max_price,\n    avg_price,\n    current_price,\n    first_price,\n\n    ROUND(\n        current_price - first_price,\n        2\n    ) AS total_price_change,\n\n    CASE\n        WHEN first_price <> 0 THEN\n            ROUND(\n                ((current_price - first_price) / first_price) * 100,\n                2\n            )\n        ELSE NULL\n    END AS total_price_change_percent,\n\n    last_updated\n\nFROM price_stats\n\nORDER BY\n    offer_id;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgresTool",
+      "typeVersion": 2.7,
+      "position": [
+        -160,
+        944
+      ],
+      "id": "9140b135-de9f-4f92-9db6-0e7418821e04",
+      "name": "OZON Price History",
+      "credentials": {
+        "postgres": {
+          "id": "nw1S6OrTyc326IJL",
+          "name": "Postgres account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Get Products",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Products": {
+      "main": [
+        [
+          {
+            "node": "Get Product Info",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Product Info": {
+      "main": [
+        [
+          {
+            "node": "Prepare Products",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Products": {
+      "main": [
+        [
+          {
+            "node": "Save Products",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Products": {
+      "main": [
+        [
+          {
+            "node": "Get Stocks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Stocks": {
+      "main": [
+        [
+          {
+            "node": "Prepare Stocks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Stocks": {
+      "main": [
+        [
+          {
+            "node": "Save Stocks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Financial Operations": {
+      "main": [
+        [
+          {
+            "node": "Prepare Financial Operations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Financial Operations": {
+      "main": [
+        [
+          {
+            "node": "Save Finance Operations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Postings": {
+      "main": [
+        [
+          {
+            "node": "Prepare Posting Logistics",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prepare Postings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Postings": {
+      "main": [
+        [
+          {
+            "node": "Save Postings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Postings": {
+      "main": [
+        [
+          {
+            "node": "Get Current Prices",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Price History": {
+      "main": [
+        [
+          {
+            "node": "Save Price History",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Finance Operations": {
+      "main": [
+        [
+          {
+            "node": "Get Postings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Stocks": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query9",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Price History": {
+      "main": [
+        [
+          {
+            "node": "Get Returns",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Returns": {
+      "main": [
+        [
+          {
+            "node": "Prepare Returns",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Returns": {
+      "main": [
+        [
+          {
+            "node": "Save Returns",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Product Alerts": {
+      "main": [
+        [
+          {
+            "node": "Decision Engine",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When chat message received": {
+      "main": [
+        [
+          {
+            "node": "OZON AI Analyst",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tool — Анализ проблем товаров": {
+      "ai_tool": [
+        [
+          {
+            "node": "OZON AI Analyst",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decision Engine": {
+      "main": [
+        [
+          {
+            "node": "Get Product Alerts Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Current Prices": {
+      "main": [
+        [
+          {
+            "node": "Prepare Price History",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Returns": {
+      "main": [
+        [
+          {
+            "node": "Get Sales Returns Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "OZON AI Analyst",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OZON Analytics": {
+      "ai_tool": [
+        [
+          {
+            "node": "OZON AI Analyst",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query9": {
+      "main": [
+        [
+          {
+            "node": "Get Financial Operations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Posting Logistics": {
+      "main": [
+        [
+          {
+            "node": "Save Posting Logistics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OZON Regional Analytics": {
+      "ai_tool": [
+        [
+          {
+            "node": "OZON AI Analyst",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OZON Price History": {
+      "ai_tool": [
+        [
+          {
+            "node": "OZON AI Analyst",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "7f7c26f8-d141-491b-adda-1414d6810926",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "a1c5b8ae00ab65096f4efdfde15addf3de4578210e14dece35559089eaaed06d"
+  },
+  "nodeGroups": [],
+  "id": "B2DiIq630Yb2fXR8",
+  "tags": []
+}{
+  "name": "OZON workflow - Phase A - GitHub baseline",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -2608,
+        368
+      ],
+      "id": "888d6e91-5fb3-4764-951a-60a867a1bf17",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api-seller.ozon.ru/v3/product/list",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Client-Id",
+              "value": "4767584"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"filter\": {\n    \"visibility\": \"ALL\"\n  },\n  \"last_id\": \"\",\n  \"limit\": 1000\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -2384,
+        368
+      ],
+      "id": "3713f44a-d5e6-4e8f-b093-b9f9cf606f0e",
+      "name": "Get Products",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "VKCN9mlqrD9VzcmL",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api-seller.ozon.ru/v3/product/info/list",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Client-Id",
+              "value": "4767584"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\n{\n  offer_id: [],\n  product_id: $('Get Products').first().json.result.items.map(item => item.product_id)\n}\n}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -2160,
+        368
+      ],
+      "id": "5ae069ee-39e3-4f2b-b714-a3ce6cd25805",
+      "name": "Get Product Info",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "VKCN9mlqrD9VzcmL",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = [];\n\nconst products = $input.first().json.items;\n\nfor (const product of products) {\n\n  rows.push({\n    json: {\n      product_id: product.id,\n      offer_id: product.offer_id,\n      name: product.name,\n\n      sku: product.sources?.[0]?.sku ?? null,\n      barcode: product.barcodes?.[0] ?? null,\n\n      category_id: product.description_category_id,\n\n      min_price: Number(product.min_price || 0),\n      old_price: Number(product.old_price || 0),\n      price: Number(product.price || 0),\n\n      created_at: product.created_at,\n\n      archived: product.is_archived\n    }\n  });\n\n}\n\nreturn rows;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1936,
+        368
+      ],
+      "id": "56797fbe-66ac-451c-a8d9-b4b324bad212",
+      "name": "Prepare Products"
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "value": "products",
+          "mode": "list",
+          "cachedResultName": "products"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {
+            "archived": false,
+            "product_id": 0,
+            "price": 0,
+            "old_price": 0,
+            "min_price": 0,
+            "marketing_price": 0,
+            "net_price": 0,
+            "acquiring": 0,
+            "commission_fbs": 0,
+            "delivery_fbs": 0,
+            "sku": 0,
+            "category_id": 0,
+            "cost_price": 0
+          },
+          "matchingColumns": [
+            "offer_id"
+          ],
+          "schema": [
+            {
+              "id": "offer_id",
+              "displayName": "offer_id",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "product_id",
+              "displayName": "product_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "barcode",
+              "displayName": "barcode",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "name",
+              "displayName": "name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "price",
+              "displayName": "price",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "old_price",
+              "displayName": "old_price",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "min_price",
+              "displayName": "min_price",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "marketing_price",
+              "displayName": "marketing_price",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "net_price",
+              "displayName": "net_price",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "acquiring",
+              "displayName": "acquiring",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "commission_fbs",
+              "displayName": "commission_fbs",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "delivery_fbs",
+              "displayName": "delivery_fbs",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "updated_at",
+              "displayName": "updated_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "sku",
+              "displayName": "sku",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "category_id",
+              "displayName": "category_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "archived",
+              "displayName": "archived",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "brand",
+              "displayName": "brand",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "vendor",
+              "displayName": "vendor",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "image_url",
+              "displayName": "image_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "updated_from_ozon",
+              "displayName": "updated_from_ozon",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "cost_price",
+              "displayName": "cost_price",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        -1712,
+        368
+      ],
+      "id": "e16858e2-64c5-40f4-8148-59a18207da18",
+      "name": "Save Products",
+      "credentials": {
+        "postgres": {
+          "id": "nw1S6OrTyc326IJL",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n    offer_id,\n    product_id,\n    name,\n    price,\n    cost_price,\n    updated_from_ozon\nFROM products\nORDER BY updated_from_ozon DESC;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        -976,
+        1280
+      ],
+      "id": "fdb45b49-5efa-4168-8f16-8cbf4f6c8d2a",
+      "name": "Verify Products",
+      "credentials": {
+        "postgres": {
+          "id": "nw1S6OrTyc326IJL",
+          "name": "Postgres account"
+        }
+      },
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api-seller.ozon.ru/v4/product/info/stocks",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Client-Id",
+              "value": "4767584"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\n{\n  \"filter\": {\n    \"product_id\": $('Get Products').first().json.result.items.map(item => item.product_id)\n  },\n  \"limit\": 1000\n}\n}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -1488,
+        368
+      ],
+      "id": "5773dd94-501c-4fd7-a2c1-1925b40a4529",
+      "name": "Get Stocks",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "VKCN9mlqrD9VzcmL",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = [];\n\nconst products = $input.first().json.items;\n\nfor (const product of products) {\n\n  const fbo = product.stocks.find(s => s.type === 'fbo');\n  const fbs = product.stocks.find(s => s.type === 'fbs');\n\n  rows.push({\n    json: {\n      offer_id: product.offer_id,\n\n      stock_fbo: fbo ? fbo.present : 0,\n      stock_fbs: fbs ? fbs.present : 0,\n      reserved_fbs: fbs ? fbs.reserved : 0,\n\n      updated_stock_at: new Date().toISOString()\n    }\n  });\n\n}\n\nreturn rows;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1264,
+        368
+      ],
+      "id": "0edb21e5-5eb8-4b4b-934e-d441ea1a7710",
+      "name": "Prepare Stocks"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api-seller.ozon.ru/v3/finance/transaction/list",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Client-Id",
+              "value": "4767584"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\n{\n  \"filter\": {\n    \"date\": {\n      \"from\": \"2026-08-01T00:00:00.000Z\",\n      \"to\": new Date().toISOString()\n    },\n    \"operation_type\": [],\n    \"transaction_type\": \"all\"\n  },\n  \"page\": 1,\n  \"page_size\": 1000\n}\n}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -592,
+        368
+      ],
+      "id": "8fd07d91-1b61-40e4-a844-0cbad45777e5",
+      "name": "Get Financial Operations",
+      "executeOnce": true,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "VKCN9mlqrD9VzcmL",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = [];\n\nconst input = $input.first().json.result.operations;\n\nfor (const op of input) {\n\n    const item = op.items?.[0] ?? {};\n\n    // Сумма всех услуг\n    const services = op.services ?? [];\n\n    const serviceName = services\n        .map(s => s.name)\n        .join('; ');\n\n    const serviceAmount = services\n        .reduce((sum, s) => sum + Number(s.price ?? 0), 0);\n\n    rows.push({\n        json: {\n\n            operation_id: op.operation_id,\n\n            posting_number: op.posting?.posting_number ?? null,\n\n            order_number: op.posting?.order_number ?? null,\n\n            operation_type: op.operation_type,\n\n            operation_type_name: op.operation_type_name,\n\n            operation_date: op.operation_date,\n\n            amount: op.amount,\n\n            delivery_charge: op.delivery_charge ?? 0,\n\n            return_delivery_charge: op.return_delivery_charge ?? 0,\n\n            accruals_for_sale: op.accruals_for_sale ?? 0,\n\n            sale_commission: op.sale_commission ?? 0,\n\n            service_name: serviceName,\n\n            service_amount: serviceAmount,\n\n            sku: item.sku ?? null\n\n        }\n    });\n\n}\n\nreturn rows;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -368,
+        368
+      ],
+      "id": "88934202-237f-4f6d-9e2a-599440dbaacb",
+      "name": "Prepare Financial Operations"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api-seller.ozon.ru/v3/posting/fbs/list",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Client-Id",
+              "value": "4767584"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\n{\n  \"filter\": {\n    \"since\": new Date(new Date().setDate(new Date().getDate() - 30)).toISOString(),\n    \"to\": new Date().toISOString()\n  },\n  \"limit\": 1000,\n  \"offset\": 0,\n  \"with\": {\n    \"analytics_data\": true,\n    \"financial_data\": true\n  }\n}\n}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        80,
+        368
+      ],
+      "id": "ebda3940-b33f-469b-96bd-545a87b99abb",
+      "name": "Get Postings",
+      "executeOnce": true,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "VKCN9mlqrD9VzcmL",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = [];\n\nconst postings = $input.first().json.result.postings;\n\nfor (const posting of postings) {\n\n  for (const product of posting.products) {\n\n    rows.push({\n      json: {\n\n        posting_number: posting.posting_number,\n        order_number: posting.order_number,\n        status: posting.status,\n\n        offer_id: product.offer_id,\n        sku: product.sku,\n        name: product.name,\n        quantity: product.quantity,\n\n        shipment_date: posting.shipment_date,\n        delivering_date: posting.delivering_date,\n\n        updated_from_ozon: new Date().toISOString()\n\n      }\n    });\n\n  }\n\n}\n\nreturn rows;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        304,
+        272
+      ],
+      "id": "d2d3d606-7379-4919-ba25-30a7472edda4",
+      "name": "Prepare Postings"
+    },
+    {
+      "parameters": {
+        "content": "PRODUCTS\n\nПолучение списка товаров\nПолучение полной информации\nОбновление таблицы products"
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -2160,
+        80
+      ],
+      "typeVersion": 1,
+      "id": "02c42ab5-ffde-4a2d-baad-ef81f3541fd8",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "content": "STOCKS\n\nПолучение остатков FBO/FBS\nОбновление таблицы products"
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -1408,
+        80
+      ],
+      "typeVersion": 1,
+      "id": "527e349c-a8ab-499a-9dcb-1cd3c9a61c43",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "content": "FINANCE OPERATIONS\n\nПолучение финансовых операций OZON\nПодготовка данных\nЗапись в таблицу finance_operations"
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -608,
+        80
+      ],
+      "typeVersion": 1,
+      "id": "fbbf4fd5-8e0d-43a7-9793-10cadb9acaea",
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "content": "POSTINGS\n\nПолучение заказов OZON\nПодготовка данных\nЗапись в таблицу postings\n\n↓ используется далее\nдля получения истории цен",
+        "height": 240
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        0,
+        0
+      ],
+      "typeVersion": 1,
+      "id": "e204f3ac-4f1f-4f36-a618-99c076604f5f",
+      "name": "Sticky Note3"
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "value": "postings",
+          "mode": "list",
+          "cachedResultName": "postings"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {
+            "sku": 0,
+            "quantity": 0
+          },
+          "matchingColumns": [
+            "posting_number",
+            "offer_id"
+          ],
+          "schema": [
+            {
+              "id": "posting_number",
+              "displayName": "posting_number",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "order_number",
+              "displayName": "order_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "offer_id",
+              "displayName": "offer_id",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "sku",
+              "displayName": "sku",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "name",
+              "displayName": "name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "quantity",
+              "displayName": "quantity",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "shipment_date",
+              "displayName": "shipment_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "delivering_date",
+              "displayName": "delivering_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "updated_from_ozon",
+              "displayName": "updated_from_ozon",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        528,
+        272
+      ],
+      "id": "e1d693a6-229d-4aac-b4ce-8f1b6ec445cb",
+      "name": "Save Postings",
+      "credentials": {
+        "postgres": {
+          "id": "nw1S6OrTyc326IJL",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = [];\n\nconst response = $input.first().json.items;\n\nfor (const product of response) {\n\n  rows.push({\n    json: {\n      product_id: product.product_id,\n      offer_id: product.offer_id,\n\n      price: product.price?.price ?? null,\n      old_price: product.price?.old_price ?? null,\n      min_price: product.price?.min_price ?? null,\n\n      marketing_price: product.price?.marketing_price ?? null,\n      marketing_seller_price: product.price?.marketing_seller_price ?? null,\n\n      updated_from_ozon: new Date().toISOString()\n    }\n  });\n\n}\n\nreturn rows;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        976,
+        272
+      ],
+      "id": "2e30486e-56b6-4b9f-ae60-4781c00288bb",
+      "name": "Prepare Price History"
+    },
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "value": "ozon_price_history",
+          "mode": "list",
+          "cachedResultName": "ozon_price_history"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "product_id",
+              "displayName": "product_id",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "offer_id",
+              "displayName": "offer_id",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "price",
+              "displayName": "price",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "old_price",
+              "displayName": "old_price",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "min_price",
+              "displayName": "min_price",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "marketing_price",
+              "displayName": "marketing_price",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "marketing_seller_price",
+              "displayName": "marketing_seller_price",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "updated_from_ozon",
+              "displayName": "updated_from_ozon",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        1200,
+        272
+      ],
+      "id": "2d1e2243-c530-421f-973d-61c7a232b51a",
+      "name": "Save Price History",
+      "credentials": {
+        "postgres": {
+          "id": "nw1S6OrTyc326IJL",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "value": "finance_operations",
+          "mode": "list",
+          "cachedResultName": "finance_operations"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {
+            "operation_id": 0,
+            "amount": 0,
+            "service_amount": 0,
+            "sku": 0
+          },
+          "matchingColumns": [
+            "operation_id"
+          ],
+          "schema": [
+            {
+              "id": "operation_id",
+              "displayName": "operation_id",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "posting_number",
+              "displayName": "posting_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "order_number",
+              "displayName": "order_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "operation_type",
+              "displayName": "operation_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "operation_type_name",
+              "displayName": "operation_type_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "operation_date",
+              "displayName": "operation_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "amount",
+              "displayName": "amount",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "service_name",
+              "displayName": "service_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "service_amount",
+              "displayName": "service_amount",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "sku",
+              "displayName": "sku",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "offer_id",
+              "displayName": "offer_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "name",
+              "displayName": "name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "updated_from_ozon",
+              "displayName": "updated_from_ozon",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "delivery_charge",
+              "displayName": "delivery_charge",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "return_delivery_charge",
+              "displayName": "return_delivery_charge",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "accruals_for_sale",
+              "displayName": "accruals_for_sale",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "sale_commission",
+              "displayName": "sale_commission",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        -144,
+        368
+      ],
+      "id": "2ac06ddd-1ae8-42ec-a9fd-c46f2844bad4",
+      "name": "Save Finance Operations",
+      "credentials": {
+        "postgres": {
+          "id": "nw1S6OrTyc326IJL",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "value": "products",
+          "mode": "list",
+          "cachedResultName": "products"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {
+            "archived": false,
+            "product_id": 0,
+            "price": 0,
+            "old_price": 0,
+            "min_price": 0,
+            "marketing_price": 0,
+            "net_price": 0,
+            "acquiring": 0,
+            "commission_fbs": 0,
+            "delivery_fbs": 0,
+            "sku": 0,
+            "category_id": 0,
+            "cost_price": 0
+          },
+          "matchingColumns": [
+            "offer_id"
+          ],
+          "schema": [
+            {
+              "id": "offer_id",
+              "displayName": "offer_id",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "product_id",
+              "displayName": "product_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "barcode",
+              "displayName": "barcode",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "name",
+              "displayName": "name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "price",
+              "displayName": "price",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "old_price",
+              "displayName": "old_price",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "min_price",
+              "displayName": "min_price",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "marketing_price",
+              "displayName": "marketing_price",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "net_price",
+              "displayName": "net_price",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "acquiring",
+              "displayName": "acquiring",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "commission_fbs",
+              "displayName": "commission_fbs",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "delivery_fbs",
+              "displayName": "delivery_fbs",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "updated_at",
+              "displayName": "updated_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "sku",
+              "displayName": "sku",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "category_id",
+              "displayName": "category_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "archived",
+              "displayName": "archived",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "brand",
+              "displayName": "brand",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "vendor",
+              "displayName": "vendor",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "image_url",
+              "displayName": "image_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "updated_from_ozon",
+              "displayName": "updated_from_ozon",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "cost_price",
+              "displayName": "cost_price",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "stock_fbo",
+              "displayName": "stock_fbo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "stock_fbs",
+              "displayName": "stock_fbs",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "reserved_fbs",
+              "displayName": "reserved_fbs",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "updated_stock_at",
+              "displayName": "updated_stock_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        -1040,
+        368
+      ],
+      "id": "a3f6898e-ffef-4956-9f29-fa7dd688d3a4",
+      "name": "Save Stocks",
+      "credentials": {
+        "postgres": {
+          "id": "nw1S6OrTyc326IJL",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "PRICE HISTORY\n\nПолучение текущих цен\nПодготовка данных\nЗапись в таблицу\nozon_price_history\n\nPHASE A — ANALYTICAL CORE\n\nСкорость продаж\nПродажи/день\nDays of stock\nReturn rate\nProfit per unit\nНормальная модель текущего запаса"
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        496,
+        80
+      ],
+      "typeVersion": 1,
+      "id": "7de241ec-1a01-4b8f-9f8b-23bbe56c20b5",
+      "name": "Sticky Note4"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api-seller.ozon.ru/v1/returns/list",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Client-Id",
+              "value": "4767584"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\n{\n  filter: {\n    logistic_return_date: {\n      time_from: $now.minus({ days: 30 }).startOf('day').toUTC().toISO(),\n      time_to: $now.toUTC().toISO()\n    }\n  },\n  limit: 100,\n  last_id: 0\n}\n}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1424,
+        272
+      ],
+      "id": "c1d3137d-650d-4594-98b6-520140be7e25",
+      "name": "Get Returns",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "VKCN9mlqrD9VzcmL",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const inputItems = $input.all();\n\nconst allReturns = [];\n\nfor (const item of inputItems) {\n  const returns = item.json?.returns;\n\n  if (Array.isArray(returns)) {\n    allReturns.push(...returns);\n  }\n}\n\n// Удаляем дубли по ID возврата.\n// Если один и тот же возврат встретился несколько раз,\n// сохраняем последнюю полученную версию.\nconst uniqueReturns = new Map();\n\nfor (const ret of allReturns) {\n  if (ret?.id != null) {\n    uniqueReturns.set(String(ret.id), ret);\n  }\n}\n\nconst rows = [];\n\nfor (const ret of uniqueReturns.values()) {\n  rows.push({\n    json: {\n      return_id: ret.id,\n\n      company_id: ret.company_id,\n\n      type: ret.type,\n      schema: ret.schema,\n\n      order_id: ret.order_id,\n      order_number: ret.order_number,\n      posting_number: ret.posting_number,\n\n      sku: ret.product?.sku ?? null,\n      offer_id: ret.product?.offer_id ?? null,\n      product_name: ret.product?.name ?? null,\n      price: ret.product?.price?.price ?? null,\n      quantity: ret.product?.quantity ?? null,\n\n      return_reason: ret.return_reason_name ?? null,\n\n      return_status:\n        ret.visual?.status?.display_name ?? null,\n\n      logistic_return_date:\n        ret.logistic?.return_date ?? null,\n\n      clearing_id: ret.clearing_id ?? null,\n      source_id: ret.source_id ?? null,\n\n      updated_from_ozon: new Date().toISOString()\n    }\n  });\n}\n\nreturn rows;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1648,
+        272
+      ],
+      "id": "fa391857-7f21-45f4-9558-46e10aa45464",
+      "name": "Prepare Returns"
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "value": "returns",
+          "mode": "list",
+          "cachedResultName": "returns"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {
+            "return_id": 0,
+            "company_id": 0,
+            "order_id": 0,
+            "sku": 0,
+            "price": 0,
+            "quantity": 0,
+            "clearing_id": 0,
+            "source_id": 0
+          },
+          "matchingColumns": [
+            "return_id"
+          ],
+          "schema": [
+            {
+              "id": "return_id",
+              "displayName": "return_id",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "company_id",
+              "displayName": "company_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "type",
+              "displayName": "type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "schema",
+              "displayName": "schema",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "order_id",
+              "displayName": "order_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "order_number",
+              "displayName": "order_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "posting_number",
+              "displayName": "posting_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "sku",
+              "displayName": "sku",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "offer_id",
+              "displayName": "offer_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "product_name",
+              "displayName": "product_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "price",
+              "displayName": "price",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "quantity",
+              "displayName": "quantity",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "return_reason",
+              "displayName": "return_reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "return_status",
+              "displayName": "return_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "logistic_return_date",
+              "displayName": "logistic_return_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "clearing_id",
+              "displayName": "clearing_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "source_id",
+              "displayName": "source_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "updated_from_ozon",
+              "displayName": "updated_from_ozon",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        1872,
+        272
+      ],
+      "id": "ca1607fe-6353-49b6-a249-12f807e9e26c",
+      "name": "Save Returns",
+      "credentials": {
+        "postgres": {
+          "id": "nw1S6OrTyc326IJL",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT *\nFROM vw_orders_finance_summary\nLIMIT 20;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        -2464,
+        864
+      ],
+      "id": "0d007ee7-fee1-461d-8fa1-1374ac89d073",
+      "name": "Execute a SQL query1",
+      "credentials": {
+        "postgres": {
+          "id": "nw1S6OrTyc326IJL",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT *\nFROM vw_orders_profit_final\nLIMIT 20;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        -2464,
+        1088
+      ],
+      "id": "4456cb0c-decf-4c51-86c5-c29bb5997082",
+      "name": "Execute a SQL query2",
+      "credentials": {
+        "postgres": {
+          "id": "nw1S6OrTyc326IJL",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n    CASE\n        WHEN posting_number ~ '^[0-9]+-[0-9]+-[0-9]+$'\n            THEN regexp_replace(posting_number, '-[0-9]+$', '')\n        ELSE posting_number\n    END AS posting_key,\n\n    SUM(amount) AS total_amount\n\nFROM finance_operations\n\nWHERE operation_type IN (\n    'OperationReturnGoodsFBSofRMS',\n    'OperationMarketplacePackageMaterialsProvision',\n    'OperationMarketplacePackageRedistribution',\n    'InsuranceServiceSellerItem',\n    'OperationMarketplaceCostPerClick',\n    'DisposalOfGoods',\n    'ClientReturnAgentOperation'\n)\n\nGROUP BY 1\nORDER BY 1\nLIMIT 50;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        -2464,
+        1312
+      ],
+      "id": "f5bd8b3f-5ec6-4391-a901-ac96cddba8ae",
+      "name": "Execute a SQL query3",
+      "credentials": {
+        "postgres": {
+          "id": "nw1S6OrTyc326IJL",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT tablename\nFROM pg_tables\nWHERE schemaname = 'public'\nORDER BY tablename;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        -2144,
+        640
+      ],
+      "id": "ba94c4d7-0be1-4e77-9dcd-1106eb9f9f83",
+      "name": "Execute a SQL query4",
+      "credentials": {
+        "postgres": {
+          "id": "nw1S6OrTyc326IJL",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n    s.posting_number,\n    p.posting_key,\n\n    s.profit        AS old_profit,\n    p.profit        AS new_profit,\n\n    s.revenue       AS old_revenue,\n    p.revenue       AS new_revenue,\n\n    s.commission    AS old_commission,\n    p.commission    AS new_commission,\n\n    s.delivery      AS old_delivery,\n    p.logistics     AS new_delivery,\n\n    s.cost_price    AS old_cost,\n    p.cost_price    AS new_cost\n\nFROM sales s\n\nJOIN vw_orders_profit p\n\nON\nCASE\nWHEN s.posting_number ~ '^[0-9]+-[0-9]+-[0-9]+$'\nTHEN regexp_replace(s.posting_number,'-[0-9]+$','')\nELSE s.posting_number\nEND = p.posting_key\n\nLIMIT 30;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        -2144,
+        864
+      ],
+      "id": "83f06f73-b603-4466-9db6-c7a044efe119",
+      "name": "Execute a SQL query5",
+      "credentials": {
+        "postgres": {
+          "id": "nw1S6OrTyc326IJL",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n    routine_schema,\n    routine_name\nFROM information_schema.routines\nWHERE routine_schema = 'public'\n  AND (\n      routine_name ILIKE '%stock%'\n      OR routine_name ILIKE '%остат%'\n      OR routine_name ILIKE '%snapshot%'\n      OR routine_name ILIKE '%history%'\n  )\nORDER BY routine_name;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        -2144,
+        1088
+      ],
+      "id": "f73b124f-826a-4744-8d78-e8ed44ba6628",
+      "name": "Execute a SQL query6",
+      "credentials": {
+        "postgres": {
+          "id": "nw1S6OrTyc326IJL",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT *\nFROM vw_product_alerts\nORDER BY avg_profit ASC;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        -1712,
+        736
+      ],
+      "id": "9c5ccdf0-1c6a-4ba5-a621-8b115307fca4",
+      "name": "Get Product Alerts",
+      "credentials": {
+        "postgres": {
+          "id": "nw1S6OrTyc326IJL",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const result = [];\n\nfor (const item of $input.all()) {\n  const d = item.json;\n\n  const avgProfit = Number(d.avg_profit || 0);\n  const orders = Number(d.orders_count || 0);\n\n  let priority = 'LOW';\n  const reasons = [];\n  let recommendedAction = 'Наблюдать';\n\n  // Низкая прибыль\n  if (d.profit_alert === 'HIGH') {\n    priority = 'HIGH';\n    reasons.push('Низкая средняя прибыль');\n\n    recommendedAction =\n      'Проверить причины низкой прибыльности. ' +\n      'Цену автоматически не менять.';\n  }\n\n  // Высокая логистика\n  if (d.logistics_alert === 'HIGH') {\n    priority = 'HIGH';\n    reasons.push('Высокая стоимость логистики');\n\n    if (recommendedAction === 'Наблюдать') {\n      recommendedAction =\n        'Проверить стоимость логистики и влияние схемы доставки.';\n    }\n  } else if (d.logistics_alert === 'MEDIUM') {\n    if (priority === 'LOW') {\n      priority = 'MEDIUM';\n    }\n\n    reasons.push('Повышенная стоимость логистики');\n  }\n\n  // Высокая комиссия\n  if (d.commission_alert === 'HIGH') {\n    priority = 'HIGH';\n    reasons.push('Высокая комиссия');\n\n    if (recommendedAction === 'Наблюдать') {\n      recommendedAction =\n        'Проверить комиссию OZON и условия продажи товара.';\n    }\n  } else if (d.commission_alert === 'MEDIUM') {\n    if (priority === 'LOW') {\n      priority = 'MEDIUM';\n    }\n\n    reasons.push('Повышенная комиссия');\n  }\n\n  // Недостаточно данных\n  if (orders < 10) {\n    if (priority === 'LOW') {\n      priority = 'MEDIUM';\n    }\n\n    reasons.push('Недостаточно продаж для уверенного решения');\n\n    recommendedAction =\n      'Наблюдать. Не принимать решение об изменении цены.';\n  }\n\n  result.push({\n    json: {\n      offer_id: d.offer_id,\n      product_name: d.product_name,\n\n      priority,\n\n      orders_count: orders,\n      avg_profit: avgProfit,\n      avg_commission: Number(d.avg_commission || 0),\n      avg_logistics: Number(d.avg_logistics || 0),\n      avg_payout: Number(d.avg_payout || 0),\n\n      current_price: Number(d.current_price || 0),\n      cost_price: Number(d.cost_price || 0),\n\n      profit_alert: d.profit_alert,\n      logistics_alert: d.logistics_alert,\n      commission_alert: d.commission_alert,\n\n      reasons: reasons.join('; '),\n      recommended_action: recommendedAction\n    }\n  });\n}\n\nreturn result;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1488,
+        736
+      ],
+      "id": "045e496e-d67e-466f-93b9-d3c720203ed1",
+      "name": "Decision Engine"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        -976,
+        736
+      ],
+      "id": "3f8c2543-e438-48e4-aa58-2c508b9afff4",
+      "name": "When chat message received",
+      "webhookId": "78a835f6-1409-447f-8875-b2cbc50c687d"
+    },
+    {
+      "parameters": {
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        -976,
+        1504
+      ],
+      "id": "73e8884a-5744-4c06-9149-7ad72fd7addf",
+      "name": "Basic LLM Chain",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "claude-haiku-4-5-20251001",
+          "mode": "list",
+          "cachedResultName": "Claude Haiku 4.5"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.5,
+      "position": [
+        -960,
+        1744
+      ],
+      "id": "65bcdb57-a08c-44b8-8e93-e96d57d7cd9c",
+      "name": "Claude Analyst",
+      "credentials": {
+        "anthropicApi": {
+          "id": "Kz3hVJ5i6LEx8LN1",
+          "name": "Anthropic account"
+        }
+      },
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "options": {
+          "systemMessage": "Ты — интерфейс для представления аналитических данных товаров OZON.\n\nУ тебя есть два инструмента:\n\n1. OZON Problem Analysis — текущие проблемы товаров, причины, приоритеты, alert-поля и recommended_action.\n2. OZON Analytics — продажи, выручка, прибыль, комиссия, логистика, остатки, возвраты и другие возвращаемые показатели.\n\nГЛАВНЫЙ ПРИНЦИП\n\nДанные инструмента → точное представление данных.\n\nИспользуй только фактически возвращённые инструментами данные.\n\nНе придумывай отсутствующие данные, причины, оценки, нормативы, расчёты или рекомендации.\n\nОБЩИЕ ПРАВИЛА\n\n1. Не изменяй значения полей, reasons, recommended_action или alert.\n\n2. Не пересчитывай показатели без необходимости, прямо связанной с вопросом пользователя.\n\n3. Не выполняй действий в личном кабинете OZON и не изменяй цены, акции, продвижение, стратегию ценообразования, остатки или другие параметры без отдельного явного запроса пользователя.\n\n4. Не повторяй успешно выполненный вызов инструмента с теми же параметрами.\n\n5. При ошибке инструмента не повторяй автоматически тот же вызов бесконечно. Если изменение параметров не решает проблему, прекрати вызовы и сообщи об ошибке.\n\n6. Не смешивай данные инструментов, если для ответа достаточно одного инструмента.\n\n7. Если для полного ответа необходимо использовать данные нескольких инструментов, используй их последовательно и сопоставляй результаты строго по offer_id.\n\n8. Не задавай пользователю вопрос о том, является ли указанное значение offer_id, если оно явно соответствует известному offer_id.\n\nВЫБОР ИНСТРУМЕНТА\n\nИспользуй OZON Problem Analysis, если пользователь спрашивает о:\n\n- текущих проблемах товаров;\n- причинах проблем;\n- приоритетах;\n- alert-полях;\n- recommended_action;\n- наиболее проблемных товарах, если для ответа достаточно данных этого инструмента.\n\nИспользуй OZON Analytics, если пользователь спрашивает о:\n\n- заказах;\n- проданных единицах;\n- выручке;\n- прибыли;\n- комиссии;\n- логистике;\n- остатках;\n- возвратах;\n- других показателях, которые возвращает этот инструмент.\n\nЕсли вопрос требует одновременно проблем товара и дополнительных фактических показателей, используй оба инструмента.\n\nНе вызывай второй инструмент только ради самого факта многоинструментального анализа.\n\nПРАВИЛА МНОГОИНСТРУМЕНТНОГО АНАЛИЗА\n\nИспользуй несколько инструментов только тогда, когда данные одного инструмента недостаточны для ответа на вопрос.\n\nПримеры:\n\n«Какие товары сейчас наиболее проблемные и почему?»\n→ достаточно OZON Problem Analysis.\n\n«Какие проблемные товары имеют самую низкую прибыль?»\n→ сначала OZON Problem Analysis, затем OZON Analytics.\n\n«Какие товары имеют проблемы с логистикой и сколько у них заказов?»\n→ сначала OZON Problem Analysis, затем OZON Analytics.\n\n«Какие проблемные товары дают наибольшую выручку?»\n→ сначала OZON Problem Analysis, затем OZON Analytics.\n\n«Какие проблемные товары имеют наибольший остаток?»\n→ сначала OZON Problem Analysis, затем OZON Analytics.\n\n«Покажи аналитику УФ 004Б»\n→ OZON Analytics.\n\nПри объединении данных:\n\n- сопоставляй товары строго по offer_id;\n- используй только фактически возвращённые значения;\n- не дублируй одинаковые показатели;\n- не придумывай отсутствующие показатели;\n- не заменяй данные одного инструмента данными другого.\n\nЕсли первый инструмент уже полностью отвечает на вопрос, второй инструмент не вызывай.\n\nЕсли пользователь просит сравнить или ранжировать товары по показателю, которого нет в полном виде в данных первого инструмента, обязательно вызови инструмент, который возвращает этот показатель.\n\nНаличие связанного, но другого показателя не считается достаточным.\n\nПример:\n\n«Какие проблемные товары имеют самую низкую прибыль?»\n→ OZON Problem Analysis определяет проблемные товары.\n→ OZON Analytics получает поле profit.\n→ сопоставление по offer_id.\n→ сортировка по profit по возрастанию.\n\nНельзя использовать avg_profit вместо profit для ответа на этот вопрос.\n\nЕсли для ответа необходимо получить данные по нескольким товарам и для этого один и тот же инструмент вызывается несколько раз, не формируй финальный ответ после первого вызова.\n\nСначала собери результаты ВСЕХ необходимых вызовов инструмента.\n\nПосле получения всех результатов:\n1. объедини их по offer_id;\n2. выполни требуемое сравнение, сортировку или ранжирование;\n3. только после этого сформируй финальный ответ пользователю.\n\nНельзя терять результаты предыдущих вызовов инструмента.\n\nПример:\n\nПользователь:\n«Какие проблемные товары имеют самую низкую прибыль?»\n\nЕсли проблемных товаров 5, OZON Analytics должен быть вызван для всех 5 товаров.\n\nПосле этого необходимо получить:\nУФ 001Б → profit\nУФ 002Б → profit\nУФ 003Б → profit\nУФ 004Б → profit\nУФ 005Б → profit\n\nЗатем сравнить ВСЕ пять значений и определить минимальное.\n\nФинальный ответ должен содержать результат сравнения, а не только данные первого вызова.\n\nЕсли пользователь просит «какие товары», «какой товар», «среди товаров», «топ», «самый высокий», «самый низкий», «больше всего», «меньше всего» или иное сравнение нескольких товаров, необходимо рассматривать ВСЕ товары, соответствующие условию запроса.\n\nНельзя выбирать товар только по результату первого вызова инструмента.\n\nЕсли инструмент возвращает товары порциями или отдельными вызовами, сначала получи полный необходимый набор данных, затем выполняй сравнение.\n\nOZON ANALYTICS — ВЫЗОВ\n\nПараметр offer_id:\n\n- общая аналитика без конкретного товара → ALL;\n- конкретный товар → точный offer_id;\n- несколько конкретных товаров → используй ALL, если он позволяет получить необходимые данные; отдельные вызовы используй только если это действительно необходимо;\n- пустой offer_id не передавай.\n\nПримеры:\n\n«Покажи общую аналитику товаров»\n→ offer_id = ALL\n\n«Покажи аналитику УФ 004Б»\n→ offer_id = УФ 004Б\n\nOZON ANALYTICS — ВЫВОД\n\nВ обычном запросе показывай только показатели, которые пользователь явно запросил.\n\nНе показывай product_name и другие поля, если они не запрошены и не нужны для идентификации товара.\n\nЕсли пользователь говорит «полная аналитика», покажи все фактически возвращённые показатели этого товара.\n\nЕсли пользователь просит общую аналитику без указания конкретных показателей, покажи только:\n\n- orders_count\n- revenue\n- profit\n- fbs_present\n\nВ многоинструментном аналитическом запросе разрешается использовать и показывать дополнительные показатели OZON Analytics, если они непосредственно необходимы для ответа на вопрос пользователя.\n\nНе показывай показатели, которые не связаны с поставленным вопросом.\n\nЕсли вопрос пользователя требует сравнения или ранжирования показателей, сначала определи точное поле, соответствующее смыслу запроса.\n\nНе заменяй требуемый показатель другим, даже если они связаны между собой.\n\nНапример:\nprofit ≠ avg_profit\norders_count ≠ delivered_units\ncurrent_price ≠ sale_price\ntotal_present ≠ total_change\n\nСООТВЕТСТВИЕ ПОКАЗАТЕЛЕЙ\n\n«заказы»\n«количество заказов»\n«сколько заказов»\n→ orders_count\n«прибыль»\n«общая прибыль»\n«сколько заработали»\n«какой товар принёс больше прибыли»\n«какой товар принёс меньше прибыли»\n→ profit\n\n«средняя прибыль»\n«прибыль с одного заказа»\n«средняя прибыль на заказ»\n→ avg_profit\n\nНикогда не используй avg_profit вместо profit, если пользователь спрашивает именно о прибыли товара в целом.\n\nЕсли пользователь просит сравнить товары по прибыли, а инструмент, который был вызван первым, возвращает только avg_profit, но не возвращает profit, обязательно используй OZON Analytics для получения поля profit.\n\nНе считай avg_profit эквивалентом profit.\n\n«сколько продалось»\n«сколько единиц продано»\n«количество проданных единиц»\n→ использовать только отдельное поле количества проданных единиц, если оно возвращено инструментом.\n\norders_count означает количество заказов, а НЕ количество проданных единиц.\n\nЕсли отдельное поле количества проданных единиц отсутствует, прямо сообщи, что точное количество проданных единиц по имеющимся данным определить нельзя.\n\nНе подменяй количество проданных единиц количеством заказов.\n\nНе используй изменение остатков как количество проданных единиц.\n\nНельзя определять количество проданных единиц как:\n\n- orders_count;\n- абсолютное значение total_change;\n- абсолютное значение fbo_change;\n- абсолютное значение fbs_change;\n- абсолютное значение rfbs_change;\n- сумму этих изменений.\n\nЕсли пользователь спрашивает «сколько продалось» или «сколько единиц продано», а отдельного показателя количества проданных единиц в данных инструмента нет, сообщи о недостаточности данных.\n\nФАЗА A — АНАЛИТИЧЕСКОЕ ЯДРО\n\nOZON Analytics может возвращать:\n- delivered_units_7d\n- delivered_units_30d\n- sales_velocity_7d\n- sales_per_day_7d\n- sales_per_day_30d\n- available_stock\n- reserved_stock\n- days_of_stock_7d\n- days_of_stock_30d\n- returned_quantity_30d\n- return_rate_30d\n- profit_per_unit\n\nСоответствие запросов:\n- «скорость продаж» → sales_velocity_7d, а для нормализованной скорости используй sales_per_day_7d или sales_per_day_30d в зависимости от явно указанного периода;\n- «продажи в день», «продаж в день», «сколько продаётся в день» → sales_per_day_7d, если период не указан;\n- «продажи в день за 30 дней» → sales_per_day_30d;\n- «сколько дней запаса», «на сколько дней хватит остатка» → days_of_stock_7d, если период не указан;\n- «запас на 30 дней», «сколько дней запаса по 30-дневной скорости» → days_of_stock_30d;\n- «текущий доступный остаток» → available_stock;\n- «резерв» → reserved_stock;\n- «коэффициент возвратов», «доля возвратов», «return rate» → return_rate_30d;\n- «количество возвратов за 30 дней» → returned_quantity_30d;\n- «прибыль на единицу», «прибыль с одной единицы» → profit_per_unit.\n\nПравила:\n1. Не называй sales_velocity_7d количеством заказов. Это количество доставленных единиц за 7 дней.\n2. sales_per_day_* — среднее количество доставленных единиц в день, а не количество заказов.\n3. days_of_stock_* — расчётная обеспеченность текущего доступного остатка при соответствующей фактической скорости продаж. Это не прогноз спроса.\n4. Если days_of_stock_* отсутствует, не заменяй его нулём и не вычисляй самостоятельно из других полей.\n5. available_stock = total_present. Не используй total_change как текущий запас.\n6. return_rate_30d отражает долю возвратов/отказов в текущем источнике returns. Не называй её исключительно «процентом возвратов после доставки».\n7. profit_per_unit — прибыль на доставленную единицу. Не заменяй её avg_profit.\n8. Если пользователь не указал период для скорости продаж или days of stock, используй 7-дневные показатели, поскольку они лучше отражают текущую динамику.\n9. Для сравнений сначала получи показатель для всех требуемых товаров, затем сравнивай значения.\n\n\nOZON PROBLEM ANALYSIS\n\nИспользуй OZON Problem Analysis для вопросов о текущих проблемах товаров, причинах, приоритетах и рекомендуемых действиях.\n\nПоказывай только записи с priority = HIGH.\n\nИспользуй:\n\n- offer_id;\n- reasons;\n- соответствующие alert-поля;\n- максимум 3 исходных поля в разделе «Данные»;\n- recommended_action.\n\nreasons и recommended_action выводи дословно.\n\nНе создавай собственных причин, действий или интерпретаций.\n\nHIGH выводи именно как HIGH.\n\nНе заменяй HIGH словами «срочно», «критично», «важно», «требует внимания» и т.п.\n\nСООТВЕТСТВИЕ REASONS И ALERT\n\n«Критически низкая прибыль» → profit_alert\n\n«Проблема с прибыльностью» → profit_alert\n\n«Повышенная стоимость логистики» → logistics_alert\n\n«Высокая комиссия OZON» → commission_alert\n\n«Повышенная комиссия OZON» → commission_alert\n\nПоказывай только alert-поля, соответствующие причинам конкретной записи.\n\nЕсли причина отсутствует в reasons, соответствующий alert не показывай.\n\nНе показывай alert со значением LOW, если соответствующая причина отсутствует.\n\nЕсли причина отсутствует в данных, используй:\n\n«Причина не определена по имеющимся данным».\n\nЕсли несколько товаров имеют полностью одинаковые reasons и recommended_action, объединяй их только в разделе «Товары».\n\nФОРМАТ OZON PROBLEM ANALYSIS\n\n## Главное\n\nМаксимум 3 пункта:\n\n[reasons] — [соответствующие alert-поля]\n\n## Товары\n\n**offer_id**\n\n- Проблема: [reasons]\n- Данные: [1–3 исходных поля]\n- Действие: [recommended_action]\n\n## Итог\n\nТолько значения reasons.\n\nНе добавляй собственных пояснений, причин, оценок или рекомендаций.\n\nФОРМАТ OZON ANALYTICS\n\n## Аналитика\n\n- offer_id: [значение]\n- [показатель]&#58; [значение]\n\nПоказывай только необходимые показатели.\n\nЕсли пользователь запросил только один показатель, показывай только его.\n\nНе добавляй вступление или заключение, если они не предусмотрены соответствующим форматом ответа.\n\nПРАВИЛА АНАЛИЗА ИСТОРИИ ОСТАТКОВ\n\nOZON Analytics может возвращать текущие остатки и их изменения относительно предыдущего снимка.\n\nИспользуй:\n\n- total_present — общий текущий остаток FBO + FBS + rFBS;\n- total_reserved — общий текущий резерв;\n- fbo_present / fbs_present / rfbs_present — остатки по схемам;\n- total_change — изменение общего остатка относительно предыдущего snapshot;\n- fbo_change / fbs_change / rfbs_change — изменение остатка по каждой схеме;\n- total_reserved_change — изменение общего резерва;\n- fbo_reserved_change / fbs_reserved_change / rfbs_reserved_change — изменение резерва по схемам;\n- has_previous_snapshot — наличие предыдущего снимка;\n- stock_snapshot_at — время последнего снимка.\n\nПРАВИЛА ИНТЕРПРЕТАЦИИ ОСТАТКОВ\n\n1. Если has_previous_snapshot = false:\n\n- считать снимок исходной точкой;\n- не делать вывод об изменении остатков;\n- не считать change_* доказанным фактическим изменением.\n\n2. Если total_change < 0:\n\n- общий остаток уменьшился;\n- не утверждать автоматически, что причиной была продажа.\n\n3. Если total_change > 0:\n\n- общий остаток увеличился;\n- не утверждать автоматически причину увеличения.\n\n4. Если total_change = 0:\n\n- между двумя последними снимками общий остаток не изменился.\n\n5. Если total_reserved_change > 0:\n\n- количество зарезервированного товара увеличилось.\n\n6. Если total_reserved_change < 0:\n\n- количество зарезервированного товара уменьшилось.\n\n7. Изменение остатка само по себе не является доказательством продажи.\n\n8. Для вывода о продажах используй данные orders/sales.\n\n9. Если одновременно наблюдаются изменение остатка и соответствующее изменение данных продаж/заказов, можно указать на их совпадение, но не утверждать причинность, если данных недостаточно.\n\n10. При анализе конкретного товара используй его offer_id и не смешивай данные разных товаров.\n\n11. Если пользователь спрашивает именно об изменении остатков, используй исторические поля total_change и *_change, а не только текущие значения.\n\n12. Не придумывай причины изменения остатков, если в данных нет подтверждения.\n\n13. Если данных недостаточно для уверенного вывода, прямо укажи это.\n\nПРАВИЛА ФОРМАТИРОВАНИЯ\n\n1. Ответ пользователю — обычный Markdown-текст.\n\n2. Используй реальные переносы строк.\n\n3. Не заключай весь ответ в JSON, объект, массив или кодовый блок, если пользователь явно этого не просил.\n\n4. Не добавляй технические названия инструментов, внутренних узлов workflow, SQL-запросов или служебные комментарии.\n\n5. Если используется заголовок «## Аналитика», после него делай реальный перенос строки.\n\n6. Если значение отсутствует в данных инструмента, не подставляй 0, null, «нет данных» или другое значение самостоятельно.\n\n7. Для логических полей используй true/false без изменения их смысла.\n\n8. Если has_previous_snapshot = false, не используй формулировки:\n\n- «остаток уменьшился»;\n- «остаток увеличился»;\n- «изменение составило»;\n- и аналогичные формулировки.\n\n9. Если has_previous_snapshot = true и изменение равно 0, допускается формулировка:\n\n«Изменения не зафиксировано.»\n\n10. Если изменение отлично от 0, указывай направление и фактическое значение соответствующего поля, но не придумывай причину изменения.\n\n11. Не дублируй одно и то же значение в разных формулировках.\n\n12. Не используй Markdown-таблицы, если пользователь явно их не запросил.\n\n13. Не используй эмодзи.\n\n14. Не используй HTML.\n\n15. Форматирование не должно изменять значения, полученные от инструмента.\n\nПРИОРИТЕТ ПРАВИЛ\n\nПри конфликте правил используй следующий приоритет:\n\n1. Безопасность и запрет выдумывания данных.\n2. Правила выбора и использования инструментов.\n3. Специальные правила соответствующего инструмента.\n4. Правила анализа истории остатков.\n5. Правила форматирования ответа.\n\nПри анализе проблем сначала показывай товары с profit_alert = HIGH, затем товары с несколькими HIGH/MEDIUM alert, затем остальные. Не просто перечисляй проблемы, а ранжируй товары по приоритету действий."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        -688,
+        736
+      ],
+      "id": "b59ee8f7-f4ee-4548-87be-1b1ff2ab86b9",
+      "name": "OZON AI Analyst"
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Получает текущие проблемы товаров Ozon из представления vw_product_alerts.\n\nИспользуй этот инструмент только для анализа текущих проблем товаров, причин проблем, приоритетов и рекомендуемых действий.\n\nИнструмент возвращает только товары с priority = HIGH.\n\nИспользуй поля:\n- offer_id\n- reasons\n- соответствующие alert-поля\n- максимум 3 исходных поля из orders_count, avg_profit, commission_rate, logistics_rate, profit_margin\n- recommended_action\n\nreasons и recommended_action выводи дословно.\n\nПоказывай только alert-поля, соответствующие причинам конкретного товара.\n\nЕсли причина отсутствует в reasons, соответствующий alert не показывай.\n\nНе создавай собственных причин, действий, оценок, нормативов или интерпретаций.\n\nНе изменяй значения полей, reasons, recommended_action или alert.\n\nИнструмент только читает данные и ничего не изменяет в базе.\n\nНе дублируй reasons отдельным блоком «Итог». Не повторяй уже показанные причины без дополнительного аналитического вывода.",
+        "operation": "executeQuery",
+        "query": "SELECT\n    offer_id,\n    CASE\n        WHEN profit_alert = 'HIGH'\n          OR logistics_alert = 'HIGH'\n          OR commission_alert = 'HIGH'\n        THEN 'HIGH'\n        ELSE 'LOW'\n    END AS priority,\n\n    orders_count,\n    avg_profit,\n    commission_rate,\n    logistics_rate,\n    profit_margin,\n\n    profit_alert,\n    logistics_alert,\n    commission_alert,\n\n    CONCAT_WS(\n        '; ',\n        CASE\n            WHEN profit_alert = 'HIGH'\n            THEN 'Критически низкая прибыль'\n        END,\n        CASE\n            WHEN logistics_alert = 'HIGH'\n            THEN 'Повышенная стоимость логистики'\n        END,\n        CASE\n            WHEN commission_alert = 'HIGH'\n            THEN 'Высокая комиссия OZON'\n        END\n    ) AS reasons,\n\n    CASE\n        WHEN profit_alert = 'HIGH'\n         AND logistics_alert = 'HIGH'\n         AND commission_alert = 'HIGH'\n            THEN 'Проверить прибыльность, логистику и комиссию OZON. Цену автоматически не менять.'\n\n        WHEN profit_alert = 'HIGH'\n         AND logistics_alert = 'HIGH'\n            THEN 'Проверить прибыльность и стоимость логистики. Цену автоматически не менять.'\n\n        WHEN profit_alert = 'HIGH'\n         AND commission_alert = 'HIGH'\n            THEN 'Проверить прибыльность и комиссию OZON. Цену автоматически не менять.'\n\n        WHEN profit_alert = 'HIGH'\n            THEN 'Проверить причины низкой прибыльности. Цену автоматически не менять.'\n\n        WHEN logistics_alert = 'HIGH'\n         AND commission_alert = 'HIGH'\n            THEN 'Проверить стоимость логистики и комиссию OZON.'\n\n        WHEN logistics_alert = 'HIGH'\n            THEN 'Проверить стоимость логистики.'\n\n        WHEN commission_alert = 'HIGH'\n            THEN 'Проверить комиссию OZON.'\n\n        ELSE 'Существенных действий не требуется.'\n    END AS recommended_action\n\nFROM public.vw_product_alerts\n\nWHERE\n    profit_alert = 'HIGH'\n    OR logistics_alert = 'HIGH'\n    OR commission_alert = 'HIGH'\n\nORDER BY orders_count DESC;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgresTool",
+      "typeVersion": 2.7,
+      "position": [
+        -624,
+        944
+      ],
+      "id": "801408a2-e7dc-412c-9fcd-69032008c4d2",
+      "name": "Tool — Анализ проблем товаров",
+      "credentials": {
+        "postgres": {
+          "id": "nw1S6OrTyc326IJL",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n    offer_id,\n\n    CASE\n        WHEN profit_alert = 'HIGH'\n          OR logistics_alert = 'HIGH'\n          OR commission_alert = 'HIGH'\n        THEN 'HIGH'\n\n        WHEN profit_alert = 'MEDIUM'\n          OR logistics_alert = 'MEDIUM'\n          OR commission_alert = 'MEDIUM'\n        THEN 'MEDIUM'\n\n        ELSE 'LOW'\n    END AS priority,\n\n    orders_count,\n    avg_profit,\n    commission_rate,\n    logistics_rate,\n    profit_margin,\n\n    profit_alert,\n    logistics_alert,\n    commission_alert,\n\n    CONCAT_WS(\n        '; ',\n\n        CASE\n            WHEN profit_alert = 'HIGH'\n            THEN 'Критически низкая прибыль'\n            WHEN profit_alert = 'MEDIUM'\n            THEN 'Проблема с прибыльностью'\n        END,\n\n        CASE\n            WHEN logistics_alert = 'HIGH'\n            THEN 'Повышенная стоимость логистики'\n            WHEN logistics_alert = 'MEDIUM'\n            THEN 'Повышенная стоимость логистики'\n        END,\n\n        CASE\n            WHEN commission_alert = 'HIGH'\n            THEN 'Высокая комиссия OZON'\n            WHEN commission_alert = 'MEDIUM'\n            THEN 'Повышенная комиссия OZON'\n        END\n\n    ) AS reasons,\n\n    CASE\n        WHEN profit_alert = 'HIGH'\n             AND logistics_alert = 'HIGH'\n             AND commission_alert = 'HIGH'\n        THEN 'Проверить причины низкой прибыльности, стоимость логистики и комиссию OZON. Цену автоматически не менять.'\n\n        WHEN profit_alert = 'HIGH'\n             AND logistics_alert = 'HIGH'\n        THEN 'Проверить причины низкой прибыльности и стоимость логистики. Цену автоматически не менять.'\n\n        WHEN profit_alert = 'HIGH'\n             AND commission_alert = 'HIGH'\n        THEN 'Проверить причины низкой прибыльности и комиссию OZON. Цену автоматически не менять.'\n\n        WHEN profit_alert = 'HIGH'\n        THEN 'Проверить причины низкой прибыльности. Цену автоматически не менять.'\n\n        WHEN logistics_alert = 'HIGH'\n             AND commission_alert IN ('HIGH', 'MEDIUM')\n        THEN 'Проверить стоимость логистики и комиссию OZON.'\n\n        WHEN logistics_alert = 'HIGH'\n        THEN 'Проверить стоимость логистики.'\n\n        WHEN commission_alert = 'HIGH'\n        THEN 'Проверить комиссию OZON.'\n\n        WHEN logistics_alert = 'MEDIUM'\n             AND commission_alert = 'MEDIUM'\n        THEN 'Наблюдать и проверить структуру расходов.'\n\n        WHEN logistics_alert = 'MEDIUM'\n        THEN 'Наблюдать и проверить стоимость логистики.'\n\n        WHEN commission_alert = 'MEDIUM'\n        THEN 'Наблюдать и проверить комиссию OZON.'\n\n        ELSE 'Существенных действий не требуется.'\n    END AS recommended_action\n\nFROM vw_product_alerts\n\nORDER BY\n    CASE\n        WHEN profit_alert = 'HIGH'\n          OR logistics_alert = 'HIGH'\n          OR commission_alert = 'HIGH'\n        THEN 1\n\n        WHEN profit_alert = 'MEDIUM'\n          OR logistics_alert = 'MEDIUM'\n          OR commission_alert = 'MEDIUM'\n        THEN 2\n\n        ELSE 3\n    END,\n\n    orders_count DESC;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        -1264,
+        736
+      ],
+      "id": "78f452d4-ad13-4ed1-b0c9-a75407a27351",
+      "name": "Get Product Alerts Report",
+      "executeOnce": true,
+      "credentials": {
+        "postgres": {
+          "id": "nw1S6OrTyc326IJL",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api-seller.ozon.ru/v5/product/info/prices",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Client-Id",
+              "value": "4767584"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\n{\n  \"filter\": {\n    \"visibility\": \"ALL\"\n  },\n  \"limit\": 1000\n}\n}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        752,
+        272
+      ],
+      "id": "1e5c4031-d942-40fe-83f2-a08a34cb6ef8",
+      "name": "Get Current Prices",
+      "executeOnce": true,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "VKCN9mlqrD9VzcmL",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n    m.offer_id,\n\n    m.orders_count,\n    m.revenue,\n    m.profit,\n    m.avg_profit,\n    m.avg_revenue,\n    m.avg_commission,\n    m.avg_logistics,\n    m.avg_payout,\n    m.cost_price,\n    m.current_price,\n\n    COALESCE(r.return_rows, 0) AS return_rows,\n    COALESCE(r.returned_quantity, 0) AS returned_quantity,\n    COALESCE(r.returned_amount, 0) AS returned_amount,\n    COALESCE(r.reasons_count, 0) AS reasons_count,\n    COALESCE(r.statuses_count, 0) AS statuses_count,\n    r.first_return_date,\n    r.last_return_date\n\nFROM vw_product_metrics m\n\nLEFT JOIN (\n    SELECT\n        offer_id,\n        COUNT(*) AS return_rows,\n        SUM(quantity) AS returned_quantity,\n        ROUND(SUM(price * quantity), 2) AS returned_amount,\n        COUNT(DISTINCT return_reason) AS reasons_count,\n        COUNT(DISTINCT return_status) AS statuses_count,\n        MIN(logistic_return_date) AS first_return_date,\n        MAX(logistic_return_date) AS last_return_date\n    FROM returns\n    GROUP BY offer_id\n) r\n    ON r.offer_id = m.offer_id\n\nORDER BY m.offer_id;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        2096,
+        272
+      ],
+      "id": "d0b8e8fc-5f3b-4aa5-bac2-e6d03d8c6d19",
+      "name": "Get Sales Returns Analysis",
+      "executeOnce": true,
+      "credentials": {
+        "postgres": {
+          "id": "nw1S6OrTyc326IJL",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-5-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        -752,
+        944
+      ],
+      "id": "eacb92aa-f4fc-465e-b8eb-a01ec76219c1",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "yyEyGdICknueBiAu",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Аналитика товаров Ozon.\n\nИспользуй этот инструмент для получения аналитики по товарам из базы Ozon.\n\nЕсли пользователь запрашивает конкретный товар и называет его offer_id, обязательно передай этот offer_id в параметр offer_id.\n\nЕсли пользователь называет конкретный товар по его offer_id, например «УФ 004Б», считай это точным идентификатором товара и не спрашивай дополнительного подтверждения.\n\nЕсли пользователь запрашивает общую аналитику без указания конкретного товара, используй offer_id = ALL.\n\nНе спрашивай пользователя, является ли указанное значение offer_id, если оно явно указано как артикул товара Ozon.\n\nИнструмент только читает данные и ничего не изменяет в базе.\n\nСоответствие показателей:\n\n- «продажи», «заказы», «количество заказов» → orders_count\n- «проданные единицы», «сколько единиц продано», «количество проданных единиц» → delivered_units\n- «выручка» → revenue\n- «прибыль» → profit\n- «средняя прибыль», «прибыль на заказ» → avg_profit\n- «средняя выручка» → avg_revenue\n- «комиссия» → avg_commission\n- «логистика» → avg_logistics\n- «выплата» → avg_payout\n- «себестоимость» → cost_price\n- «текущая цена» → current_price\n- «маржа», «рентабельность» → profit_margin\n- «ставка комиссии» → commission_rate\n- «ставка логистики» → logistics_rate\n- «возвраты» → returned_quantity\n- «сумма возвратов» → returned_amount\n- «остатки FBS» → fbs_present\n\nНе путай orders_count и delivered_units:\norders_count показывает количество заказов, а delivered_units — количество единиц товара в доставленных заказах.\n\nЕсли пользователь спрашивает именно о проданных единицах, используй delivered_units, а не orders_count.\n\nЕсли пользователь спрашивает «сколько заказов и сколько единиц продано», используй одновременно orders_count и delivered_units.\n\nЕсли пользователь просит общую аналитику без указания конкретных показателей, возвращай только orders_count, revenue, profit и fbs_present.\n\nФАЗА A — АНАЛИТИЧЕСКОЕ ЯДРО\n\nИнструмент также возвращает следующие производные показатели за текущее 30-дневное аналитическое окно:\n\n- delivered_units_7d — доставленные единицы за последние 7 дней;\n- delivered_units_30d — доставленные единицы за последние 30 дней;\n- sales_velocity_7d — скорость продаж в единицах за 7 дней;\n- sales_per_day_7d — средние продажи в единицах в день за последние 7 дней;\n- sales_per_day_30d — средние продажи в единицах в день за последние 30 дней;\n- available_stock — текущий доступный запас, равный total_present;\n- reserved_stock — текущий резерв, равный total_reserved;\n- days_of_stock_7d — ориентировочное количество дней запаса при скорости продаж последних 7 дней;\n- days_of_stock_30d — ориентировочное количество дней запаса при скорости продаж последних 30 дней;\n- returned_quantity_30d — количество возвратов/отказов за последние 30 дней;\n- return_rate_30d — доля возвратов/отказов от суммы доставленных и возвращённых единиц за последние 30 дней;\n- profit_per_unit — прибыль на одну доставленную единицу.\n\nПравила:\n- sales_per_day_* — это скорость продаж, нормализованная до одной календарной даты;\n- days_of_stock_* рассчитывается только при положительной скорости продаж;\n- если скорость продаж равна 0, days_of_stock_* должно быть NULL, а не 0;\n- available_stock — фактический текущий остаток из модели snapshot, а не изменение остатка;\n- изменение остатка не использовать как продажи;\n- profit_per_unit рассчитывается только при delivered_units_30d > 0;\n- return_rate_30d не интерпретировать как процент возвратов после доставки: в текущем источнике returns есть возвраты, отмены и невыкупы, поэтому показатель отражает долю возвратов/отказов относительно доставленных и возвращённых единиц;\n- не подменять эти показатели orders_count, avg_profit или total_change.\n",
+        "operation": "executeQuery",
+        "query": "SELECT\n    posting_number,\n    order_number,\n    region,\n    city,\n    district,\n    delivery_type,\n    warehouse,\n    cluster_from,\n    cluster_to\nFROM public.posting_logistics\nWHERE posting_number IS NOT NULL\nORDER BY updated_from_ozon DESC\nLIMIT 10;",
+        "options": {
+          "queryReplacement": "{{ $fromAI('offer_id', 'Артикул товара Ozon (offer_id). Для конкретного товара передай точный offer_id, например УФ 004Б. Для общей аналитики используй значение ALL.', 'string', 'ALL') || 'ALL' }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgresTool",
+      "typeVersion": 2.7,
+      "position": [
         -496,
         944
       ],
