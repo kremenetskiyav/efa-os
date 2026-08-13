@@ -388,8 +388,8 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.7,
       "position": [
-        -976,
-        1280
+        -1632,
+        1248
       ],
       "id": "fdb45b49-5efa-4168-8f16-8cbf4f6c8d2a",
       "name": "Verify Products",
@@ -1912,8 +1912,8 @@
       "type": "@n8n/n8n-nodes-langchain.chatTrigger",
       "typeVersion": 1.4,
       "position": [
-        -976,
-        736
+        -752,
+        752
       ],
       "id": "3f8c2543-e438-48e4-aa58-2c508b9afff4",
       "name": "When chat message received",
@@ -1926,8 +1926,8 @@
       "type": "@n8n/n8n-nodes-langchain.chainLlm",
       "typeVersion": 1.9,
       "position": [
-        -976,
-        1504
+        -1696,
+        1488
       ],
       "id": "73e8884a-5744-4c06-9149-7ad72fd7addf",
       "name": "Basic LLM Chain",
@@ -1946,8 +1946,8 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
       "typeVersion": 1.5,
       "position": [
-        -960,
-        1744
+        -1616,
+        1712
       ],
       "id": "65bcdb57-a08c-44b8-8e93-e96d57d7cd9c",
       "name": "Claude Analyst",
@@ -1968,8 +1968,8 @@
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 3.1,
       "position": [
-        -688,
-        736
+        -464,
+        752
       ],
       "id": "b59ee8f7-f4ee-4548-87be-1b1ff2ab86b9",
       "name": "OZON AI Analyst"
@@ -1985,8 +1985,8 @@
       "type": "n8n-nodes-base.postgresTool",
       "typeVersion": 2.7,
       "position": [
-        -624,
-        944
+        -400,
+        960
       ],
       "id": "801408a2-e7dc-412c-9fcd-69032008c4d2",
       "name": "Tool — Анализ проблем товаров",
@@ -2090,8 +2090,8 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
       "typeVersion": 1.3,
       "position": [
-        -752,
-        944
+        -640,
+        960
       ],
       "id": "eacb92aa-f4fc-465e-b8eb-a01ec76219c1",
       "name": "OpenAI Chat Model",
@@ -2105,9 +2105,9 @@
     {
       "parameters": {
         "descriptionType": "manual",
-        "toolDescription": "Аналитика товаров Ozon.\n\nИспользуй этот инструмент для получения аналитики по товарам из базы Ozon.\n\nЕсли пользователь запрашивает конкретный товар и называет его offer_id, обязательно передай этот offer_id в параметр offer_id.\n\nЕсли пользователь называет конкретный товар по его offer_id, например «УФ 004Б», считай это точным идентификатором товара и не спрашивай дополнительного подтверждения.\n\nЕсли пользователь запрашивает общую аналитику без указания конкретного товара, используй offer_id = ALL.\n\nНе спрашивай пользователя, является ли указанное значение offer_id, если оно явно указано как артикул товара Ozon.\n\nИнструмент только читает данные и ничего не изменяет в базе.\n\nСоответствие показателей:\n\n- «продажи», «заказы», «количество заказов» → orders_count\n- «проданные единицы», «сколько единиц продано», «количество проданных единиц» → delivered_units\n- «выручка» → revenue\n- «прибыль» → profit\n- «средняя прибыль», «прибыль на заказ» → avg_profit\n- «средняя выручка» → avg_revenue\n- «комиссия» → avg_commission\n- «логистика» → avg_logistics\n- «выплата» → avg_payout\n- «себестоимость» → cost_price\n- «текущая цена» → current_price\n- «маржа», «рентабельность» → profit_margin\n- «ставка комиссии» → commission_rate\n- «ставка логистики» → logistics_rate\n- «возвраты» → returned_quantity\n- «сумма возвратов» → returned_amount\n- «остатки FBS» → fbs_present\n\nНе путай orders_count и delivered_units:\norders_count показывает количество заказов, а delivered_units — количество единиц товара в доставленных заказах.\n\nЕсли пользователь спрашивает именно о проданных единицах, используй delivered_units, а не orders_count.\n\nЕсли пользователь спрашивает «сколько заказов и сколько единиц продано», используй одновременно orders_count и delivered_units.\n\nЕсли пользователь просит общую аналитику без указания конкретных показателей, возвращай только orders_count, revenue, profit и fbs_present.\n\nФАЗА A — АНАЛИТИЧЕСКОЕ ЯДРО\n\nИнструмент также возвращает следующие производные показатели за текущее 30-дневное аналитическое окно:\n\n- delivered_units_7d — доставленные единицы за последние 7 дней;\n- delivered_units_30d — доставленные единицы за последние 30 дней;\n- sales_velocity_7d — скорость продаж в единицах за 7 дней;\n- sales_per_day_7d — средние продажи в единицах в день за последние 7 дней;\n- sales_per_day_30d — средние продажи в единицах в день за последние 30 дней;\n- available_stock — текущий доступный запас, равный total_present;\n- reserved_stock — текущий резерв, равный total_reserved;\n- days_of_stock_7d — ориентировочное количество дней запаса при скорости продаж последних 7 дней;\n- days_of_stock_30d — ориентировочное количество дней запаса при скорости продаж последних 30 дней;\n- returned_quantity_30d — количество возвратов/отказов за последние 30 дней;\n- return_rate_30d — доля возвратов/отказов от суммы доставленных и возвращённых единиц за последние 30 дней;\n- profit_per_unit — прибыль на одну доставленную единицу.\n\nПравила:\n- sales_per_day_* — это скорость продаж, нормализованная до одной календарной даты;\n- days_of_stock_* рассчитывается только при положительной скорости продаж;\n- если скорость продаж равна 0, days_of_stock_* должно быть NULL, а не 0;\n- available_stock — фактический текущий остаток из модели snapshot, а не изменение остатка;\n- изменение остатка не использовать как продажи;\n- profit_per_unit рассчитывается только при delivered_units_30d > 0;\n- return_rate_30d не интерпретировать как процент возвратов после доставки: в текущем источнике returns есть возвраты, отмены и невыкупы, поэтому показатель отражает долю возвратов/отказов относительно доставленных и возвращённых единиц;\n- не подменять эти показатели orders_count, avg_profit или total_change.\n",
+        "toolDescription": "Основной финансово-продажный инструмент Ozon. Используй для конкретного товара и общей аналитики за заданный период. Возвращает фактические доставленные единицы, количество заказов, выручку, комиссию, логистику, выплату Ozon, себестоимость и итоговую прибыль.\n\nПараметры: offer_id и days. Если период не указан — 30 дней.\n\nСоответствие: orders_count — количество заказов; delivered_units — проданные доставленные единицы; revenue — выручка; commission — комиссия; logistics — логистика; payout — выплата Ozon; cost — фактическая себестоимость проданных единиц; profit — payout минус cost; profit_per_unit — прибыль на единицу.\n\nДля вопросов о прибыли используй именно profit, а не avg_profit. Для средней прибыли используй profit_per_unit только если пользователь спрашивает прибыль на единицу. Не используй этот инструмент для истории цен, возвратов или региональной аналитики.",
         "operation": "executeQuery",
-        "query": "SELECT\n    posting_number,\n    order_number,\n    region,\n    city,\n    district,\n    delivery_type,\n    warehouse,\n    cluster_from,\n    cluster_to\nFROM public.posting_logistics\nWHERE posting_number IS NOT NULL\nORDER BY updated_from_ozon DESC\nLIMIT 10;",
+        "query": "WITH params AS (\n    SELECT\n        {{ $fromAI(\"offer_id\", \"Артикул Ozon (offer_id). Для конкретного товара передай offer_id. Для общей аналитики передай ALL.\", \"string\", \"ALL\") }} AS offer_id,\n        '{{ $fromAI(\"days\", \"Количество последних дней для анализа. По умолчанию 30.\", \"string\", \"30\") }}'::integer AS days\n),\n\nposting_data AS (\n    SELECT\n        p.posting_number,\n        p.offer_id,\n        p.sku,\n        SUM(COALESCE(p.quantity, 0)) AS units,\n        MAX(COALESCE(pr.cost_price, 0)) AS unit_cost\n    FROM postings p\n    LEFT JOIN products pr\n        ON pr.offer_id = p.offer_id\n    GROUP BY\n        p.posting_number,\n        p.offer_id,\n        p.sku\n),\n\nfinance_data AS (\n    SELECT\n        f.posting_number,\n        f.sku,\n        MIN(f.operation_date) AS operation_date,\n        SUM(COALESCE(f.accruals_for_sale, 0)) AS revenue,\n        SUM(COALESCE(f.sale_commission, 0)) AS commission,\n        SUM(COALESCE(f.service_amount, 0)) AS logistics,\n        SUM(COALESCE(f.amount, 0)) AS payout\n    FROM finance_operations f\n    CROSS JOIN params p\n    WHERE\n        f.operation_type = 'OperationAgentDeliveredToCustomer'\n        AND f.posting_number IS NOT NULL\n        AND f.accruals_for_sale > 0\n        AND f.operation_date >= CURRENT_TIMESTAMP\n            - p.days * INTERVAL '1 day'\n    GROUP BY\n        f.posting_number,\n        f.sku\n),\n\nsales_data AS (\n    SELECT\n        p.posting_number,\n        p.offer_id,\n        p.units,\n        p.unit_cost,\n        f.operation_date,\n        f.revenue,\n        f.commission,\n        f.logistics,\n        f.payout,\n\n        p.units * p.unit_cost AS cost\n    FROM posting_data p\n    INNER JOIN finance_data f\n        ON f.posting_number = p.posting_number\n       AND f.sku = p.sku\n    CROSS JOIN params prm\n    WHERE\n        p.offer_id = prm.offer_id\n        OR prm.offer_id = 'ALL'\n)\n\nSELECT\n    offer_id,\n\n    COUNT(DISTINCT posting_number) AS orders_count,\n\n    SUM(units) AS delivered_units,\n\n    ROUND(SUM(revenue), 2) AS revenue,\n\n    ROUND(SUM(commission), 2) AS commission,\n\n    ROUND(SUM(logistics), 2) AS logistics,\n\n    ROUND(SUM(payout), 2) AS payout,\n\n    ROUND(SUM(cost), 2) AS cost,\n\n    ROUND(\n        SUM(payout) - SUM(cost),\n        2\n    ) AS profit,\n\n    ROUND(\n        SUM(revenue) / NULLIF(SUM(units), 0),\n        2\n    ) AS avg_sale_price,\n\n    ROUND(\n        SUM(payout) / NULLIF(COUNT(DISTINCT posting_number), 0),\n        2\n    ) AS avg_payout,\n\n    ROUND(\n        SUM(commission) / NULLIF(COUNT(DISTINCT posting_number), 0),\n        2\n    ) AS avg_commission,\n\n    ROUND(\n        SUM(logistics) / NULLIF(COUNT(DISTINCT posting_number), 0),\n        2\n    ) AS avg_logistics,\n\n    ROUND(\n        (\n            SUM(payout) - SUM(cost)\n        ) / NULLIF(SUM(units), 0),\n        2\n    ) AS profit_per_unit,\n\n    MIN(operation_date) AS first_sale_date,\n\n    MAX(operation_date) AS last_sale_date\n\nFROM sales_data\n\nGROUP BY\n    offer_id\n\nORDER BY\n    profit DESC,\n    offer_id;",
         "options": {
           "queryReplacement": "{{ $fromAI('offer_id', 'Артикул товара Ozon (offer_id). Для конкретного товара передай точный offer_id, например УФ 004Б. Для общей аналитики используй значение ALL.', 'string', 'ALL') || 'ALL' }}"
         }
@@ -2115,8 +2115,8 @@
       "type": "n8n-nodes-base.postgresTool",
       "typeVersion": 2.7,
       "position": [
-        -464,
-        944
+        -240,
+        960
       ],
       "id": "1bb870f9-317f-4874-acc9-cef415f555b9",
       "name": "OZON Analytics",
@@ -2388,8 +2388,8 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.7,
       "position": [
-        -976,
-        1104
+        -1632,
+        1072
       ],
       "id": "74eaa1ce-bc28-4b8d-be95-861fe15a09ad",
       "name": "Verify Posting Logistics",
@@ -2405,14 +2405,14 @@
         "descriptionType": "manual",
         "toolDescription": "Региональная аналитика продаж Ozon.\n\nИспользуй этот инструмент, когда пользователь спрашивает:\n- в каких регионах продается товар;\n- где самая высокая или низкая логистика;\n- сравнение логистики по регионам;\n- прибыль товара по регионам;\n- выручку по регионам;\n- количество проданных единиц по регионам;\n- эффективность товара в разных регионах.\n\nИнструмент возвращает:\nregion,\noffer_id,\nunits,\npostings_count,\nrevenue,\ncommission,\nlogistics,\npayout,\nprofit,\nlogistics_per_unit,\nprofit_per_unit.\n\nДля конкретного товара обязательно передавай точный offer_id.\nДля общей региональной аналитики используй ALL.\n\nНе делай выводов о регионах, которых нет в результате инструмента.",
         "operation": "executeQuery",
-        "query": "WITH posting_data AS (\n    SELECT\n        p.posting_number,\n        p.offer_id,\n        SUM(COALESCE(p.quantity, 0)) AS units,\n        MAX(COALESCE(pr.cost_price, 0)) AS cost_price\n    FROM postings p\n    LEFT JOIN products pr\n        ON pr.offer_id = p.offer_id\n    GROUP BY\n        p.posting_number,\n        p.offer_id\n),\n\nfinance_data AS (\n    SELECT\n        f.posting_number,\n        SUM(COALESCE(f.accruals_for_sale, 0)) AS revenue,\n        SUM(COALESCE(f.service_amount, 0)) AS logistics,\n        SUM(COALESCE(f.sale_commission, 0)) AS commission,\n        SUM(COALESCE(f.amount, 0)) AS payout\n    FROM finance_operations f\n    WHERE\n    f.operation_type = 'OperationAgentDeliveredToCustomer'\n    AND f.posting_number IS NOT NULL\n    AND f.accruals_for_sale > 0\n    GROUP BY\n        f.posting_number\n),\n\nlogistics_data AS (\n    SELECT\n        pl.posting_number,\n        MAX(\n            COALESCE(\n                NULLIF(pl.cluster_to, ''),\n                NULLIF(pl.region, ''),\n                NULLIF(pl.city, ''),\n                'Не указан'\n            )\n        ) AS region\n    FROM posting_logistics pl\n    GROUP BY\n        pl.posting_number\n)\n\nSELECT\n    ld.region,\n    p.offer_id,\n\n    SUM(p.units) AS units,\n    COUNT(DISTINCT p.posting_number) AS postings_count,\n\n    ROUND(SUM(f.revenue), 2) AS revenue,\n    ROUND(SUM(f.commission), 2) AS commission,\n    ROUND(SUM(f.logistics), 2) AS logistics,\n    ROUND(SUM(f.payout), 2) AS payout,\n\n    ROUND(\n        SUM(f.payout)\n        - SUM(p.units * p.cost_price),\n        2\n    ) AS profit,\n\n    ROUND(\n        SUM(ABS(f.logistics))\n        / NULLIF(SUM(p.units), 0),\n        2\n    ) AS logistics_per_unit,\n\n    ROUND(\n        (\n            SUM(f.payout)\n            - SUM(p.units * p.cost_price)\n        )\n        / NULLIF(SUM(p.units), 0),\n        2\n    ) AS profit_per_unit\n\nFROM posting_data p\n\nINNER JOIN finance_data f\n    ON f.posting_number = p.posting_number\n\nLEFT JOIN logistics_data ld\n    ON ld.posting_number = p.posting_number\n\nWHERE\n    (\n        p.offer_id = '{{ $fromAI(\"offer_id\", \"Артикул Ozon (offer_id). Для общей аналитики передай ALL.\", \"string\", \"ALL\") }}'\n        OR '{{ $fromAI(\"offer_id\", \"Артикул Ozon (offer_id). Для общей аналитики передай ALL.\", \"string\", \"ALL\") }}' = 'ALL'\n    )\n\nGROUP BY\n    ld.region,\n    p.offer_id\n\nORDER BY\n    logistics_per_unit DESC,\n    ld.region;",
+        "query": "WITH params AS (\n    SELECT\n        '{{ $fromAI(\"offer_id\", \"Артикул Ozon (offer_id). Для конкретного товара передай offer_id. Для общей аналитики передай ALL.\", \"string\", \"ALL\") }}' AS offer_id\n),\n\nposting_data AS (\n    SELECT\n        p.posting_number,\n        p.offer_id,\n        SUM(COALESCE(p.quantity, 0)) AS units,\n        MAX(pr.cost_price) AS cost_price\n    FROM postings p\n    LEFT JOIN products pr\n        ON pr.offer_id = p.offer_id\n    GROUP BY\n        p.posting_number,\n        p.offer_id\n),\n\nfinance_data AS (\n    SELECT\n        f.posting_number,\n        SUM(COALESCE(f.accruals_for_sale, 0)) AS revenue,\n        SUM(COALESCE(f.service_amount, 0)) AS logistics,\n        SUM(COALESCE(f.sale_commission, 0)) AS commission,\n        SUM(COALESCE(f.amount, 0)) AS payout\n    FROM finance_operations f\n    WHERE\n        f.operation_type = 'OperationAgentDeliveredToCustomer'\n        AND f.posting_number IS NOT NULL\n    GROUP BY\n        f.posting_number\n)\n\nSELECT\n    COALESCE(NULLIF(pl.region, ''), 'Не указан') AS region,\n    p.offer_id,\n\n    SUM(p.units) AS units,\n    COUNT(DISTINCT p.posting_number) AS postings_count,\n\n    ROUND(SUM(COALESCE(f.revenue, 0)), 2) AS revenue,\n    ROUND(SUM(COALESCE(f.commission, 0)), 2) AS commission,\n    ROUND(SUM(COALESCE(f.logistics, 0)), 2) AS logistics,\n    ROUND(SUM(COALESCE(f.payout, 0)), 2) AS payout,\n\n    ROUND(\n        SUM(COALESCE(f.payout, 0))\n        - SUM(p.units * p.cost_price),\n        2\n    ) AS profit,\n\n    ROUND(\n        SUM(ABS(COALESCE(f.logistics, 0)))\n        / NULLIF(SUM(p.units), 0),\n        2\n    ) AS logistics_per_unit,\n\n    ROUND(\n        (\n            SUM(COALESCE(f.payout, 0))\n            - SUM(p.units * p.cost_price)\n        )\n        / NULLIF(SUM(p.units), 0),\n        2\n    ) AS profit_per_unit\n\nFROM posting_data p\n\nLEFT JOIN finance_data f\n    ON f.posting_number = p.posting_number\n\nLEFT JOIN posting_logistics pl\n    ON pl.posting_number = p.posting_number\n\nCROSS JOIN params prm\n\nWHERE\n    p.offer_id = prm.offer_id\n    OR prm.offer_id = 'ALL'\n\nGROUP BY\n    COALESCE(NULLIF(pl.region, ''), 'Не указан'),\n    p.offer_id\n\nORDER BY\n    logistics_per_unit DESC,\n    region;",
         "options": {}
       },
       "type": "n8n-nodes-base.postgresTool",
       "typeVersion": 2.7,
       "position": [
-        -320,
-        944
+        -96,
+        960
       ],
       "id": "633b2039-948c-42c0-83b9-9bba39eba39e",
       "name": "OZON Regional Analytics",
@@ -2428,17 +2428,86 @@
         "descriptionType": "manual",
         "toolDescription": "Анализирует историю цен товаров Ozon. Используй для вопросов об изменении цены, текущей и предыдущей цене, минимальной и максимальной цене, количестве изменений и динамике цены за период. Для конкретного товара передавай offer_id. Если offer_id не указан, используй ALL. Параметр days задаёт количество последних дней для анализа, по умолчанию 30. Не используй этот инструмент для анализа продаж, прибыли, логистики или остатков.",
         "operation": "executeQuery",
-        "query": "WITH params AS (\n    SELECT\n        '{{ $fromAI(\"offer_id\", \"Артикул Ozon (offer_id). Для общей аналитики передай ALL.\", \"string\", \"ALL\") }}' AS offer_id,\n        '{{ $fromAI(\"days\", \"Количество последних дней для анализа истории цены. По умолчанию 30.\", \"string\", \"30\") }}'::integer AS days\n),\n\nprice_history AS (\n    SELECT\n        h.offer_id,\n        h.price,\n        h.old_price,\n        h.min_price,\n        h.marketing_price,\n        h.marketing_seller_price,\n        h.updated_from_ozon,\n        LAG(h.price) OVER (\n            PARTITION BY h.offer_id\n            ORDER BY h.updated_from_ozon\n        ) AS previous_price\n    FROM ozon_price_history h\n    CROSS JOIN params p\n    WHERE\n        h.updated_from_ozon >= NOW() - (p.days || ' days')::interval\n        AND (\n            h.offer_id = p.offer_id\n            OR p.offer_id = 'ALL'\n        )\n),\n\nprice_stats AS (\n    SELECT\n        offer_id,\n        COUNT(*) AS observations,\n\n        COUNT(*) FILTER (\n            WHERE previous_price IS NOT NULL\n              AND price <> previous_price\n        ) AS price_changes,\n\n        ROUND(MIN(price), 2) AS min_price,\n        ROUND(MAX(price), 2) AS max_price,\n        ROUND(AVG(price), 2) AS avg_price,\n\n        ROUND(\n            (ARRAY_AGG(price ORDER BY updated_from_ozon DESC))[1],\n            2\n        ) AS current_price,\n\n        ROUND(\n            (ARRAY_AGG(price ORDER BY updated_from_ozon ASC))[1],\n            2\n        ) AS first_price,\n\n        MAX(updated_from_ozon) AS last_updated\n\n    FROM price_history\n    GROUP BY offer_id\n)\n\nSELECT\n    offer_id,\n    observations,\n    price_changes,\n    min_price,\n    max_price,\n    avg_price,\n    current_price,\n    first_price,\n\n    ROUND(\n        current_price - first_price,\n        2\n    ) AS total_price_change,\n\n    CASE\n        WHEN first_price <> 0 THEN\n            ROUND(\n                ((current_price - first_price) / first_price) * 100,\n                2\n            )\n        ELSE NULL\n    END AS total_price_change_percent,\n\n    last_updated\n\nFROM price_stats\n\nORDER BY\n    offer_id;",
+        "query": "WITH params AS (\n    SELECT\n        '{{ $fromAI(\"offer_id\", \"Артикул Ozon (offer_id). Для конкретного товара передай offer_id. Для общей аналитики передай ALL.\", \"string\", \"ALL\") }}' AS offer_id,\n        '{{ $fromAI(\"days\", \"Количество последних дней для анализа истории цен. По умолчанию 30.\", \"number\", \"30\") }}'::integer AS days\n),\n\nprice_data AS (\n    SELECT\n        offer_id,\n        price,\n        updated_from_ozon\n    FROM ozon_price_history h\n    CROSS JOIN params p\n    WHERE\n        h.updated_from_ozon >= CURRENT_TIMESTAMP\n            - p.days * INTERVAL '1 day'\n        AND (\n            h.offer_id = p.offer_id\n            OR p.offer_id = 'ALL'\n        )\n),\n\nprice_changes AS (\n    SELECT\n        offer_id,\n        price,\n        updated_from_ozon,\n        LAG(price) OVER (\n            PARTITION BY offer_id\n            ORDER BY updated_from_ozon\n        ) AS previous_price\n    FROM price_data\n)\n\nSELECT\n    offer_id,\n\n    COUNT(*) AS observations,\n\n    COUNT(*) FILTER (\n        WHERE previous_price IS NOT NULL\n          AND price IS DISTINCT FROM previous_price\n    ) AS price_changes,\n\n    ROUND(MIN(price), 2) AS min_price,\n\n    ROUND(MAX(price), 2) AS max_price,\n\n    ROUND(AVG(price), 2) AS avg_price,\n\n    ROUND(\n        (ARRAY_AGG(price ORDER BY updated_from_ozon DESC))[1],\n        2\n    ) AS current_price,\n\n    ROUND(\n        (ARRAY_AGG(price ORDER BY updated_from_ozon ASC))[1],\n        2\n    ) AS first_price,\n\n    ROUND(\n        (ARRAY_AGG(price ORDER BY updated_from_ozon DESC))[1]\n        -\n        (ARRAY_AGG(price ORDER BY updated_from_ozon ASC))[1],\n        2\n    ) AS total_price_change,\n\n    ROUND(\n        (\n            (\n                (ARRAY_AGG(price ORDER BY updated_from_ozon DESC))[1]\n                -\n                (ARRAY_AGG(price ORDER BY updated_from_ozon ASC))[1]\n            )\n            /\n            NULLIF(\n                (ARRAY_AGG(price ORDER BY updated_from_ozon ASC))[1],\n                0\n            )\n        ) * 100,\n        2\n    ) AS total_price_change_percent,\n\n    MAX(updated_from_ozon) AS last_updated\n\nFROM price_changes\n\nGROUP BY\n    offer_id\n\nORDER BY\n    offer_id;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgresTool",
+      "typeVersion": 2.7,
+      "position": [
+        -480,
+        1152
+      ],
+      "id": "9140b135-de9f-4f92-9db6-0e7418821e04",
+      "name": "OZON Price History",
+      "credentials": {
+        "postgres": {
+          "id": "nw1S6OrTyc326IJL",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Анализирует детальные возвраты товаров Ozon из таблицы returns. Используй для вопросов о количестве возвратов, возвращённых единицах, сумме возвратов, причинах и статусах возвратов за заданный период. Для конкретного товара используй offer_id. Не используй этот инструмент для общей прибыли, продаж, остатков или региональной логистики.",
+        "operation": "executeQuery",
+        "query": "WITH filtered_returns AS (\n    SELECT\n        r.offer_id,\n        r.product_name,\n        r.quantity,\n        r.price,\n        r.return_reason,\n        r.return_status,\n        r.logistic_return_date\n    FROM returns r\n    WHERE\n        r.logistic_return_date >= CURRENT_TIMESTAMP\n            - (\n                '{{ $fromAI(\"days\", \"Количество дней для анализа возвратов. По умолчанию 30.\", \"number\", 30) }}'\n            )::integer * INTERVAL '1 day'\n        AND (\n            r.offer_id = '{{ $fromAI(\"offer_id\", \"Артикул Ozon (offer_id). Для конкретного товара передай offer_id. Для общей аналитики передай ALL.\", \"string\", \"ALL\") }}'\n            OR '{{ $fromAI(\"offer_id\", \"Артикул Ozon (offer_id). Для общей аналитики передай ALL.\", \"string\", \"ALL\") }}' = 'ALL'\n        )\n)\n\nSELECT\n    offer_id,\n    MAX(product_name) AS product_name,\n\n    COUNT(*) AS return_rows,\n\n    COALESCE(SUM(quantity), 0) AS returned_quantity,\n\n    ROUND(\n        COALESCE(SUM(price * quantity), 0),\n        2\n    ) AS returned_amount,\n\n    COUNT(DISTINCT return_reason) AS reasons_count,\n\n    COUNT(DISTINCT return_status) AS statuses_count,\n\n    MIN(logistic_return_date) AS first_return_date,\n\n    MAX(logistic_return_date) AS last_return_date,\n\n    COALESCE(\n        jsonb_agg(\n            DISTINCT jsonb_build_object(\n                'reason', return_reason,\n                'status', return_status\n            )\n        ) FILTER (\n            WHERE return_reason IS NOT NULL\n               OR return_status IS NOT NULL\n        ),\n        '[]'::jsonb\n    ) AS return_details\n\nFROM filtered_returns\n\nGROUP BY\n    offer_id\n\nORDER BY\n    returned_quantity DESC,\n    offer_id;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgresTool",
+      "typeVersion": 2.7,
+      "position": [
+        -320,
+        1152
+      ],
+      "id": "a24794e5-3cea-4257-a63c-74eabf436623",
+      "name": "OZON Returns Analytics",
+      "credentials": {
+        "postgres": {
+          "id": "nw1S6OrTyc326IJL",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Анализирует историю остатков товаров Ozon из таблицы stock_history. Используй для вопросов об изменении остатков, динамике FBO/FBS, текущем и среднем остатке, минимальном и максимальном остатке, количестве изменений и периодах дефицита. Поддерживает offer_id и период days. Не используй для анализа продаж, прибыли, логистики или возвратов.",
+        "operation": "executeQuery",
+        "query": "WITH params AS (\n    SELECT\n        '{{ $fromAI(\"offer_id\", \"Артикул Ozon (offer_id). Для конкретного товара передай offer_id. Для общей аналитики передай ALL.\", \"string\", \"ALL\") }}' AS offer_id,\n        '{{ $fromAI(\"days\", \"Количество последних дней для анализа истории остатков. По умолчанию 30.\", \"string\", \"30\") }}'::integer AS days\n),\n\nfiltered_history AS (\n    SELECT\n        h.snapshot_at,\n        h.offer_id,\n        h.product_id,\n        h.type,\n        h.present,\n        h.reserved,\n        h.sku\n    FROM stock_history h\n    CROSS JOIN params p\n    WHERE\n        h.snapshot_at >= CURRENT_TIMESTAMP - p.days * INTERVAL '1 day'\n        AND (\n            h.offer_id = p.offer_id\n            OR p.offer_id = 'ALL'\n        )\n),\n\nstock_with_changes AS (\n    SELECT\n        *,\n        LAG(present) OVER (\n            PARTITION BY offer_id, type\n            ORDER BY snapshot_at\n        ) AS previous_present\n    FROM filtered_history\n)\n\nSELECT\n    offer_id,\n    type,\n\n    MAX(product_id) AS product_id,\n    MAX(sku) AS sku,\n\n    COUNT(*) AS observations,\n\n    ROUND(AVG(present), 2) AS avg_stock,\n    MIN(present) AS min_stock,\n    MAX(present) AS max_stock,\n\n    (\n        ARRAY_AGG(\n            present\n            ORDER BY snapshot_at DESC\n        )\n    )[1] AS current_stock,\n\n    ROUND(AVG(reserved), 2) AS avg_reserved,\n    MAX(reserved) AS max_reserved,\n\n    COUNT(*) FILTER (\n        WHERE present = 0\n    ) AS zero_stock_observations,\n\n    COUNT(*) FILTER (\n        WHERE previous_present IS NOT NULL\n          AND present <> previous_present\n    ) AS stock_changes,\n\n    ROUND(\n        MAX(present) - MIN(present),\n        2\n    ) AS stock_range,\n\n    MIN(snapshot_at) AS first_snapshot,\n    MAX(snapshot_at) AS last_snapshot\n\nFROM stock_with_changes\n\nGROUP BY\n    offer_id,\n    type\n\nORDER BY\n    offer_id,\n    type;",
         "options": {}
       },
       "type": "n8n-nodes-base.postgresTool",
       "typeVersion": 2.7,
       "position": [
         -160,
-        944
+        1152
       ],
-      "id": "9140b135-de9f-4f92-9db6-0e7418821e04",
-      "name": "OZON Price History",
+      "id": "2668b332-da41-45a5-a9ac-1b3065f2e4ff",
+      "name": "OZON Stock History",
+      "credentials": {
+        "postgres": {
+          "id": "nw1S6OrTyc326IJL",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "ТОЛЬКО для анализа фактических продаж за период.\nИспользуй этот инструмент, когда пользователь спрашивает: сколько продано, количество проданных единиц, количество заказов, выручку от продаж, среднюю цену продажи, скорость продаж, продажи в день, динамику продаж за период.\n\nПараметры: offer_id и days.\n\nНЕ используй этот инструмент для прибыли, комиссии, логистики, возвратов, остатков, истории цен или региональной аналитики. Для этих задач используй другие инструменты.\n\nЕсли пользователь спрашивает о продажах конкретного товара — обязательно вызови этот инструмент, даже если другой инструмент может содержать похожие показатели.\n\nЕсли пользователь указал период в днях — передай его в days. Если период не указан — используй 30.\n\noffer_id — артикул Ozon. Для общей аналитики передавай ALL.",
+        "operation": "executeQuery",
+        "query": "WITH params AS (\n    SELECT\n        '{{ $fromAI(\"offer_id\", \"Артикул Ozon (offer_id). Для конкретного товара передай offer_id. Для общей аналитики передай ALL.\", \"string\", \"ALL\") }}' AS offer_id,\n        '{{ $fromAI(\"days\", \"Количество последних дней для анализа продаж. По умолчанию 30.\", \"string\", \"30\") }}'::integer AS days\n),\n\nposting_data AS (\n    SELECT\n        p.posting_number,\n        p.offer_id,\n        p.sku,\n        SUM(COALESCE(p.quantity, 0)) AS units\n    FROM postings p\n    GROUP BY\n        p.posting_number,\n        p.offer_id,\n        p.sku\n),\n\nfinance_data AS (\n    SELECT\n        f.posting_number,\n        f.sku,\n        MIN(f.operation_date) AS operation_date,\n        SUM(COALESCE(f.accruals_for_sale, 0)) AS revenue\n    FROM finance_operations f\n    CROSS JOIN params p\n    WHERE\n        f.operation_type = 'OperationAgentDeliveredToCustomer'\n        AND f.posting_number IS NOT NULL\n        AND f.operation_date >= CURRENT_TIMESTAMP\n            - p.days * INTERVAL '1 day'\n    GROUP BY\n        f.posting_number,\n        f.sku\n),\n\nsales_data AS (\n    SELECT\n        p.offer_id,\n        p.posting_number,\n        p.units,\n        f.operation_date,\n        f.revenue\n    FROM posting_data p\n    INNER JOIN finance_data f\n        ON f.posting_number = p.posting_number\n       AND f.sku = p.sku\n    CROSS JOIN params prm\n    WHERE\n        p.offer_id = prm.offer_id\n        OR prm.offer_id = 'ALL'\n)\n\nSELECT\n    offer_id,\n\n    COUNT(DISTINCT posting_number) AS orders_count,\n\n    SUM(units) AS sold_units,\n\n    ROUND(\n        SUM(revenue),\n        2\n    ) AS revenue,\n\n    ROUND(\n        SUM(revenue) / NULLIF(SUM(units), 0),\n        2\n    ) AS avg_sale_price,\n\n    ROUND(\n        SUM(units)::numeric\n        / NULLIF(\n            GREATEST(\n                EXTRACT(\n                    DAY FROM (\n                        CURRENT_TIMESTAMP\n                        - (\n                            CURRENT_TIMESTAMP\n                            - (SELECT days FROM params) * INTERVAL '1 day'\n                        )\n                    )\n                ),\n                1\n            ),\n            0\n        ),\n        2\n    ) AS sales_per_day,\n\n    MIN(operation_date) AS first_sale_date,\n\n    MAX(operation_date) AS last_sale_date\n\nFROM sales_data\n\nGROUP BY\n    offer_id\n\nORDER BY\n    sold_units DESC,\n    offer_id;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgresTool",
+      "typeVersion": 2.7,
+      "position": [
+        0,
+        1152
+      ],
+      "id": "133b58fb-9d93-4550-bf02-804b2516deae",
+      "name": "OZON Sales Analytics",
       "credentials": {
         "postgres": {
           "id": "nw1S6OrTyc326IJL",
@@ -2783,6 +2852,39 @@
           }
         ]
       ]
+    },
+    "OZON Returns Analytics": {
+      "ai_tool": [
+        [
+          {
+            "node": "OZON AI Analyst",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OZON Stock History": {
+      "ai_tool": [
+        [
+          {
+            "node": "OZON AI Analyst",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OZON Sales Analytics": {
+      "ai_tool": [
+        [
+          {
+            "node": "OZON AI Analyst",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "active": false,
@@ -2791,7 +2893,7 @@
     "binaryMode": "separate",
     "availableInMCP": false
   },
-  "versionId": "7f7c26f8-d141-491b-adda-1414d6810926",
+  "versionId": "cc159218-376c-4d62-abb9-77bbab2d4f7d",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "a1c5b8ae00ab65096f4efdfde15addf3de4578210e14dece35559089eaaed06d"
