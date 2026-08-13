@@ -51,3 +51,13 @@ Phase A is the established working baseline. The next development work should ex
 - Verified directly for `УФ 005Б` over 30 days: 15 observations, 1 price change, minimum 667 ₽, maximum 901 ₽, average 791.80 ₽, current 667 ₽, first 901 ₽, total change −234 ₽ / −25.97%.
 - Verified end-to-end through `OZON AI Analyst`: the agent correctly called `OZON Price History` and returned the same price-history metrics.
 - Current price-history analytics implementation is considered `v1` and should be extended without duplicating the existing tool architecture.
+
+### Returns analytics — OZON AI Analyst
+
+- Added `OZON Returns Analytics` as a dedicated Postgres AI Tool connected to `OZON AI Analyst`.
+- Uses the existing `returns` table; no new return-storage layer was introduced.
+- Supports `offer_id` filtering and a configurable analysis period through the `days` parameter; `ALL` is supported for cross-product analysis.
+- Returns return-row count, returned units, returned amount, number of distinct reasons/statuses, first/last return dates and detailed reason/status pairs.
+- Parameters are normalized through a single `params` CTE so `$fromAI()` is called only once per parameter.
+- Verified end-to-end for `УФ 005Б` over 30 days: 1 return row, 1 returned unit, returned amount 811 ₽, reason `Покупатель отказался при вручении: товар не подошел`, status `На складе Ozon`.
+- Current returns analytics implementation is considered `v1` and should be extended without duplicating the existing tool architecture.
