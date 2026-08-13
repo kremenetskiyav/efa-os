@@ -30,3 +30,13 @@ Phase A is the established working baseline. The next development work should ex
 - `vw_orders_finance_summary` and downstream profit views use the corrected posting-level cost.
 - Verified on four delivered multi-unit postings.
 - Audit confirmed no delivered posting currently contains multiple SKUs.
+
+### Regional analytics — OZON AI Analyst
+
+- Added `OZON Regional Analytics` as a dedicated Postgres AI Tool connected to `OZON AI Analyst`.
+- Regional destination is derived from `posting_logistics.cluster_to`; `region` and `city` are not reliable populated fields in the current dataset.
+- The tool aggregates delivered sales by destination cluster/city and `offer_id` and returns units, postings count, revenue, commission, logistics, payout, profit, logistics per unit and profit per unit.
+- Cost is calculated from `products.cost_price` multiplied by posting quantity, preserving the multi-unit correction.
+- Financial rows without positive `accruals_for_sale` are excluded from regional sales analysis.
+- Verified end-to-end through `OZON AI Analyst`: the agent correctly called `OZON Regional Analytics` and returned the top five regions for `УФ 005Б` by logistics per unit together with profit per unit.
+- Current regional analytics implementation is considered `v1` and should be extended without duplicating the existing analytics tool architecture.
