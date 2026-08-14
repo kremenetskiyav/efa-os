@@ -6,7 +6,7 @@ Date: 2026-08-14
 
 The project is based on a local Dockerized n8n + PostgreSQL stack. The canonical workflow is `OZON workflow - Phase A`.
 
-Workflow ID: `q0yXnbt8BqFnukQj`
+Live workflow ID: `B2DiIq630Yb2fXR8`
 Canonical workflow JSON: `n8n/workflows/OZON_workflow_Phase_A.json`.
 
 The repository copy is sanitized for source control. Secrets remain in local n8n credentials and are not committed.
@@ -129,6 +129,22 @@ existing Python engine; no recommendation rules were copied into n8n or SQL,
 and the adapter exposes no host port. The provided Compose fragment must be
 included with the local runtime Compose file before the sanitized workflow is
 imported into the production n8n instance.
+
+### Token Optimization v0.1
+
+The live `OZON AI Analyst` workflow was synchronized to the canonical JSON and
+successfully tested end-to-end with `get_price_profit_recommendations`.
+
+- The agent correctly called the tool and returned `CONSIDER_RAISE` for
+  `УФ 001Б` and `УФ 002Б`, and `REVIEW_DATA` for `УФ 004Б`.
+- `proposed_price` remained `null`; the AI did not invent a target price.
+- Prompt and tool-context reduction lowered the observed run from about
+  `7,262` to `2,458` tokens (about 66%).
+- The HTTP Request Tool now serializes `offer_id` and `action` separately,
+  preserving absent filters as JSON `null` rather than `undefined` or the
+  string `"null"`.
+- Prompt caching is automatically applicable to the stable prompt prefix, but
+  the current n8n execution UI does not expose its cache metrics.
 
 ## Snapshot Layer v1 — architecture complete
 

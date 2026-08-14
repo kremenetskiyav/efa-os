@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-08-15
+
+- Completed Token Optimization v0.1 for the live OZON AI Analyst workflow.
+  End-to-end execution confirmed `get_price_profit_recommendations`, correct
+  recommendations, and `proposed_price = null`; observed usage fell from about
+  7,262 to 2,458 tokens (about 66%).
+- Fixed the HTTP Request Tool JSON Body so separately supplied nullable
+  `offer_id` and `action` parameters are serialized as JSON `null`, not
+  `undefined` or the string `"null"`.
+- Synchronized the successful live workflow to the canonical workflow JSON.
+  Prompt caching is automatically applicable, while current n8n execution
+  metrics do not report cache usage.
+
 ## 2026-08-14
 
 - Connected the canonical OZON AI Analyst workflow to the new internal
