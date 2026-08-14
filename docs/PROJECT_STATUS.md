@@ -11,6 +11,13 @@ Canonical workflow JSON: `n8n/workflows/OZON_workflow_Phase_A.json`.
 
 The repository copy is sanitized for source control. Secrets remain in local n8n credentials and are not committed.
 
+## Repository and source-control status
+
+- Commit `7dcdc2e` (`feat: synchronize repository and add Snapshot Layer foundation`) was created and pushed to `origin/main`.
+- The local `main` branch is synchronized with GitHub.
+- The repository now contains the Snapshot Layer v1 architecture documents, its reviewed PostgreSQL DDL migration, the safe cost-price import script, and secret-free configuration/dependency files.
+- The PostgreSQL migration has **not** been applied. No PostgreSQL schema or production data was changed as part of this repository synchronization.
+
 ## Completed analytical foundation
 
 The following six AI-facing tools are now verified in the live workflow:
@@ -92,22 +99,46 @@ Current architecture:
 
 Dockerized infrastructure remains the execution environment for n8n and PostgreSQL.
 
-## Next phase — Autonomous Monitoring Core
+## Snapshot Layer v1 — architecture complete
 
-The next stage is **not** to add more ad-hoc SQL tools. The priority is to build the monitoring foundation that can detect changes automatically.
+The project has completed the architecture and DDL design for the first Autonomous Monitoring Core layer. The relevant documents are:
+
+- `docs/architecture/SNAPSHOT_LAYER_V1.md`
+- `docs/architecture/SNAPSHOT_LAYER_DDL_DESIGN_V1.md`
+- `database/migrations/001_snapshot_layer_v1.sql`
+
+The migration is versioned and reviewed, but it remains unapplied. It creates the planned `snapshot_runs`, `product_snapshots`, and `change_events` tables only after explicit approval and manual execution.
+
+The v1 MVP is intentionally narrow:
+
+- the only event type is `PRICE_CHANGED`;
+- price comparisons use immutable product snapshots and the canonical `products.offer_id`;
+- repeated runs are designed to be idempotent;
+- AI may analyse facts and provide recommendations, but it performs no automatic actions;
+- no product, price, promotion, stock, or OZON setting is changed automatically.
+
+## Next phase — Snapshot Layer implementation
+
+The next stage is **not** to add more ad-hoc SQL tools. The priority is controlled implementation of the designed monitoring foundation.
 
 Target architecture:
 
 `OZON -> PostgreSQL -> current state snapshot -> previous state snapshot -> change detection -> Decision Engine -> AI interpretation -> alert/report`
 
-### Phase 1 — State and change monitoring
+### Completed design work
 
-1. Verify the current PostgreSQL schema and existing historical tables before adding new structures.
-2. Define the canonical state model for monitored entities/products.
-3. Define snapshot cadence and retention.
-4. Implement deterministic change detection for sales, prices, stock, returns and other existing metrics.
-5. Store detected changes/events in PostgreSQL.
-6. Keep facts separate from interpretations and recommendations.
+1. Audited the existing PostgreSQL schema and historical price/stock sources in read-only mode.
+2. Defined the canonical v1 state model, immutable snapshot rules, UTC timestamps, and Europe/Moscow business dates.
+3. Defined idempotency rules for runs, snapshots, and events.
+4. Designed and versioned the v1 DDL migration without applying it.
+
+### Implementation prerequisites
+
+1. Review and explicitly approve manual application of the Snapshot Layer migration.
+2. Implement the Snapshot Collector only after the migration is available.
+3. Create deterministic `PRICE_CHANGED` detection from consecutive valid snapshots.
+4. Validate the first scenario for `УФ 005Б`: `901 ₽ -> 667 ₽` (`-234 ₽`, `-25.97%`).
+5. Keep detected facts separate from AI interpretation and recommendations.
 
 ### Phase 2 — Autonomous business monitoring
 
