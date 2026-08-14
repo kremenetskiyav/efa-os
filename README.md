@@ -1,63 +1,83 @@
 # efa-os
-AI Operating System for EFA automotive cabin air filter brand.
+
+EFA OS is the operational system for the EFA automotive cabin air filter brand: OZON marketplace data, PostgreSQL analytics, n8n orchestration, and AI decision support.
+
+## Business context
+
+EFA develops automotive cabin air filters and technical requirements; manufacturing is performed by a partner factory to EFA specifications. The primary sales channel is Ozon Marketplace.
+
+The long-term goal is to build a scalable filtration brand supported by AI, automation, and standardised business processes while keeping product facts and human responsibility central to decision-making.
+
+## Technical architecture
+
+The production runtime is local:
+
+- Docker Desktop hosts n8n and PostgreSQL.
+- OZON Seller API is the external data source.
+- PostgreSQL is the persistence and analytical layer.
+- `n8n/workflows/OZON_workflow_Phase_A.json` is the canonical Phase A workflow.
+- OZON AI Analyst and its specialised tools provide read-oriented analytical and decision-support capabilities.
+
+Data flow:
+
+`OZON API -> n8n ingestion -> PostgreSQL tables and views -> analytical tools -> OZON AI Analyst`
+
+GitHub stores version-controlled code and documentation; it is not the production runtime.
 
 ## OZON automation — Phase A baseline
 
-Current architectural baseline for the OZON automation project:
+Phase A is the established working baseline. It covers products, stocks, finance operations, postings, price history, returns, stock history, posting logistics, product alerts, regional analytics, and AI-assisted analysis.
 
-- n8n workflow: `n8n/workflows/OZON_workflow_Phase_A.json`
-- PostgreSQL is the persistence layer.
-- OZON API authentication is performed through the n8n `Header Auth account` credential (`httpHeaderAuth`); API keys must not be stored directly in workflow JSON.
-- Phase A includes product, stock, finance, postings, price history, returns, stock history, posting logistics, product alerts/Decision Engine, OZON Analytics and OZON Problem Analysis, plus the OZON AI Analyst interface.
-- Region/logistics analytics is part of the Phase A analytical layer and must be preserved when extending the workflow.
+Key rules:
 
-### Baseline rules
+1. Extend the existing workflow instead of creating a duplicate one.
+2. Preserve PostgreSQL schema compatibility and keep persistent calculations in SQL.
+3. Keep OZON credentials in local n8n credential storage; never store API keys in workflow JSON.
+4. Preserve verified regional logistics, price history, returns, stock, and financial analytics when extending the system.
 
-1. Treat the working n8n workflow as the source of truth for runtime behavior.
-2. Do not create duplicate workflows when an existing node/branch can be extended.
-3. Preserve existing credential architecture and PostgreSQL schema compatibility.
-4. Do not expose or commit real OZON API keys.
-5. Any architectural change must be documented here before moving to the next phase.
+The verified Phase A status, metrics, and roadmap are maintained in [docs/PROJECT_STATUS.md](docs/PROJECT_STATUS.md), [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), and [docs/ROADMAP.md](docs/ROADMAP.md).
 
-### Current project state
+## Snapshot Layer v1
 
-Phase A is the established working baseline. The next development work should extend the existing architecture rather than rebuild it.
+The next architectural direction is autonomous monitoring based on immutable product state snapshots and deterministic change detection.
 
-### Analytical fixes completed
+The initial scope is deliberately narrow:
 
-- Multi-unit posting cost calculation fixed.
-- `vw_orders_finance_final` now derives posting-level cost as `cost_price × total quantity` from `postings`.
-- `vw_orders_finance_summary` and downstream profit views use the corrected posting-level cost.
-- Verified on four delivered multi-unit postings.
-- Audit confirmed no delivered posting currently contains multiple SKUs.
+- create immutable snapshots after successful data ingestion;
+- compare consecutive valid price states for the same canonical `offer_id`;
+- detect `PRICE_CHANGED` events only;
+- keep AI in an analysis and recommendation role;
+- do not automatically change products, prices, promotions, stock, or OZON settings.
 
-### Regional analytics — OZON AI Analyst
+Snapshot Layer implementation must reuse existing Phase A data sources and preserve the current workflow and analytical tools.
 
-- Added `OZON Regional Analytics` as a dedicated Postgres AI Tool connected to `OZON AI Analyst`.
-- Regional destination is derived from `posting_logistics.cluster_to`; `region` and `city` are not reliable populated fields in the current dataset.
-- The tool aggregates delivered sales by destination cluster/city and `offer_id` and returns units, postings count, revenue, commission, logistics, payout, profit, logistics per unit and profit per unit.
-- Cost is calculated from `products.cost_price` multiplied by posting quantity, preserving the multi-unit correction.
-- Financial rows without positive `accruals_for_sale` are excluded from regional sales analysis.
-- Verified end-to-end through `OZON AI Analyst`: the agent correctly called `OZON Regional Analytics` and returned the top five regions for `УФ 005Б` by logistics per unit together with profit per unit.
-- Current regional analytics implementation is considered `v1` and should be extended without duplicating the existing analytics tool architecture.
+## Repository structure
 
-### Price history — OZON AI Analyst
+```text
+.env.example              Secret-free environment-variable template
+AGENTS.md                 Project rules for contributors and AI agents
+README.md                 Project overview
+requirements.txt          Python dependencies for local scripts
+Scripts/                  Local utility scripts, including cost-price import
+database/                 Versioned PostgreSQL migrations and their instructions
+docs/                     Architecture, project status, roadmap, and product standards
+n8n/workflows/            Sanitised canonical n8n workflow exports
+```
 
-- Added `OZON Price History` as a dedicated Postgres AI Tool connected to `OZON AI Analyst`.
-- Uses the existing `ozon_price_history` table and does not introduce a new storage layer or duplicate the existing price-history workflow.
-- Supports `offer_id` filtering and a configurable analysis period through the `days` parameter; `ALL` is supported for cross-product analysis.
-- Returns observations, number of price changes, minimum, maximum and average price, first and current price, absolute and percentage price change, and the latest observation timestamp.
-- The tool calculates the first/current price from the ordered history and aggregates the result before returning it to the AI Analyst.
-- Verified directly for `УФ 005Б` over 30 days: 15 observations, 1 price change, minimum 667 ₽, maximum 901 ₽, average 791.80 ₽, current 667 ₽, first 901 ₽, total change −234 ₽ / −25.97%.
-- Verified end-to-end through `OZON AI Analyst`: the agent correctly called `OZON Price History` and returned the same price-history metrics.
-- Current price-history analytics implementation is considered `v1` and should be extended without duplicating the existing tool architecture.
+New directories are documented only after they are introduced and reviewed; this README does not list placeholder or non-existent folders.
 
-### Returns analytics — OZON AI Analyst
+## Security and data integrity
 
-- Added `OZON Returns Analytics` as a dedicated Postgres AI Tool connected to `OZON AI Analyst`.
-- Uses the existing `returns` table; no new return-storage layer was introduced.
-- Supports `offer_id` filtering and a configurable analysis period through the `days` parameter; `ALL` is supported for cross-product analysis.
-- Returns return-row count, returned units, returned amount, number of distinct reasons/statuses, first/last return dates and detailed reason/status pairs.
-- Parameters are normalized through a single `params` CTE so `$fromAI()` is called only once per parameter.
-- Verified end-to-end for `УФ 005Б` over 30 days: 1 return row, 1 returned unit, returned amount 811 ₽, reason `Покупатель отказался при вручении: товар не подошел`, status `На складе Ozon`.
-- Current returns analytics implementation is considered `v1` and should be extended without duplicating the existing tool architecture.
+- Never commit secrets, `.env` files, n8n credentials, local database dumps, Docker volumes, logs, or temporary files.
+- Use `.env.example` only as a secret-free configuration template when scripts require environment variables.
+- Store reviewed PostgreSQL schema migrations in `database/migrations/`; apply them manually only after review and explicit approval.
+- Keep n8n credentials in local n8n credential storage. Workflow exports in Git must remain sanitised and contain placeholders only.
+- Do not invent product specifications, OEM references, or compatibility. Preserve traceability to verified product sources.
+- AI supports people; it does not replace responsibility or approve autonomous business changes.
+
+## Documentation
+
+- [Architecture](docs/ARCHITECTURE.md)
+- [Project status](docs/PROJECT_STATUS.md)
+- [Roadmap](docs/ROADMAP.md)
+- [Changelog](docs/CHANGELOG.md)

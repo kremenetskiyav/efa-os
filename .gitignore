@@ -1,0 +1,49 @@
+# Local environment configuration
+.env
+.env.*
+!.env.example
+
+# Python bytecode, caches, and virtual environments
+__pycache__/
+*.py[cod]
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+env/
+
+# Editor, operating-system, and temporary files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.tmp
+*.temp
+*.bak
+.DS_Store
+Thumbs.db
+
+# Local logs, exports, database dumps, and runtime volumes
+*.log
+logs/
+*.dump
+*.sql.gz
+*.sqlite
+*.sqlite3
+postgres_data/
+n8n_data/
+docker-data/
+
+# Local source data and spreadsheets are not part of the GitHub repository
+EFA Products/
+*.xlsx
+*.xls
+*.csv
+
+# Versioned PostgreSQL schema migrations
+!database/
+!database/migrations/
+!database/migrations/*.sql
