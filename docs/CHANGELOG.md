@@ -2,6 +2,15 @@
 
 ## 2026-08-15
 
+- Deployed Price Recommendation Engine v0.2 to the private recommendation-tool
+  sidecar and synchronized its v0.2 context with the live OZON AI Analyst.
+  End-to-end execution called `get_price_profit_recommendations`; all five
+  current price intervals were correctly reported as `NOT_YET_CONFIRMED`, so
+  the AI recommended observation rather than another price change. Numeric
+  `proposed_price` remained `null` (about 3,336 tokens).
+- Expanded the nullable `action` contract to include `CONSIDER_LOWER` while
+  preserving real JSON `null` for unfiltered calls.
+
 - Corrected v0.2 price-window timing: delivered-posting date now selects the
   active price-history interval, while finance-operation date is not used as
   a sale-date proxy. Added current-price confirmation fields and conservative

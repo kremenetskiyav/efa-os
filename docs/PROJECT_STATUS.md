@@ -169,6 +169,16 @@ price-history interval; otherwise it is `NOT_YET_CONFIRMED`, retains no
 proposed price, and requests observation. Historical delivery economics is
 never transferred to a later display price.
 
+### Live v0.2 AI integration
+
+The private `get_price_profit_recommendations` sidecar and live OZON AI
+Analyst are synchronized with v0.2. The confirmed end-to-end request used the
+tool and returned all five current intervals as `NOT_YET_CONFIRMED`: the
+current price has no sufficient confirmed deliveries after its start date.
+The AI recommends observation only, uses `last_confirmed_*` as historical
+context, and returns no numeric price (`proposed_price = null`). The observed
+run used about 3,336 tokens.
+
 ## Snapshot Layer v1 — architecture complete
 
 The project has completed the architecture and DDL design for the first Autonomous Monitoring Core layer. The relevant documents are:
