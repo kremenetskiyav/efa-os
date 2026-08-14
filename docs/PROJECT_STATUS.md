@@ -121,6 +121,15 @@ for all products or an optional canonical `offer_id` / recommendation-action
 filter. The contract does not connect to n8n or alter PostgreSQL; it is the
 next integration point for OZON AI Analyst.
 
+### OZON AI Analyst price-recommendation tool
+
+The canonical n8n workflow now includes `get_price_profit_recommendations` as
+an AI tool. It calls a private Docker-network HTTP adapter which invokes the
+existing Python engine; no recommendation rules were copied into n8n or SQL,
+and the adapter exposes no host port. The provided Compose fragment must be
+included with the local runtime Compose file before the sanitized workflow is
+imported into the production n8n instance.
+
 ## Snapshot Layer v1 — architecture complete
 
 The project has completed the architecture and DDL design for the first Autonomous Monitoring Core layer. The relevant documents are:

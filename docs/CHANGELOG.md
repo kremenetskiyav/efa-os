@@ -2,6 +2,11 @@
 
 ## 2026-08-14
 
+- Connected the canonical OZON AI Analyst workflow to the new internal
+  `get_price_profit_recommendations` AI tool through a private Docker-network
+  HTTP adapter. No port, Docker socket, PostgreSQL schema, n8n business logic,
+  or recommendation rules were added.
+
 - Added the strict, read-only function-tool contract
   `get_price_profit_recommendations` over the existing Price & Profit
   Recommendation Engine v0.1, with local unit tests and no changes to n8n,
