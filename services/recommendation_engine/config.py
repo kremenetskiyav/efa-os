@@ -9,7 +9,7 @@ from typing import Mapping
 
 
 class ConfigurationError(ValueError):
-    """Raised when required local configuration is absent or invalid."""
+    pass
 
 
 @dataclass(frozen=True)
@@ -23,9 +23,9 @@ class DatabaseConfig:
 
 @dataclass(frozen=True)
 class RecommendationConfig:
-    """Conservative business thresholds, supplied through environment variables."""
-
     low_margin_percent: Decimal
+    min_window_units: int
+    max_price_step_percent: Decimal
 
 
 def load_database_config(environ: Mapping[str, str] | None = None) -> DatabaseConfig:
@@ -40,22 +40,17 @@ def load_database_config(environ: Mapping[str, str] | None = None) -> DatabaseCo
         raise ConfigurationError("EFA_DB_PORT must be an integer") from error
     if not 1 <= port <= 65535:
         raise ConfigurationError("EFA_DB_PORT must be between 1 and 65535")
-    return DatabaseConfig(
-        host=environment["EFA_DB_HOST"].strip(),
-        port=port,
-        name=environment["EFA_DB_NAME"].strip(),
-        user=environment["EFA_DB_USER"].strip(),
-        password=environment["EFA_DB_PASSWORD"],
-    )
+    return DatabaseConfig(environment["EFA_DB_HOST"].strip(), port, environment["EFA_DB_NAME"].strip(), environment["EFA_DB_USER"].strip(), environment["EFA_DB_PASSWORD"])
 
 
 def load_recommendation_config(environ: Mapping[str, str] | None = None) -> RecommendationConfig:
     environment = os.environ if environ is None else environ
-    raw_margin = environment.get("EFA_RECOMMENDATION_LOW_MARGIN_PERCENT", "15")
     try:
-        low_margin_percent = Decimal(raw_margin)
-    except InvalidOperation as error:
-        raise ConfigurationError("EFA_RECOMMENDATION_LOW_MARGIN_PERCENT must be numeric") from error
-    if not Decimal("0") < low_margin_percent < Decimal("100"):
-        raise ConfigurationError("EFA_RECOMMENDATION_LOW_MARGIN_PERCENT must be between 0 and 100")
-    return RecommendationConfig(low_margin_percent=low_margin_percent)
+        margin = Decimal(environment.get("EFA_RECOMMENDATION_LOW_MARGIN_PERCENT", "15"))
+        max_step = Decimal(environment.get("EFA_RECOMMENDATION_MAX_PRICE_STEP_PERCENT", "20"))
+        min_units = int(environment.get("EFA_RECOMMENDATION_MIN_WINDOW_UNITS", "10"))
+    except (InvalidOperation, ValueError) as error:
+        raise ConfigurationError("Recommendation thresholds must be numeric") from error
+    if not Decimal("0") < margin < Decimal("100") or not Decimal("0") < max_step <= Decimal("100") or min_units < 1:
+        raise ConfigurationError("Recommendation thresholds are outside safe bounds")
+    return RecommendationConfig(margin, min_units, max_step)

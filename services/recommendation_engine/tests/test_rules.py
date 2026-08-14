@@ -1,58 +1,42 @@
-"""Unit tests for conservative, deterministic recommendation rules."""
-
 from datetime import datetime
 from decimal import Decimal
 import unittest
 
 from config import RecommendationConfig
-from models import ProductEconomics
+from models import PriceWindow, ProductEconomics
 from rules import build_recommendation
 
+CONFIG = RecommendationConfig(Decimal("15"), 10, Decimal("20"))
 
-CONFIG = RecommendationConfig(low_margin_percent=Decimal("15"))
+def window(price: str, profit: str, *, units: int = 12, end: int = 2) -> PriceWindow:
+    revenue = Decimal(price) * units
+    return PriceWindow(Decimal(price), units, units, revenue, Decimal("-20") * units, Decimal("-10") * units, Decimal("0"), Decimal("40") * units, Decimal("0"), Decimal(profit) * units, datetime(2026, 8, 1), datetime(2026, 8, end))
 
+def product(*windows: PriceWindow, issues: tuple[str, ...] = ()) -> ProductEconomics:
+    return ProductEconomics("УФ 005Б", Decimal("100"), Decimal("40"), windows, issues)
 
-def economics(**overrides: object) -> ProductEconomics:
-    values: dict[str, object] = {"offer_id": "УФ 005Б", "current_price": Decimal("667"), "cost_price": Decimal("166"), "revenue": Decimal("1000"), "profit": Decimal("200"), "commission": Decimal("-300"), "logistics": Decimal("-100"), "period_start": datetime(2026, 8, 1), "period_end": datetime(2026, 8, 13), "delivered_units": 10, "analytics_revenue": Decimal("1000"), "analytics_profit": Decimal("200")}
-    values.update(overrides)
-    return ProductEconomics(**values)  # type: ignore[arg-type]
-
-
-class RecommendationRuleTests(unittest.TestCase):
-    def test_negative_profit_is_high_priority_consider_raise(self) -> None:
-        result = build_recommendation(economics(profit=Decimal("-1"), analytics_profit=Decimal("-1")), CONFIG)
-        self.assertEqual((result.action, result.priority), ("CONSIDER_RAISE", "high"))
-
-    def test_low_margin_considers_raise(self) -> None:
-        result = build_recommendation(economics(profit=Decimal("100"), analytics_profit=Decimal("100")), CONFIG)
-        self.assertEqual((result.action, result.priority), ("CONSIDER_RAISE", "medium"))
-
-    def test_normal_margin_keeps_price(self) -> None:
-        result = build_recommendation(economics(), CONFIG)
-        self.assertEqual((result.action, result.priority), ("KEEP", "low"))
-        self.assertEqual(result.profit_per_unit, Decimal("20.00"))
-
-    def test_missing_data_requires_review(self) -> None:
-        result = build_recommendation(economics(current_price=None), CONFIG)
+class RulesV2Tests(unittest.TestCase):
+    def test_review_for_quality_gate(self) -> None:
+        result = build_recommendation(product(window("80", "10"), issues=("unallocated_other_expenses",)), CONFIG)
         self.assertEqual(result.action, "REVIEW_DATA")
-        self.assertIn("missing_current_price", result.reasons)
 
-    def test_zero_units_requires_review_and_no_profit_per_unit(self) -> None:
-        result = build_recommendation(economics(delivered_units=0), CONFIG)
-        self.assertEqual(result.action, "REVIEW_DATA")
-        self.assertIsNone(result.profit_per_unit)
+    def test_keep_with_adequate_current_window(self) -> None:
+        result = build_recommendation(product(window("100", "20")), CONFIG)
+        self.assertEqual((result.action, result.proposed_price), ("KEEP", None))
 
-    def test_conflicting_confirmed_views_require_review(self) -> None:
-        result = build_recommendation(economics(analytics_profit=Decimal("199")), CONFIG)
-        self.assertEqual(result.action, "REVIEW_DATA")
-        self.assertIn("profit_mismatch_between_confirmed_views", result.reasons)
+    def test_raise_uses_only_observed_better_price(self) -> None:
+        result = build_recommendation(product(window("100", "10", end=2), window("110", "20", end=1)), CONFIG)
+        self.assertEqual((result.action, result.proposed_price), ("CONSIDER_RAISE", Decimal("110")))
 
-    def test_target_price_stays_null_without_confirmed_variable_cost_model(self) -> None:
-        result = build_recommendation(economics(), CONFIG)
+    def test_lower_requires_better_observed_economics(self) -> None:
+        result = build_recommendation(product(window("100", "10", end=2), window("90", "20", end=1)), CONFIG)
+        self.assertEqual((result.action, result.proposed_price), ("CONSIDER_LOWER", Decimal("90")))
+
+    def test_no_extrapolation_when_step_exceeds_limit(self) -> None:
+        result = build_recommendation(product(window("100", "10", end=2), window("150", "30", end=1)), CONFIG)
         self.assertIsNone(result.proposed_price)
-        self.assertIsNone(result.proposed_price_range)
-        self.assertIn("no confirmed marginal commission", result.proposal_reason or "")
+        self.assertEqual(result.action, "CONSIDER_RAISE")
 
-
-if __name__ == "__main__":
-    unittest.main()
+    def test_low_sample_never_becomes_numeric_candidate(self) -> None:
+        result = build_recommendation(product(window("100", "10", end=2), window("110", "30", units=2, end=1)), CONFIG)
+        self.assertIsNone(result.proposed_price)

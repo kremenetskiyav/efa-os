@@ -2,6 +2,16 @@
 
 ## 2026-08-15
 
+- Added Price Recommendation Engine v0.2: read-only confirmed unit economics
+  from delivered posting quantity, historical observed-effective-price windows,
+  `CONSIDER_LOWER`, confidence gates and a configurable maximum price step.
+  Numeric prices are limited to observed windows; no tariff, tax or unknown
+  price extrapolation is used.
+- Set `vw_orders_profit_final` as the profit source of truth. Product-level
+  other expenses are included only when a posting key uniquely identifies one
+  delivered product line; unallocated CPC, insurance and disposal costs remain
+  excluded.
+
 - Completed Token Optimization v0.1 for the live OZON AI Analyst workflow.
   End-to-end execution confirmed `get_price_profit_recommendations`, correct
   recommendations, and `proposed_price = null`; observed usage fell from about

@@ -1,69 +1,89 @@
-"""Deterministic, conservative price recommendation rules."""
+"""Conservative rules over observed, confirmed effective-price windows."""
 
 from __future__ import annotations
 
 from decimal import Decimal, ROUND_HALF_UP
 
 from config import RecommendationConfig
-from models import ProductEconomics, Recommendation
+from models import PriceWindow, ProductEconomics, Recommendation
 
 
-MONEY_QUANTUM = Decimal("0.01")
-PERCENT_QUANTUM = Decimal("0.01")
+MONEY = Decimal("0.01")
 
 
-def _same_money(left: Decimal | None, right: Decimal | None) -> bool:
-    if left is None or right is None:
-        return False
-    return left.quantize(MONEY_QUANTUM) == right.quantize(MONEY_QUANTUM)
+def _money(value: Decimal) -> Decimal:
+    return value.quantize(MONEY, rounding=ROUND_HALF_UP)
+
+
+def _margin(window: PriceWindow) -> Decimal | None:
+    return _money(window.profit / window.revenue * Decimal("100")) if window.revenue > 0 else None
+
+
+def _profit_per_unit(window: PriceWindow) -> Decimal | None:
+    return _money(window.profit / Decimal(window.units)) if window.units > 0 else None
+
+
+def _confidence(window: PriceWindow, config: RecommendationConfig) -> str:
+    if window.units >= config.min_window_units * 2:
+        return "high"
+    if window.units >= config.min_window_units:
+        return "medium"
+    return "low"
+
+
+def _current_window(windows: tuple[PriceWindow, ...]) -> PriceWindow | None:
+    if not windows:
+        return None
+    latest = max(item.period_end for item in windows)
+    candidates = [item for item in windows if item.period_end == latest]
+    return candidates[0] if len(candidates) == 1 else None
 
 
 def build_recommendation(economics: ProductEconomics, config: RecommendationConfig) -> Recommendation:
-    """Recommend review/raise/keep without inventing a target-price formula."""
+    current = _current_window(economics.windows)
+    issues = list(economics.data_issues)
+    if economics.current_price is None:
+        issues.append("missing_current_price_context")
+    if economics.cost_price is None:
+        issues.append("missing_cost_price")
+    if current is None:
+        issues.append("ambiguous_or_missing_current_effective_window")
+    if issues:
+        return _result(economics, current, "REVIEW_DATA", "high", None, "low", tuple(sorted(set(issues))))
 
-    quality_issues: list[str] = []
-    required = {
-        "current_price": economics.current_price,
-        "cost_price": economics.cost_price,
-        "revenue": economics.revenue,
-        "profit": economics.profit,
-        "commission": economics.commission,
-        "logistics": economics.logistics,
-        "period_start": economics.period_start,
-        "period_end": economics.period_end,
-    }
-    quality_issues.extend(f"missing_{name}" for name, value in required.items() if value is None)
-    if economics.revenue is not None and economics.revenue <= 0:
-        quality_issues.append("revenue_is_not_positive")
-    if economics.delivered_units is None or economics.delivered_units <= 0:
-        quality_issues.append("confirmed_delivered_units_unavailable")
-    if not _same_money(economics.revenue, economics.analytics_revenue):
-        quality_issues.append("revenue_mismatch_between_confirmed_views")
-    if not _same_money(economics.profit, economics.analytics_profit):
-        quality_issues.append("profit_mismatch_between_confirmed_views")
+    assert current is not None
+    current_margin = _margin(current)
+    current_profit_per_unit = _profit_per_unit(current)
+    if current_margin is None or current_profit_per_unit is None:
+        return _result(economics, current, "REVIEW_DATA", "high", None, "low", ("invalid_current_unit_economics",))
 
-    margin: Decimal | None = None
-    if economics.revenue is not None and economics.revenue > 0 and economics.profit is not None:
-        margin = (economics.profit / economics.revenue * Decimal("100")).quantize(PERCENT_QUANTUM, rounding=ROUND_HALF_UP)
-
-    profit_per_unit: Decimal | None = None
-    if not quality_issues and economics.delivered_units is not None and economics.profit is not None:
-        profit_per_unit = (economics.profit / Decimal(economics.delivered_units)).quantize(MONEY_QUANTUM, rounding=ROUND_HALF_UP)
-
-    proposal_reason = "proposed_price is null: no confirmed marginal commission and logistics model for a target-price calculation"
-    if quality_issues:
-        return Recommendation(**_fields(economics, profit_per_unit, margin), data_quality_status="review", action="REVIEW_DATA", priority="high", reasons=tuple(quality_issues), proposed_price=None, proposed_price_range=None, proposal_reason=proposal_reason)
-
-    assert economics.profit is not None
-    assert margin is not None
-    if economics.profit <= 0:
-        action, priority, reasons = "CONSIDER_RAISE", "high", ("non_positive_profit",)
-    elif margin < config.low_margin_percent:
-        action, priority, reasons = "CONSIDER_RAISE", "medium", ("margin_below_configured_threshold",)
-    else:
-        action, priority, reasons = "KEEP", "low", ("margin_meets_configured_threshold",)
-    return Recommendation(**_fields(economics, profit_per_unit, margin), data_quality_status="valid", action=action, priority=priority, reasons=reasons, proposed_price=None, proposed_price_range=None, proposal_reason=proposal_reason)
+    valid = [item for item in economics.windows if _confidence(item, config) != "low" and _margin(item) is not None and _profit_per_unit(item) is not None]
+    comparable: list[PriceWindow] = []
+    for item in valid:
+        if item.effective_price == current.effective_price:
+            continue
+        change = abs(item.effective_price / current.effective_price - Decimal("1")) * Decimal("100")
+        if change <= config.max_price_step_percent:
+            comparable.append(item)
+    better = [item for item in comparable if _margin(item) >= config.low_margin_percent and _profit_per_unit(item) > current_profit_per_unit]
+    if better:
+        candidate = max(better, key=lambda item: (_profit_per_unit(item), -item.effective_price))
+        action = "CONSIDER_RAISE" if candidate.effective_price > current.effective_price else "CONSIDER_LOWER"
+        return _result(economics, current, action, "medium", candidate, _confidence(candidate, config), ("observed_price_window_has_better_confirmed_unit_economics",))
+    if current_margin < config.low_margin_percent:
+        return _result(economics, current, "CONSIDER_RAISE", "medium", None, _confidence(current, config), ("current_margin_below_configured_threshold", "no_confirmed_observed_price_candidate"))
+    return _result(economics, current, "KEEP", "low", None, _confidence(current, config), ("current_effective_window_meets_configured_threshold",))
 
 
-def _fields(economics: ProductEconomics, profit_per_unit: Decimal | None, margin: Decimal | None) -> dict[str, object]:
-    return {"offer_id": economics.offer_id, "current_price": economics.current_price, "cost_price": economics.cost_price, "revenue": economics.revenue, "profit": economics.profit, "profit_per_unit": profit_per_unit, "profit_margin_percent": margin, "commission": economics.commission, "logistics": economics.logistics, "period_start": economics.period_start, "period_end": economics.period_end}
+def _result(economics: ProductEconomics, current: PriceWindow | None, action: str, priority: str, candidate: PriceWindow | None, confidence: str, reasons: tuple[str, ...]) -> Recommendation:
+    return Recommendation(
+        economics.offer_id, economics.current_price, current.effective_price if current else None,
+        current.revenue if current else None, current.profit if current else None,
+        _profit_per_unit(current) if current else None, _margin(current) if current else None,
+        current.commission if current else None, current.logistics if current else None,
+        current.other_expenses if current else None, current.period_start if current else None,
+        current.period_end if current else None, action, priority,
+        candidate.effective_price if candidate else None,
+        _profit_per_unit(candidate) if candidate else None, _margin(candidate) if candidate else None,
+        confidence, "valid" if action != "REVIEW_DATA" else "review", reasons,
+    )

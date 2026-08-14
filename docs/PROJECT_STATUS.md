@@ -146,6 +146,22 @@ successfully tested end-to-end with `get_price_profit_recommendations`.
 - Prompt caching is automatically applicable to the stable prompt prefix, but
   the current n8n execution UI does not expose its cache metrics.
 
+## Price Recommendation Engine v0.2
+
+v0.2 now calculates read-only, confirmed unit economics from delivered
+posting/product quantity and `products.cost_price`, rather than deriving cost
+from an order-level view. It uses delivery finance data for revenue,
+commission, logistics and payout, and includes return/package expenses only
+when their normalized posting key has one delivered product line. CPC,
+insurance, disposal, taxes and any unallocated charge remain excluded.
+
+Historical windows are grouped by observed effective revenue per unit, not by
+the display price. A numeric proposed price is allowed only for an observed
+window with sufficient sample size, better confirmed unit economics and a
+configurable maximum step. The engine never extrapolates an unknown price.
+`vw_orders_profit_final` is the profit source of truth; its discrepancy with
+`vw_product_analytics` no longer independently causes `REVIEW_DATA`.
+
 ## Snapshot Layer v1 — architecture complete
 
 The project has completed the architecture and DDL design for the first Autonomous Monitoring Core layer. The relevant documents are:
