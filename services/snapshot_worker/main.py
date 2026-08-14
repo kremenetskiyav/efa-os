@@ -1,4 +1,4 @@
-"""Command entry point for Snapshot Worker v1.2."""
+"""Command entry point for Snapshot Worker v1.3."""
 
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ from database import (
     DatabaseQueryError,
     SnapshotWriteError,
     check_connection,
+    fetch_previous_valid_snapshots,
     fetch_products_with_recent_prices,
     write_daily_snapshot_run,
 )
@@ -25,7 +26,7 @@ from snapshot import (
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     """Parse the intentionally small command-line contract for the worker."""
 
-    parser = argparse.ArgumentParser(description="Snapshot Worker v1.2")
+    parser = argparse.ArgumentParser(description="Snapshot Worker v1.3")
     parser.add_argument(
         "--dry-run",
         action="store_true",
@@ -73,6 +74,7 @@ def run_dry_run() -> int:
     print(f"Products found: {len(products)}")
 
     snapshots = build_snapshot_candidates(products)
+    business_date = calculate_business_date()
     snapshots_with_price = sum(snapshot.current_price is not None for snapshot in snapshots)
     print("[SNAPSHOTS]")
     print(f"Snapshot candidates: {len(snapshots)}")
@@ -92,16 +94,28 @@ def run_dry_run() -> int:
             )
         )
 
-    candidates = [
-        candidate
-        for product in products
-        if (
-            candidate := build_price_change_candidate(
-                product.offer_id, product.previous_price, product.current_price
-            )
+    try:
+        previous_by_offer_id = fetch_previous_valid_snapshots(
+            config,
+            [snapshot.offer_id for snapshot in snapshots],
+            business_date,
         )
-        is not None
-    ]
+    except (DatabaseConnectionError, DatabaseQueryError) as error:
+        print(f"ERROR: {error}")
+        return 4
+
+    candidates = []
+    for snapshot in snapshots:
+        previous = previous_by_offer_id.get(snapshot.offer_id)
+        if snapshot.data_quality_status != "valid" or previous is None:
+            continue
+        candidate = build_price_change_candidate(
+            snapshot.offer_id,
+            previous.current_price,
+            snapshot.current_price,
+        )
+        if candidate is not None:
+            candidates.append(candidate)
     print("[PRICE EVENTS]")
     print(f"PRICE_CHANGED candidates: {len(candidates)}")
     for candidate in candidates:
@@ -120,12 +134,12 @@ def run_dry_run() -> int:
         )
 
     print("[RESULT]")
-    print("Snapshot Worker v1.2 dry-run completed")
+    print("Snapshot Worker v1.3 dry-run completed")
     return 0
 
 
 def run_snapshot_write() -> int:
-    """Create one atomic, idempotent daily snapshot run without events."""
+    """Create one atomic, idempotent daily snapshot run with price events."""
 
     print("[CONFIG]")
     print("Checking environment configuration")
@@ -179,6 +193,7 @@ def run_snapshot_write() -> int:
     print(f"products_expected: {result.products_expected}")
     print(f"products_snapshotted: {result.products_snapshotted}")
     print(f"products_invalid: {result.products_invalid}")
+    print(f"events_created: {result.events_created}")
     print(f"status: {result.status}")
     return 0
 

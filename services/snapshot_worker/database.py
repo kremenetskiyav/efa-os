@@ -1,4 +1,4 @@
-"""PostgreSQL access for Snapshot Worker v1.2."""
+"""PostgreSQL access for Snapshot Worker v1.3."""
 
 from __future__ import annotations
 
@@ -7,10 +7,18 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from decimal import Decimal
+import json
 from typing import TYPE_CHECKING
 from uuid import UUID
 
 from config import DatabaseConfig
+from events import (
+    MINIMUM_ABSOLUTE_CHANGE,
+    MINIMUM_PERCENT_CHANGE,
+    PriceChangeEvent,
+    ProductSnapshotState,
+    build_price_change_event,
+)
 
 if TYPE_CHECKING:
     from snapshot import SnapshotCandidate
@@ -30,14 +38,12 @@ class SnapshotWriteError(RuntimeError):
 
 @dataclass(frozen=True)
 class ProductPriceHistory:
-    """One product with its latest and immediately previous price point."""
+    """One product with only the latest Ozon price used for a new snapshot."""
 
     offer_id: str
     cost_price_used: Decimal | None
     current_price: Decimal | None
     price_updated_from_ozon: datetime | None
-    previous_price: Decimal | None
-    previous_price_updated_from_ozon: datetime | None
 
 
 @dataclass(frozen=True)
@@ -50,10 +56,11 @@ class SnapshotRunWriteResult:
     products_expected: int
     products_snapshotted: int
     products_invalid: int
+    events_created: int = 0
 
 
-# One batch query for all products. ROW_NUMBER ranks each offer_id by Ozon's
-# source timestamp and uses created_at as a deterministic tie-breaker.
+# Ozon history supplies only the latest source value for a new snapshot. It is
+# never used as the baseline for Event Layer comparisons.
 RECENT_PRODUCT_PRICES_QUERY = """
 WITH ranked_price_points AS (
     SELECT
@@ -72,23 +79,18 @@ WITH ranked_price_points AS (
       AND price IS NOT NULL
       AND updated_from_ozon IS NOT NULL
 ),
-two_latest_price_points AS (
-    SELECT offer_id, price, updated_from_ozon, price_rank
+latest_price_points AS (
+    SELECT offer_id, price, updated_from_ozon
     FROM ranked_price_points
-    WHERE price_rank <= 2
+    WHERE price_rank = 1
 )
 SELECT
     p.offer_id,
     p.cost_price,
-    MAX(r.price) FILTER (WHERE r.price_rank = 1) AS current_price,
-    MAX(r.updated_from_ozon) FILTER (WHERE r.price_rank = 1)
-        AS price_updated_from_ozon,
-    MAX(r.price) FILTER (WHERE r.price_rank = 2) AS previous_price,
-    MAX(r.updated_from_ozon) FILTER (WHERE r.price_rank = 2)
-        AS previous_price_updated_from_ozon
+    r.price AS current_price,
+    r.updated_from_ozon AS price_updated_from_ozon
 FROM products AS p
-LEFT JOIN two_latest_price_points AS r ON r.offer_id = p.offer_id
-GROUP BY p.offer_id, p.cost_price
+LEFT JOIN latest_price_points AS r ON r.offer_id = p.offer_id
 ORDER BY p.offer_id ASC
 """
 
@@ -128,6 +130,52 @@ INSERT INTO product_snapshots (
     data_quality_status
 )
 VALUES (%s, %s, %s, %s, %s, %s, %s, 'ozon_phase_a', %s)
+RETURNING snapshot_id
+"""
+
+PREVIOUS_VALID_SNAPSHOTS_QUERY = """
+SELECT DISTINCT ON (ps.offer_id)
+    ps.snapshot_id,
+    ps.offer_id,
+    ps.business_date,
+    ps.current_price,
+    ps.data_quality_status
+FROM product_snapshots AS ps
+JOIN snapshot_runs AS sr ON sr.run_id = ps.run_id
+WHERE ps.offer_id = ANY(%s)
+  AND ps.business_date < %s
+  AND ps.data_quality_status = 'valid'
+  AND sr.status = 'success'
+ORDER BY
+    ps.offer_id,
+    ps.business_date DESC,
+    ps.snapshot_at DESC,
+    ps.snapshot_id DESC
+"""
+
+INSERT_CHANGE_EVENT_QUERY = """
+INSERT INTO change_events (
+    event_type,
+    offer_id,
+    business_date,
+    old_snapshot_id,
+    new_snapshot_id,
+    metric,
+    old_value,
+    new_value,
+    absolute_change,
+    change_percent,
+    severity,
+    rule_id,
+    idempotency_key,
+    parameters,
+    status
+)
+VALUES (
+    'PRICE_CHANGED', %s, %s, %s, %s, 'current_price', %s, %s, %s, %s,
+    %s, 'price_change_v1', %s, %s::jsonb, 'new'
+)
+ON CONFLICT (idempotency_key) DO NOTHING
 """
 
 COMPLETE_SNAPSHOT_RUN_QUERY = """
@@ -218,7 +266,7 @@ def check_connection(config: DatabaseConfig) -> None:
 def fetch_products_with_recent_prices(
     config: DatabaseConfig, batch_size: int
 ) -> list[ProductPriceHistory]:
-    """Fetch products and their two latest price points with one batched SELECT."""
+    """Fetch products and only their latest Ozon price with one batched SELECT."""
 
     products: list[ProductPriceHistory] = []
     try:
@@ -232,8 +280,6 @@ def fetch_products_with_recent_prices(
                             cost_price_used=row[1],
                             current_price=row[2],
                             price_updated_from_ozon=row[3],
-                            previous_price=row[4],
-                            previous_price_updated_from_ozon=row[5],
                         )
                         for row in rows
                     )
@@ -243,6 +289,54 @@ def fetch_products_with_recent_prices(
         raise DatabaseQueryError("Read-only product and price query failed") from error
 
     return products
+
+
+def _row_to_snapshot_state(row: tuple[object, ...]) -> ProductSnapshotState:
+    return ProductSnapshotState(
+        snapshot_id=row[0],
+        offer_id=str(row[1]),
+        business_date=row[2],
+        current_price=row[3],
+        data_quality_status=str(row[4]),
+    )
+
+
+def _fetch_previous_valid_snapshots(
+    connection: object,
+    offer_ids: list[str],
+    before_business_date: date,
+) -> dict[str, ProductSnapshotState]:
+    """Fetch at most one baseline per product with one SELECT."""
+
+    if not offer_ids:
+        return {}
+    with connection.cursor() as cursor:
+        cursor.execute(
+            PREVIOUS_VALID_SNAPSHOTS_QUERY,
+            (offer_ids, before_business_date),
+        )
+        rows = cursor.fetchall()
+    return {str(row[1]): _row_to_snapshot_state(row) for row in rows}
+
+
+def fetch_previous_valid_snapshots(
+    config: DatabaseConfig,
+    offer_ids: list[str],
+    before_business_date: date,
+) -> dict[str, ProductSnapshotState]:
+    """Read previous valid snapshot baselines for dry-run without writes."""
+
+    try:
+        with open_read_only_connection(config) as connection:
+            return _fetch_previous_valid_snapshots(
+                connection,
+                offer_ids,
+                before_business_date,
+            )
+    except DatabaseConnectionError:
+        raise
+    except Exception as error:
+        raise DatabaseQueryError("Previous valid snapshot query failed") from error
 
 
 def _row_to_run_result(row: tuple[object, ...]) -> SnapshotRunWriteResult:
@@ -270,6 +364,97 @@ def _source_watermark(snapshots: list[SnapshotCandidate]) -> datetime | None:
         if snapshot.price_updated_from_ozon is not None
     ]
     return max(timestamps) if timestamps else None
+
+
+def _insert_product_snapshots(
+    connection: object,
+    *,
+    run_id: UUID,
+    snapshot_at: datetime,
+    business_date: date,
+    snapshots: list[SnapshotCandidate],
+) -> list[ProductSnapshotState]:
+    persisted: list[ProductSnapshotState] = []
+    with connection.cursor() as cursor:
+        for snapshot in snapshots:
+            cursor.execute(
+                INSERT_PRODUCT_SNAPSHOT_QUERY,
+                (
+                    run_id,
+                    snapshot.offer_id,
+                    snapshot_at,
+                    business_date,
+                    snapshot.current_price,
+                    snapshot.price_updated_from_ozon,
+                    snapshot.cost_price_used,
+                    snapshot.data_quality_status,
+                ),
+            )
+            row = cursor.fetchone()
+            if row is None:
+                raise SnapshotWriteError("Snapshot identifier was not returned")
+            persisted.append(
+                ProductSnapshotState(
+                    snapshot_id=row[0],
+                    offer_id=snapshot.offer_id,
+                    business_date=business_date,
+                    current_price=snapshot.current_price,
+                    data_quality_status=snapshot.data_quality_status,
+                )
+            )
+    return persisted
+
+
+def _build_events(
+    current_snapshots: list[ProductSnapshotState],
+    previous_by_offer_id: dict[str, ProductSnapshotState],
+) -> list[PriceChangeEvent]:
+    events = []
+    for current in current_snapshots:
+        event = build_price_change_event(
+            previous_by_offer_id.get(current.offer_id),
+            current,
+        )
+        if event is not None:
+            events.append(event)
+    return events
+
+
+def _insert_price_change_events(
+    connection: object,
+    events: list[PriceChangeEvent],
+) -> int:
+    """Insert event candidates idempotently within the caller's transaction."""
+
+    created = 0
+    parameters = json.dumps(
+        {
+            "minimum_absolute_change": str(MINIMUM_ABSOLUTE_CHANGE),
+            "minimum_percent_change": str(MINIMUM_PERCENT_CHANGE),
+            "comparison_source": "product_snapshots",
+        },
+        sort_keys=True,
+    )
+    with connection.cursor() as cursor:
+        for event in events:
+            cursor.execute(
+                INSERT_CHANGE_EVENT_QUERY,
+                (
+                    event.offer_id,
+                    event.business_date,
+                    event.old_snapshot_id,
+                    event.new_snapshot_id,
+                    event.old_value,
+                    event.new_value,
+                    event.absolute_change,
+                    event.change_percent,
+                    event.severity,
+                    event.idempotency_key,
+                    parameters,
+                ),
+            )
+            created += max(cursor.rowcount, 0)
+    return created
 
 
 def _is_unique_violation(error: Exception) -> bool:
@@ -322,7 +507,7 @@ def write_daily_snapshot_run(
     business_date: date,
     snapshots: list[SnapshotCandidate],
 ) -> SnapshotRunWriteResult:
-    """Atomically create one daily run and its immutable product snapshots."""
+    """Atomically create a daily run, snapshots, and derived price events."""
 
     started_at = datetime.now(timezone.utc)
     products_expected = len(snapshots)
@@ -357,22 +542,20 @@ def write_daily_snapshot_run(
                         raise SnapshotWriteError("Snapshot run identifier was not returned")
                     run_id = run_row[0]
 
-                    cursor.executemany(
-                        INSERT_PRODUCT_SNAPSHOT_QUERY,
-                        [
-                            (
-                                run_id,
-                                snapshot.offer_id,
-                                started_at,
-                                business_date,
-                                snapshot.current_price,
-                                snapshot.price_updated_from_ozon,
-                                snapshot.cost_price_used,
-                                snapshot.data_quality_status,
-                            )
-                            for snapshot in snapshots
-                        ],
+                    current_snapshots = _insert_product_snapshots(
+                        connection,
+                        run_id=run_id,
+                        snapshot_at=started_at,
+                        business_date=business_date,
+                        snapshots=snapshots,
                     )
+                    previous_by_offer_id = _fetch_previous_valid_snapshots(
+                        connection,
+                        [snapshot.offer_id for snapshot in current_snapshots],
+                        business_date,
+                    )
+                    events = _build_events(current_snapshots, previous_by_offer_id)
+                    events_created = _insert_price_change_events(connection, events)
                     cursor.execute(
                         COMPLETE_SNAPSHOT_RUN_QUERY,
                         (
@@ -413,4 +596,5 @@ def write_daily_snapshot_run(
         products_expected=products_expected,
         products_snapshotted=products_snapshotted,
         products_invalid=products_invalid,
+        events_created=events_created,
     )

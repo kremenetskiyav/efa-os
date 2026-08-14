@@ -7,7 +7,14 @@ import unittest
 from unittest.mock import patch
 
 from config import DatabaseConfig
-from database import ProductPriceHistory, SnapshotWriteError, write_daily_snapshot_run
+from database import (
+    PREVIOUS_VALID_SNAPSHOTS_QUERY,
+    ProductPriceHistory,
+    SnapshotWriteError,
+    _insert_price_change_events,
+    write_daily_snapshot_run,
+)
+from events import ProductSnapshotState, build_price_change_event
 from snapshot import (
     build_daily_idempotency_key,
     build_snapshot_candidates,
@@ -34,14 +41,14 @@ class SnapshotPreparationTests(unittest.TestCase):
     def test_valid_price_creates_valid_snapshot_candidate(self) -> None:
         source = ProductPriceHistory(
             "УФ 005Б", Decimal("166"), Decimal("667"),
-            datetime(2026, 8, 14, tzinfo=timezone.utc), None, None,
+            datetime(2026, 8, 14, tzinfo=timezone.utc),
         )
         candidate = build_snapshot_candidates([source])[0]
         self.assertEqual(candidate.data_quality_status, "valid")
         self.assertEqual(candidate.current_price, Decimal("667"))
 
     def test_missing_price_creates_invalid_snapshot_candidate(self) -> None:
-        source = ProductPriceHistory("УФ 005Б", Decimal("166"), None, None, None, None)
+        source = ProductPriceHistory("УФ 005Б", Decimal("166"), None, None)
         candidate = build_snapshot_candidates([source])[0]
         self.assertEqual(candidate.data_quality_status, "invalid")
         self.assertIsNone(candidate.current_price)
@@ -60,8 +67,21 @@ class _Cursor:
 
     def execute(self, query: str, params: tuple[object, ...] | None = None) -> None:
         self.connection.queries.append(query)
-        if query.lstrip().startswith("SELECT"):
+        normalized = query.lstrip()
+        if normalized.startswith("SELECT"):
             self.connection.selected = True
+        if normalized.startswith("INSERT INTO product_snapshots") and self.connection.fail_on_snapshots:
+            raise RuntimeError("simulated snapshot insert failure")
+        if normalized.startswith("INSERT INTO change_events"):
+            if self.connection.fail_on_events:
+                raise RuntimeError("simulated event insert failure")
+            assert params is not None
+            key = str(params[9])
+            if key in self.connection.event_keys:
+                self.rowcount = 0
+            else:
+                self.connection.event_keys.add(key)
+                self.rowcount = 1
 
     def executemany(self, query: str, params: list[tuple[object, ...]]) -> None:
         self.connection.queries.append(query)
@@ -74,13 +94,24 @@ class _Cursor:
             return self.connection.existing
         return (UUID("11111111-1111-1111-1111-111111111111"),)
 
+    def fetchall(self) -> list[tuple[object, ...]]:
+        return self.connection.previous_rows
+
 
 class _Connection:
-    def __init__(self, existing: tuple[object, ...] | None = None, fail_on_snapshots: bool = False) -> None:
+    def __init__(
+        self,
+        existing: tuple[object, ...] | None = None,
+        fail_on_snapshots: bool = False,
+        fail_on_events: bool = False,
+    ) -> None:
         self.existing = existing
         self.fail_on_snapshots = fail_on_snapshots
+        self.fail_on_events = fail_on_events
         self.selected = False
         self.queries: list[str] = []
+        self.previous_rows: list[tuple[object, ...]] = []
+        self.event_keys: set[str] = set()
         self.committed = False
         self.rolled_back = False
 
@@ -113,7 +144,7 @@ TEST_SNAPSHOTS = build_snapshot_candidates(
     [
         ProductPriceHistory(
             "УФ 005Б", Decimal("166"), Decimal("667"),
-            datetime(2026, 8, 14, tzinfo=timezone.utc), None, None,
+            datetime(2026, 8, 14, tzinfo=timezone.utc),
         )
     ]
 )
@@ -160,6 +191,70 @@ class SnapshotWriteSafetyTests(unittest.TestCase):
                 )
         self.assertTrue(failing_connection.rolled_back)
         self.assertFalse(failing_connection.committed)
+
+    def test_event_detection_error_rolls_back_snapshots_and_run(self) -> None:
+        transaction = _Connection()
+        failure_record_connection = _Connection()
+        with patch(
+            "database.open_write_connection",
+            side_effect=[
+                _ConnectionContext(transaction),
+                _ConnectionContext(failure_record_connection),
+            ],
+        ), patch(
+            "database._insert_price_change_events",
+            side_effect=RuntimeError("simulated event layer failure"),
+        ):
+            with self.assertRaises(SnapshotWriteError):
+                write_daily_snapshot_run(
+                    TEST_CONFIG,
+                    idempotency_key=build_daily_idempotency_key(date(2026, 8, 15)),
+                    business_date=date(2026, 8, 15),
+                    snapshots=TEST_SNAPSHOTS,
+                )
+
+        self.assertTrue(transaction.rolled_back)
+        self.assertFalse(transaction.committed)
+
+
+class PreviousSnapshotSelectionTests(unittest.TestCase):
+    def test_failed_or_partial_runs_cannot_be_baselines(self) -> None:
+        normalized = " ".join(PREVIOUS_VALID_SNAPSHOTS_QUERY.split())
+        self.assertIn("ps.data_quality_status = 'valid'", normalized)
+        self.assertIn("sr.status = 'success'", normalized)
+        self.assertIn("ps.business_date < %s", normalized)
+
+    def test_previous_snapshot_query_is_batched(self) -> None:
+        normalized = " ".join(PREVIOUS_VALID_SNAPSHOTS_QUERY.split())
+        self.assertIn("ps.offer_id = ANY(%s)", normalized)
+        self.assertIn("DISTINCT ON (ps.offer_id)", normalized)
+
+
+class EventPersistenceTests(unittest.TestCase):
+    def test_reprocessing_same_snapshot_pair_does_not_duplicate_event(self) -> None:
+        previous = ProductSnapshotState(
+            UUID("33333333-3333-3333-3333-333333333333"),
+            "УФ 005Б",
+            date(2026, 8, 14),
+            Decimal("901"),
+            "valid",
+        )
+        current = ProductSnapshotState(
+            UUID("44444444-4444-4444-4444-444444444444"),
+            "УФ 005Б",
+            date(2026, 8, 15),
+            Decimal("667"),
+            "valid",
+        )
+        event = build_price_change_event(previous, current)
+        assert event is not None
+        connection = _Connection()
+
+        first_created = _insert_price_change_events(connection, [event])
+        second_created = _insert_price_change_events(connection, [event])
+
+        self.assertEqual(first_created, 1)
+        self.assertEqual(second_created, 0)
 
 
 if __name__ == "__main__":
