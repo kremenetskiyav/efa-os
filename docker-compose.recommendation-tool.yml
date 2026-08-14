@@ -12,3 +12,10 @@ services:
       EFA_DB_USER: ${EFA_DB_USER}
       EFA_DB_PASSWORD: ${EFA_DB_PASSWORD}
       EFA_RECOMMENDATION_LOW_MARGIN_PERCENT: ${EFA_RECOMMENDATION_LOW_MARGIN_PERCENT:-15}
+    networks:
+      - efa-tools
+
+networks:
+  efa-tools:
+    external: true
+    name: efa-tools
