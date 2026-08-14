@@ -22,6 +22,9 @@ class DatabaseConfig:
     password: str
 
 
+DEFAULT_BATCH_SIZE = 500
+
+
 def load_database_config(environ: Mapping[str, str] | None = None) -> DatabaseConfig:
     """Load and validate the required PostgreSQL settings from environment variables."""
 
@@ -55,3 +58,19 @@ def load_database_config(environ: Mapping[str, str] | None = None) -> DatabaseCo
         user=environment["EFA_DB_USER"].strip(),
         password=environment["EFA_DB_PASSWORD"],
     )
+
+
+def load_batch_size(environ: Mapping[str, str] | None = None) -> int:
+    """Load the positive read batch size without introducing database state."""
+
+    environment = os.environ if environ is None else environ
+    value = environment.get("EFA_SNAPSHOT_BATCH_SIZE", str(DEFAULT_BATCH_SIZE)).strip()
+    try:
+        batch_size = int(value)
+    except ValueError as error:
+        raise ConfigurationError("EFA_SNAPSHOT_BATCH_SIZE must be an integer") from error
+
+    if batch_size < 1:
+        raise ConfigurationError("EFA_SNAPSHOT_BATCH_SIZE must be greater than zero")
+
+    return batch_size
