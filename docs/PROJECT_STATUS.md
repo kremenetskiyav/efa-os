@@ -4,42 +4,29 @@
 
 Date: 2026-08-14
 
-The project is based on a local n8n + PostgreSQL stack. The canonical supplied workflow is `OZON workflow - Phase A`.
+The project is based on a local Dockerized n8n + PostgreSQL stack. The canonical workflow is `OZON workflow - Phase A`.
 
 Workflow ID: `q0yXnbt8BqFnukQj`
-Latest exported version recorded previously: `2b069584-6423-4fd6-a849-6f9b4769c94d`
+Canonical workflow JSON: `n8n/workflows/OZON_workflow_Phase_A.json`.
 
-The canonical workflow JSON is sanitized for repository storage: the OZON API key is represented by a placeholder rather than a secret.
+The repository copy is sanitized for source control. Secrets remain in local n8n credentials and are not committed.
 
-## Implemented areas
+## Completed analytical foundation
 
-- OZON product collection and product master data
-- stock collection and stock snapshots/history
-- finance operations collection
-- postings/orders collection
-- current price collection and price history
-- returns collection
-- posting logistics with `cluster_from` / `cluster_to`
-- product-level profitability and alert views
-- regional logistics analysis
-- AI analyst connected to PostgreSQL through read-oriented tools
-- Decision Engine for product alerts
+The following six AI-facing tools are now verified in the live workflow:
 
-## Verified AI analytical tools — 2026-08-14
+1. `Tool — Анализ проблем товаров` — verified and synchronized with the current financial methodology.
+2. `OZON Analytics` — verified.
+3. `OZON Regional Analytics` — verified.
+4. `OZON Price History` — verified.
+5. `OZON Returns Analytics` — verified.
+6. `OZON Stock History` — verified.
 
-The following five tools were successfully executed together through `OZON AI Analyst` using product `УФ 005Б` and a 30-day period:
-
-1. `OZON Analytics` — verified
-2. `OZON Regional Analytics` — verified
-3. `OZON Price History` — verified
-4. `OZON Returns Analytics` — verified
-5. `OZON Stock History` — verified
-
-Integration errors encountered during the audit were resolved, including duplicate `$fromAI('offer_id', ...)` definitions, SQL quoting/type issues around `offer_id`, and the `days` argument being passed with the wrong type to the returns tool.
+All five specialized OZON analytical tools were also individually tested through `OZON AI Analyst` using `УФ 005Б` and a 30-day period. Routing tests confirmed that each request reaches the correct specialized tool without unnecessary calls.
 
 ## Verified financial baseline — УФ 005Б
 
-For the latest 30-day test window the authoritative financial result is:
+Latest 30-day test window:
 
 - `orders_count`: 14
 - `delivered_units`: 15
@@ -51,11 +38,11 @@ For the latest 30-day test window the authoritative financial result is:
 - `profit`: 2,390.83 ₽
 - `profit_per_unit`: 159.39 ₽
 
-The regional profitability results reconcile with the overall product profit. This confirms that the current regional tool is using compatible financial facts rather than an unrelated calculation.
+Regional profitability reconciles with the overall product profit.
 
 ## Verified price / returns / stock baseline — УФ 005Б
 
-Price history for the same period:
+Price history:
 
 - first price: 901.00 ₽
 - current price: 667.00 ₽
@@ -69,78 +56,87 @@ Returns:
 - reason: `Покупатель отказался при вручении: товар не подошел`
 - status: `На складе Ozon`
 
-Stock snapshots:
+Stock:
 
 - FBO: current 0
 - FBS: current 381
 - rFBS: current 0
 
-A single return is a fact, not an automatic problem classification. Likewise, 381 FBS units must not be called excessive without a formal stock-coverage metric.
+## Problem-analysis tool status
 
-## Regional logistics analysis
+The legacy `Tool — Анализ проблем товаров` was corrected and re-tested.
 
-The regional analysis compares product financial results by destination. Current verified examples for `УФ 005Б` include:
+The tool now uses the same financial methodology as `OZON Analytics` and returns, among other fields:
 
-- weakest profit per unit: Ufa — 1.47 ₽
-- strongest profit per unit among the tested regions: Samara — 198.01 ₽
-- highest absolute regional profit among the tested regions: Samara — 396.02 ₽
+- `orders_count`
+- `delivered_units`
+- `profit`
+- `profit_per_unit`
+- `commission_per_order`
+- `logistics_per_unit`
+- `profit_alert`
+- `logistics_alert`
+- `commission_alert`
+- `reasons`
+- `recommended_action`
 
-High logistics cost in a low-volume region is not by itself proof of a product-level logistics problem. The system must continue to distinguish facts, weak signals, and confirmed problems.
+The AI presentation rules were also updated so that only alert fields corresponding to actual reasons are shown. Artificial three-field output limits were removed.
 
-## Current critical inconsistency
+## Current architecture state
 
-The legacy `Tool — Анализ проблем товаров` is **not yet synchronized with the verified financial source of truth**.
+The project has moved from a reactive analytical chatbot toward an autonomous monitoring architecture.
 
-Observed inconsistencies for `УФ 005Б`:
+Current architecture:
 
-- it reports `orders_count: 15`, while the verified `OZON Analytics` value is `14`; 15 is the delivered-unit count
-- it reports `avg_profit: 175.46`, while the authoritative `profit_per_unit` is `159.39`
-- it reports `commission_rate: 42.14`, while the rate calculated from the verified revenue and commission is approximately 42.43%
+`OZON APIs / data sources -> PostgreSQL -> analytical views/tools -> OZON AI Analyst`
 
-Therefore this tool must not be treated as an authoritative source for financial metrics until corrected.
+Dockerized infrastructure remains the execution environment for n8n and PostgreSQL.
 
-### Source-of-truth rule
+## Next phase — Autonomous Monitoring Core
 
-For financial product metrics, use `OZON Analytics` values:
+The next stage is **not** to add more ad-hoc SQL tools. The priority is to build the monitoring foundation that can detect changes automatically.
 
-- `profit` — total profit
-- `profit_per_unit` — profit per delivered unit
-- `revenue` — revenue
-- `commission` — commission
-- `logistics` — logistics
-- `payout` — Ozon payout
-- `cost` — actual cost of sold delivered units
+Target architecture:
 
-`orders_count` and `delivered_units` must remain separate concepts.
+`OZON -> PostgreSQL -> current state snapshot -> previous state snapshot -> change detection -> Decision Engine -> AI interpretation -> alert/report`
 
-## Previously identified Phase A blockers
+### Phase 1 — State and change monitoring
 
-The earlier workflow audit remains relevant:
+1. Verify the current PostgreSQL schema and existing historical tables before adding new structures.
+2. Define the canonical state model for monitored entities/products.
+3. Define snapshot cadence and retention.
+4. Implement deterministic change detection for sales, prices, stock, returns and other existing metrics.
+5. Store detected changes/events in PostgreSQL.
+6. Keep facts separate from interpretations and recommendations.
 
-1. Pagination is incomplete for several volume-sensitive OZON endpoints.
-2. Finance ingestion uses a hard-coded time window and first-page limitation.
-3. Postings are limited to 30 days and one page.
-4. Returns pagination is incomplete.
-5. Current prices are limited to 1000 products.
-6. The legacy problem-analysis tool is inconsistent with the verified financial tool and must be corrected.
-7. The Decision Engine branch remains a separate diagnostic branch and is not yet the authoritative autonomous decision layer.
-8. Database analytical objects are not fully versioned in the repository.
-9. The live PostgreSQL analytical schema still needs explicit verification before migrations or view rewrites.
-10. The workflow is still manual/inactive; reliable scheduled daily execution is a later step.
+### Phase 2 — Autonomous business monitoring
 
-## Next work session
+7. Automatic sales monitoring.
+8. Automatic price monitoring.
+9. Automatic promotion/campaign monitoring.
+10. Automatic advertising/promotion monitoring.
+11. Cross-factor analysis: price -> sales -> payout -> cost -> profit.
+12. Regional and stock-risk monitoring.
 
-1. Fix only `Tool — Анализ проблем товаров`.
-2. Make its financial fields consume the same source-of-truth methodology as `OZON Analytics`.
-3. Remove dependence on the inconsistent legacy `avg_profit` calculation.
-4. Correct the distinction between `orders_count` and `delivered_units`.
-5. Recalculate `commission_rate` only from the same verified `revenue` and `commission` values.
-6. Retest `УФ 005Б` for 30 days.
-7. Audit the resulting AI response for arithmetic correctness, factual grounding, and unsupported recommendations.
-8. Only after that, proceed to time-linked price -> sales -> profit analysis and a formal Days of Stock metric.
+### Phase 3 — Decision Engine and AI assistant
 
-Do not modify the five verified analytical tools unless a new test demonstrates a concrete defect.
+13. Prioritize detected events.
+14. Generate grounded explanations.
+15. Generate recommendations without taking actions automatically.
+16. Add daily summaries and targeted alerts.
 
-## Security status
+### Phase 4 — Controlled automation
 
-The repository copy is sanitized and does not contain the OZON API key. Credentials must remain in local n8n credential storage and must never be committed to GitHub.
+17. Accumulate evidence and history.
+18. Introduce guarded semi-automatic actions.
+19. Only later evaluate fully automatic changes to prices, promotions or other OZON settings.
+
+## Design constraints for the next phase
+
+- Do not modify the five verified analytical tools unless a new test proves a concrete defect.
+- Prefer extending existing PostgreSQL structures over creating duplicates.
+- Do not create a second database or parallel Docker stack.
+- Keep secrets in local credentials only.
+- Do not make causal claims from simple correlation without supporting data.
+- Do not automatically change prices, promotions, advertising or inventory parameters.
+- Build deterministic monitoring before adding more autonomous AI behavior.
