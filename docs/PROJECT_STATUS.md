@@ -99,6 +99,20 @@ Current architecture:
 
 Dockerized infrastructure remains the execution environment for n8n and PostgreSQL.
 
+## Price & Profit Recommendation Engine v0.1
+
+A read-only deterministic recommendation service is available in
+`services/recommendation_engine/`. It uses canonical `products.offer_id`, the
+latest Ozon price point, `vw_orders_profit_final`, and `vw_product_analytics`.
+It reports `KEEP`, `CONSIDER_RAISE`, or `REVIEW_DATA`; it does not change
+prices or calculate a target price without a confirmed marginal commission and
+logistics model.
+
+The initial live report covered all five current products. It identified two
+low-margin `CONSIDER_RAISE` cases, two `KEEP` cases, and one `REVIEW_DATA`
+case because the existing profit views disagree for that product. No database,
+n8n, Ozon, or Snapshot Layer data was modified.
+
 ## Snapshot Layer v1 — architecture complete
 
 The project has completed the architecture and DDL design for the first Autonomous Monitoring Core layer. The relevant documents are:

@@ -2,6 +2,16 @@
 
 ## 2026-08-14
 
+- Added the read-only Price & Profit Recommendation Engine v0.1 for the five
+  current products. It uses deterministic rules and reports `KEEP`,
+  `CONSIDER_RAISE`, or `REVIEW_DATA` without changing prices.
+- Added conservative configurable low-margin threshold
+  `EFA_RECOMMENDATION_LOW_MARGIN_PERCENT` (default `15`).
+- Confirmed the engine report against local PostgreSQL. It does not calculate
+  a target price without a confirmed marginal commission and logistics model.
+
+## 2026-08-14
+
 - Verified the five core AI analytical tools together on `УФ 005Б` for a 30-day period: `OZON Analytics`, `OZON Regional Analytics`, `OZON Price History`, `OZON Returns Analytics`, and `OZON Stock History`.
 - Confirmed that regional profit reconciles with the overall product profit returned by `OZON Analytics`.
 - Resolved tool integration issues involving duplicate `offer_id` definitions, SQL quoting/type handling, and the `days` argument type.
