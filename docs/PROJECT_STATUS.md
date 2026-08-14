@@ -179,6 +179,8 @@ The AI recommends observation only, uses `last_confirmed_*` as historical
 context, and returns no numeric price (`proposed_price = null`). The observed
 run used about 3,336 tokens.
 
+Next: **Profit & Cost Anomaly Tool v0.1** → connection to OZON AI Analyst.
+
 ## Snapshot Layer v1 — architecture complete
 
 The project has completed the architecture and DDL design for the first Autonomous Monitoring Core layer. The relevant documents are:
