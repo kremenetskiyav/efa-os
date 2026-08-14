@@ -2,6 +2,11 @@
 
 ## 2026-08-14
 
+- Added the strict, read-only function-tool contract
+  `get_price_profit_recommendations` over the existing Price & Profit
+  Recommendation Engine v0.1, with local unit tests and no changes to n8n,
+  PostgreSQL, or Snapshot Layer.
+
 - Added the read-only Price & Profit Recommendation Engine v0.1 for the five
   current products. It uses deterministic rules and reports `KEEP`,
   `CONSIDER_RAISE`, or `REVIEW_DATA` without changing prices.

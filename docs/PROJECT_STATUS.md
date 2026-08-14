@@ -113,6 +113,14 @@ low-margin `CONSIDER_RAISE` cases, two `KEEP` cases, and one `REVIEW_DATA`
 case because the existing profit views disagree for that product. No database,
 n8n, Ozon, or Snapshot Layer data was modified.
 
+### AI function-tool contract
+
+The engine now exposes the minimal read-only function-tool contract
+`get_price_profit_recommendations`. It returns JSON-safe deterministic results
+for all products or an optional canonical `offer_id` / recommendation-action
+filter. The contract does not connect to n8n or alter PostgreSQL; it is the
+next integration point for OZON AI Analyst.
+
 ## Snapshot Layer v1 — architecture complete
 
 The project has completed the architecture and DDL design for the first Autonomous Monitoring Core layer. The relevant documents are:
