@@ -10,9 +10,9 @@ def main() -> int:
     except (ConfigurationError, DatabaseError) as error:
         print(f"ERROR: {error}")
         return 2
-    print("offer_id | current_price | effective_price | profit_per_unit | margin | action | proposed_price | expected_profit_per_unit | expected_margin | confidence | reasons")
+    print("offer_id | current_price | current_price_since | last_effective_price | last_delivery | last_profit_per_unit | last_margin | current_status | action | proposed_price | reasons")
     for item in items:
-        print(" | ".join(str(x) if x is not None else "NULL" for x in (item.offer_id, item.current_price, item.current_effective_price, item.profit_per_unit, item.profit_margin_percent, item.action, item.proposed_price, item.expected_profit_per_unit, item.expected_margin_percent, item.confidence, "; ".join(item.reasons))))
+        print(" | ".join(str(x) if x is not None else "NULL" for x in (item.offer_id, item.current_price, item.current_price_since, item.last_confirmed_effective_price, item.last_confirmed_delivery_date, item.last_confirmed_profit_per_unit, item.last_confirmed_margin, item.current_price_economics_status, item.action, item.proposed_price, "; ".join(item.reasons))))
     return 0
 
 if __name__ == "__main__":

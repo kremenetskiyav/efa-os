@@ -2,6 +2,12 @@
 
 ## 2026-08-15
 
+- Corrected v0.2 price-window timing: delivered-posting date now selects the
+  active price-history interval, while finance-operation date is not used as
+  a sale-date proxy. Added current-price confirmation fields and conservative
+  `NOT_YET_CONFIRMED` handling when the changed price has no sufficient
+  delivered sample.
+
 - Added Price Recommendation Engine v0.2: read-only confirmed unit economics
   from delivered posting quantity, historical observed-effective-price windows,
   `CONSIDER_LOWER`, confidence gates and a configurable maximum price step.

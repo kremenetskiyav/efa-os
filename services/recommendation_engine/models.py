@@ -9,6 +9,7 @@ from decimal import Decimal
 
 @dataclass(frozen=True)
 class PriceWindow:
+    seller_price: Decimal | None
     effective_price: Decimal
     units: int
     orders: int
@@ -19,16 +20,18 @@ class PriceWindow:
     cost: Decimal
     payout: Decimal
     profit: Decimal
-    period_start: datetime
-    period_end: datetime
+    delivery_start: datetime
+    delivery_end: datetime
 
 
 @dataclass(frozen=True)
 class ProductEconomics:
     offer_id: str
     current_price: Decimal | None
+    current_price_since: datetime | None
     cost_price: Decimal | None
     windows: tuple[PriceWindow, ...]
+    last_confirmed: PriceWindow | None = None
     data_issues: tuple[str, ...] = ()
 
 
@@ -54,3 +57,9 @@ class Recommendation:
     confidence: str
     data_quality_status: str
     reasons: tuple[str, ...]
+    last_confirmed_effective_price: Decimal | None
+    last_confirmed_delivery_date: datetime | None
+    last_confirmed_profit_per_unit: Decimal | None
+    last_confirmed_margin: Decimal | None
+    current_price_economics_status: str
+    current_price_since: datetime | None

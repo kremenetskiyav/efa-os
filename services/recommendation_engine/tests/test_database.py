@@ -16,4 +16,8 @@ class UnitEconomicsQueryTests(unittest.TestCase):
         self.assertNotIn("DisposalOfGoods", PRODUCT_ECONOMICS_QUERY)
 
     def test_windows_use_observed_effective_revenue_per_unit(self) -> None:
-        self.assertIn("revenue / NULLIF(quantity, 0)", PRODUCT_ECONOMICS_QUERY)
+        self.assertIn("SUM(revenue) AS revenue", PRODUCT_ECONOMICS_QUERY)
+
+    def test_price_intervals_use_delivery_not_finance_date(self) -> None:
+        self.assertIn("r.delivery_at >= i.price_since", PRODUCT_ECONOMICS_QUERY)
+        self.assertNotIn("operation_date >= i.price_since", PRODUCT_ECONOMICS_QUERY)

@@ -162,6 +162,13 @@ configurable maximum step. The engine never extrapolates an unknown price.
 `vw_orders_profit_final` is the profit source of truth; its discrepancy with
 `vw_product_analytics` no longer independently causes `REVIEW_DATA`.
 
+Current-price confirmation is based on `postings.delivering_date`, not the
+later financial-recognition timestamp. The current `price` receives
+`CONFIRMED` economics only after sufficient delivered quantity inside its
+price-history interval; otherwise it is `NOT_YET_CONFIRMED`, retains no
+proposed price, and requests observation. Historical delivery economics is
+never transferred to a later display price.
+
 ## Snapshot Layer v1 — architecture complete
 
 The project has completed the architecture and DDL design for the first Autonomous Monitoring Core layer. The relevant documents are:

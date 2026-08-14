@@ -11,8 +11,8 @@ DB = DatabaseConfig("localhost", 5432, "efa", "efa", "not-used")
 CONFIG = RecommendationConfig(Decimal("15"), 10, Decimal("20"))
 
 def product(offer_id: str) -> ProductEconomics:
-    w = PriceWindow(Decimal("100"), 12, 12, Decimal("1200"), Decimal("-240"), Decimal("-120"), Decimal("0"), Decimal("480"), Decimal("0"), Decimal("360"), datetime(2026, 8, 1), datetime(2026, 8, 2))
-    return ProductEconomics(offer_id, Decimal("100"), Decimal("40"), (w,))
+    w = PriceWindow(Decimal("100"), Decimal("100"), 12, 12, Decimal("1200"), Decimal("-240"), Decimal("-120"), Decimal("0"), Decimal("480"), Decimal("0"), Decimal("360"), datetime(2026, 8, 1), datetime(2026, 8, 2))
+    return ProductEconomics(offer_id, Decimal("100"), datetime(2026, 8, 1), Decimal("40"), (w,), w)
 
 class ToolV2Tests(unittest.TestCase):
     def test_schema_includes_lower_action(self) -> None:
