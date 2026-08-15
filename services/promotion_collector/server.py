@@ -4,7 +4,10 @@ import json
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
-from database import map_product_ids
+try:
+    from .database import map_product_ids
+except ImportError:  # Docker executes server.py as a script.
+    from database import map_product_ids
 
 PATH = "/v1/promotions/collect"
 
