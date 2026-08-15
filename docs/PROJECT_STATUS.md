@@ -94,7 +94,7 @@ inactive CPC attributed orders are historical attribution, not current
 campaign activity. Future PDF/email/Telegram delivery must consume these
 deterministic payloads rather than recompute metrics or use an LLM.
 
-## Daily Brief Delivery v0.1 — prepared, not active
+## Production Daily Commercial Brief Delivery v1 — active
 
 Deterministic renderers now produce a five-page Cyrillic-safe A4 PDF, a short
 HTML email body and a compact Telegram message from the same Daily Brief
@@ -103,13 +103,15 @@ separates the operational `business_date` from `confirmed_through_date`; stale
 finance is labelled explicitly, `NULL` is never displayed as zero, cohort
 buyout and after-tax profit remain unavailable.
 
-The channel-independent orchestration contract uses idempotency key
-`channel + business_date + report version`, isolates email/PDF failures from
-Telegram failures, and scopes manual tests separately from production. Target
-schedule is 08:15 Europe/Moscow after morning freshness checks, but no delivery
-workflow is active. Activation requires visual PDF approval plus manually
-created n8n Gmail OAuth2 and Telegram Bot credentials and one manual test per
-channel. Generated previews and all credential material remain outside Git.
+The active n8n workflow `Ozon Daily Commercial Brief Delivery v1`
+(`Kf241Y5kzETghygL`) runs daily at 08:15 Europe/Moscow. It obtains the
+deterministic brief, sends the existing HTML/PDF representation through Gmail,
+and sends the compact Telegram representation through the existing Telegram
+credential. It does not calculate metrics or call Ozon. Per-channel
+idempotency is persisted by n8n workflow static data with key
+`daily-brief:v0.1:production:<channel>:<business_date>`; a successful channel
+is not resent, while a failed channel remains eligible on the next run.
+Manual test deliveries remain separate, inactive and non-production.
 
 The private `efa-daily-brief` rendering bridge is deployed on the existing
 `efa-tools` network with no host port. It exposes read-only JSON, Telegram,
@@ -118,7 +120,8 @@ brief; it does not recalculate metrics or send messages. PostgreSQL sessions
 enforce `default_transaction_read_only=on`, and the service has no Ozon,
 Gmail, Telegram or Docker-socket access. A real 2026-08-14 request from
 `efa-n8n` confirmed all five canonical offers, explicit finance freshness and
-a five-page Cyrillic-safe PDF. Delivery and the 08:15 schedule remain inactive.
+a five-page Cyrillic-safe PDF. Delivery is now scheduled, while generated
+previews and all credential material remain outside Git.
 
 ## Ozon Performance API — working read-only baseline
 

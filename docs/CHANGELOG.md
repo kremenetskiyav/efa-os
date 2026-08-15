@@ -2,6 +2,12 @@
 
 ## 2026-08-16
 
+- Activated `Ozon Daily Commercial Brief Delivery v1` (`Kf241Y5kzETghygL`) at
+  08:15 Europe/Moscow. It uses the existing deterministic rendering bridge for
+  Gmail HTML/PDF and compact Telegram delivery, keeps per-channel production
+  idempotency in n8n static data, and does not recalculate commercial metrics
+  or call Ozon. Manual test workflows remain inactive.
+
 - Added the private read-only `efa-daily-brief` rendering service on the
   existing `efa-tools` network. It reuses the deterministic Daily Brief and
   existing Telegram, HTML and PDF renderers, exposes no host port and holds no
