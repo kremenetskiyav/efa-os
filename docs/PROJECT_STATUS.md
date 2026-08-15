@@ -111,6 +111,15 @@ workflow is active. Activation requires visual PDF approval plus manually
 created n8n Gmail OAuth2 and Telegram Bot credentials and one manual test per
 channel. Generated previews and all credential material remain outside Git.
 
+The private `efa-daily-brief` rendering bridge is deployed on the existing
+`efa-tools` network with no host port. It exposes read-only JSON, Telegram,
+HTML-email and streamed PDF representations of the existing deterministic
+brief; it does not recalculate metrics or send messages. PostgreSQL sessions
+enforce `default_transaction_read_only=on`, and the service has no Ozon,
+Gmail, Telegram or Docker-socket access. A real 2026-08-14 request from
+`efa-n8n` confirmed all five canonical offers, explicit finance freshness and
+a five-page Cyrillic-safe PDF. Delivery and the 08:15 schedule remain inactive.
+
 ## Ozon Performance API — working read-only baseline
 
 The private `Ozon Performance OAuth2` n8n credential type is deployed with

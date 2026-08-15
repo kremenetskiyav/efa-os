@@ -2,6 +2,13 @@
 
 ## 2026-08-16
 
+- Added the private read-only `efa-daily-brief` rendering service on the
+  existing `efa-tools` network. It reuses the deterministic Daily Brief and
+  existing Telegram, HTML and PDF renderers, exposes no host port and holds no
+  channel or Ozon credentials. A controlled request from `efa-n8n` for
+  2026-08-14 validated all five offers and the five-page Cyrillic PDF; no
+  delivery workflow or schedule was activated.
+
 - Prepared Daily Brief Delivery v0.1 without activating delivery. Added a
   deterministic five-page A4 PDF renderer, HTML email and Telegram text
   renderers, latest-confirmed-economics separation, real-data trend charts,
