@@ -2,7 +2,7 @@
 
 import unittest
 
-from database import ANOMALY_ECONOMICS_QUERY, PRODUCT_ECONOMICS_QUERY
+from database import ANOMALY_ECONOMICS_QUERY, PRODUCT_ECONOMICS_QUERY, PROMOTION_MONITORING_QUERY
 
 
 class UnitEconomicsQueryTests(unittest.TestCase):
@@ -26,3 +26,8 @@ class UnitEconomicsQueryTests(unittest.TestCase):
         self.assertIn("vw_orders_profit_final", ANOMALY_ECONOMICS_QUERY)
         self.assertIn("delivery_at::date", ANOMALY_ECONOMICS_QUERY)
         self.assertNotIn("operation_date", ANOMALY_ECONOMICS_QUERY)
+
+    def test_promotions_use_only_latest_successful_run(self) -> None:
+        self.assertIn("WHERE status = 'success'", PROMOTION_MONITORING_QUERY)
+        self.assertIn("LIMIT 1", PROMOTION_MONITORING_QUERY)
+        self.assertIn("JOIN latest_successful_run", PROMOTION_MONITORING_QUERY)

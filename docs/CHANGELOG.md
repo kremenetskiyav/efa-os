@@ -2,6 +2,14 @@
 
 ## 2026-08-15
 
+- Added Promotion Monitoring Tool v0.1 to the private recommendation sidecar
+  and live OZON AI Analyst. `get_promotion_monitoring` reads the latest
+  successful persisted promotion collection only, exposes deterministic
+  participation/candidate, price, ending-soon and data-quality signals, and
+  performs no Ozon or PostgreSQL writes. The live E2E call confirmed routing
+  to the tool (about 4,331 tokens); it reports the five current participating
+  and candidate offer states without recommending JOIN/LEAVE actions.
+
 - Deployed Promotions Persistence v0.1 after a verified PostgreSQL backup.
   Migration 002 created `promotion_runs` and `promotion_snapshots`; the first
   controlled collection stored 1 successful run and 10 details with complete

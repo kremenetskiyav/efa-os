@@ -28,6 +28,22 @@ rows. The manual TEST workflow was returned to its default non-persistent mode.
 
 ## Repository and source-control status
 
+## Promotion Monitoring Tool v0.1 — live and read-only
+
+`get_promotion_monitoring` is available to the live OZON AI Analyst through
+the existing private recommendation sidecar. It reads only the latest
+successful `promotion_runs` / `promotion_snapshots` collection and returns
+compact product-level participation and candidate states, confirmed action
+prices, dates and data-quality status. Its deterministic signals are
+`ACTIVE_PARTICIPATION`, `AVAILABLE_CANDIDATE`, `PROMOTION_ENDING_SOON`,
+`ACTION_PRICE_BELOW_CURRENT_PRICE` and `DATA_QUALITY_ISSUE`; the ending-soon
+window is configured by `EFA_PROMOTION_ENDING_SOON_DAYS` (default 7).
+
+The live E2E call confirmed the tool invocation: all five offers currently
+have one participating Elastic Boosting record and one Maximum Boosting
+candidate record. The AI presents facts only: it neither joins/leaves actions
+nor makes profitability or price-change recommendations.
+
 - Commit `7dcdc2e` (`feat: synchronize repository and add Snapshot Layer foundation`) was created and pushed to `origin/main`.
 - The local `main` branch is synchronized with GitHub.
 - The repository now contains the Snapshot Layer v1 architecture documents, its reviewed PostgreSQL DDL migration, the safe cost-price import script, and secret-free configuration/dependency files.

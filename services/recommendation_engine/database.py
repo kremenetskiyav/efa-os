@@ -6,7 +6,7 @@ from contextlib import contextmanager
 from typing import Iterator
 
 from config import DatabaseConfig
-from models import PriceWindow, ProductEconomics
+from models import PriceWindow, ProductEconomics, PromotionState
 from models import PeriodEconomics
 
 class DatabaseError(RuntimeError):
@@ -132,6 +132,23 @@ FROM products p LEFT JOIN classified x ON x.offer_id = p.offer_id
 GROUP BY p.offer_id, x.period_name ORDER BY p.offer_id, x.period_name
 """
 
+PROMOTION_MONITORING_QUERY = """
+WITH latest_successful_run AS (
+  SELECT run_id, collected_at
+  FROM promotion_runs
+  WHERE status = 'success'
+  ORDER BY collected_at DESC, created_at DESC
+  LIMIT 1
+)
+SELECT s.offer_id, s.product_id, s.action_id, s.action_title, s.action_type,
+       s.action_start_at, s.action_end_at, s.source_list_type, s.add_mode,
+       s.price, s.action_price, s.max_action_price, r.collected_at,
+       s.data_quality_status
+FROM promotion_snapshots s
+JOIN latest_successful_run r ON r.run_id = s.run_id
+ORDER BY s.offer_id NULLS LAST, s.source_list_type, s.action_id, s.product_id
+"""
+
 @contextmanager
 def open_read_only_connection(config: DatabaseConfig) -> Iterator[object]:
     try:
@@ -179,3 +196,16 @@ def fetch_anomaly_economics(config: DatabaseConfig) -> dict[str, dict[str, Perio
         else:
             result.setdefault(offer_id, {})
     return dict(result)
+
+
+def fetch_promotion_states(config: DatabaseConfig) -> list[PromotionState]:
+    try:
+        with open_read_only_connection(config) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(PROMOTION_MONITORING_QUERY)
+                rows = cursor.fetchall()
+    except DatabaseError:
+        raise
+    except Exception as error:
+        raise DatabaseError("Read-only promotion monitoring query failed") from error
+    return [PromotionState(*row, ()) for row in rows]

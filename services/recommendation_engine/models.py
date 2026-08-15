@@ -90,3 +90,22 @@ class ProfitCostAnomaly:
     data_quality_status: str
     reasons: tuple[str, ...]
     recommended_attention: str
+
+
+@dataclass(frozen=True)
+class PromotionState:
+    offer_id: str | None
+    product_id: int
+    action_id: int
+    action_title: str | None
+    action_type: str | None
+    action_start_at: datetime | None
+    action_end_at: datetime | None
+    source_list_type: str
+    add_mode: str | None
+    price: Decimal | None
+    action_price: Decimal | None
+    max_action_price: Decimal | None
+    collected_at: datetime
+    data_quality_status: str
+    signals: tuple[str, ...]

@@ -37,6 +37,11 @@ class AnomalyConfig:
     commission_increase_percent: Decimal
 
 
+@dataclass(frozen=True)
+class PromotionMonitoringConfig:
+    ending_soon_days: int
+
+
 def load_database_config(environ: Mapping[str, str] | None = None) -> DatabaseConfig:
     environment = os.environ if environ is None else environ
     required = ("EFA_DB_HOST", "EFA_DB_PORT", "EFA_DB_NAME", "EFA_DB_USER", "EFA_DB_PASSWORD")
@@ -79,3 +84,14 @@ def load_anomaly_config(environ: Mapping[str, str] | None = None) -> AnomalyConf
     if min_units < 1 or any(value <= 0 or value > 100 for value in thresholds):
         raise ConfigurationError("Anomaly thresholds are outside safe bounds")
     return AnomalyConfig(min_units, profit_drop, margin_drop, logistics_increase, commission_increase)
+
+
+def load_promotion_monitoring_config(environ: Mapping[str, str] | None = None) -> PromotionMonitoringConfig:
+    environment = os.environ if environ is None else environ
+    try:
+        ending_soon_days = int(environment.get("EFA_PROMOTION_ENDING_SOON_DAYS", "7"))
+    except ValueError as error:
+        raise ConfigurationError("EFA_PROMOTION_ENDING_SOON_DAYS must be an integer") from error
+    if not 1 <= ending_soon_days <= 90:
+        raise ConfigurationError("EFA_PROMOTION_ENDING_SOON_DAYS must be between 1 and 90")
+    return PromotionMonitoringConfig(ending_soon_days)
