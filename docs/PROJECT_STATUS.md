@@ -11,6 +11,20 @@ Canonical workflow JSON: `n8n/workflows/OZON_workflow_Phase_A.json`.
 
 The repository copy is sanitized for source control. Secrets remain in local n8n credentials and are not committed.
 
+## Promotions Persistence v0.1 — ready for deployment
+
+The private Promotions Collector now has an explicit, transactional persistence
+mode for `promotion_runs` and immutable `promotion_snapshots`. The existing
+`POST /v1/promotions/collect` endpoint remains non-persistent by default;
+PostgreSQL writes require `persist: true`. A successful repeated
+`collection_ref` is returned as an idempotent replay, while duplicate logical
+details are rejected before persistence.
+
+Migration `database/migrations/002_promotion_snapshots_v1.sql` is prepared but
+has **not** been applied. Production promotion writes remain zero. The next step
+is a PostgreSQL backup and validation, followed by applying migration 002 and
+one controlled persisted TEST-workflow collection.
+
 ## Repository and source-control status
 
 - Commit `7dcdc2e` (`feat: synchronize repository and add Snapshot Layer foundation`) was created and pushed to `origin/main`.

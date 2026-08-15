@@ -2,6 +2,12 @@
 
 ## 2026-08-15
 
+- Completed the deploy-ready Promotions Persistence v0.1 layer. The private
+  collector now supports explicit `persist: true`, one transaction for run,
+  batch product mapping, immutable details and final status, rollback on any
+  failure, and successful `collection_ref` replay without duplicate writes.
+  Migration 002 remains unapplied and production promotion writes remain zero.
+
 - Added `get_profit_cost_anomalies` v0.1 to the existing private
   recommendation sidecar and OZON AI Analyst. It compares equal confirmed
   delivery periods read-only and supports deterministic profit, margin,
