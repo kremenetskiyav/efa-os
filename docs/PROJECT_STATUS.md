@@ -40,6 +40,36 @@ The controlled run covered 4 actions and persisted 5 `PARTICIPATING` plus 14
 errors. Counts changed from 1/10 to 2/29; the new run has no duplicate logical
 snapshots. The TEST workflow remains manual, disabled and non-persistent.
 
+## Promotions checkpoint — 2026-08-15
+
+Promotions Data Collector v0.1 and Promotion Monitoring Tool v0.1 are
+complete. Promotion Recommendation Engine v0.1 is implemented read-only and
+is deliberately not connected to the AI Analyst: every current state is
+`REVIEW`, and numeric projection remains prohibited without confirmed
+promotion economics.
+
+Last controlled collection:
+`ozon-actions-6h-2026-08-15T06:00:00.000Z` — 4 actions, 5 participating, 14
+candidates, 5 mapped offers, 0 unmapped, valid data quality and 0 errors.
+PostgreSQL is at 2 `promotion_runs` / 29 `promotion_snapshots`; duplicate
+logical snapshots in that collection are 0.
+
+Target commercial state is: Price + Ozon Actions + Promotion/Advertising
+instruments + Sales velocity + Deliveries + Confirmed Finance + Unit
+Economics. A future Commercial Decision Engine must assess their combination,
+not an instrument in isolation. Before any promotion is considered it must
+separate deterministic cost impact, break-even volume, required uplift,
+historically observed uplift, compatibility, profit/unit, margin,
+profit/day/total profit and confidence. Expected sales uplift is `null` unless
+historically evidenced.
+
+The current evidence gap is promotion state → delivery → confirmed unit
+economics → sales velocity. Six-hour automation now accumulates the necessary
+state history. Next: **Ozon Performance API Authentication & Contract
+Validation v0.1** — first confirm official auth and real read-only Analytics,
+CPC and CPO response contracts; do not begin Advertising Collector before
+that confirmation.
+
 ## Promotion Recommendation Engine v0.1 — implemented, read-only
 
 The conservative engine combines the latest promotion state with the existing

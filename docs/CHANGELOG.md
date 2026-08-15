@@ -2,6 +2,13 @@
 
 ## 2026-08-15
 
+- Recorded the Promotions checkpoint: the active six-hour Action snapshot
+  history is the evidence foundation for future commercial-state analysis.
+  Promotion recommendation remains conservative/read-only until promotion
+  state can be matched to delivery economics and sales velocity. The next
+  gated step is Performance API authentication and read-only contract
+  validation for Analytics, CPC and CPO.
+
 - Added and activated Promotion Snapshot Automation v0.1 as a separate
   six-hour n8n workflow (`PROMOAUTOV1`). It collects every action returned by
   the read-only Actions endpoint, preserves per-action Products/Candidates
