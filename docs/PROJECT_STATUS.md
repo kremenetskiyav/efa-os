@@ -25,6 +25,11 @@ Migration 004 extends new promotion snapshots with the confirmed nullable
 `current_boost`, `min_boost`, and `max_boost` fields; the existing active
 `PROMOAUTOV1` schedule remains every six hours. State, daily demand and
 advertising flows, delivery outcomes, and finance recognition remain separate.
+The first checkpoint is intentionally **PARTIAL**: history has only started
+accumulating. CPC rows for an inactive campaign can still contain attributed
+orders; until the Performance attribution-window semantics are confirmed, they
+must not be interpreted as current campaign activity. The project remains at
+**Control Level 0 (read-only)**.
 The next stage is **Safe Commercial Experiment v0.1**; recommendations and all
 commercial control actions remain disabled.
 
