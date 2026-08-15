@@ -29,6 +29,46 @@ def finance_lag_text(payload: dict[str, Any]) -> str:
     return f"Финансовая экономика подтверждена по состоянию на {_ru_date(confirmed)}."
 
 
+def _short_missing(value: Any) -> str:
+    return "нет данных" if value is None else f"{_display_telegram(value)} шт."
+
+
+def _display_telegram(value: Any, suffix: str = "") -> str:
+    return _display(value, suffix).replace(".", ",")
+
+
+def _human_reason(reason: str) -> str:
+    labels = {
+        "seller_daily_missing_or_stale_for_business_date": "операционный отчёт по товару требует обновления",
+        "promotion_data_quality_review": "данные акции требуют проверки",
+        "cpc_data_quality_review": "данные CPC требуют проверки",
+    }
+    return labels.get(reason, "требуется проверка данных")
+
+
+def _freshness_lines(payload: dict[str, Any]) -> list[str]:
+    warnings = set(payload.get("data_quality", {}).get("warnings", []))
+    sources = payload.get("data_quality", {}).get("sources", {})
+    lines: list[str] = []
+    if "confirmed_finance_not_available_for_business_date" in warnings:
+        confirmed_through = payload.get("latest_confirmed_economics", {}).get("confirmed_through_date")
+        lines.append(
+            f"Финансовая экономика подтверждена по {_ru_date(confirmed_through or sources.get('confirmed_finance_delivery'))}, "
+            f"операционный отчёт — за {_ru_date(payload.get('business_date'))}."
+        )
+        warnings.remove("confirmed_finance_not_available_for_business_date")
+    labels = {
+        "seller_daily_missing_or_stale_for_business_date": "Операционный отчёт требует обновления.",
+        "cpc_daily_missing_or_stale_for_business_date": "Отчёт CPC требует обновления.",
+        "promotion_state_missing": "Состояние акций пока недоступно.",
+        "promotion_state_stale": "Состояние акций требует обновления.",
+        "price_state_missing": "Состояние цены пока недоступно.",
+        "price_state_stale": "Состояние цены требует обновления.",
+    }
+    lines.extend(labels[warning] for warning in sorted(warnings) if warning in labels)
+    return lines or ["Данные актуальны по доступным источникам."]
+
+
 def render_email_html(payload: dict[str, Any]) -> str:
     summary = payload["summary"]
     latest = payload["latest_confirmed_economics"]
@@ -54,29 +94,37 @@ def render_telegram_text(payload: dict[str, Any]) -> str:
     summary = payload["summary"]
     latest = payload["latest_confirmed_economics"]
     lines = [
-        f"OZON BRIEF · {_ru_date(payload['business_date'])}", "", "TOTAL",
-        f"Заказано: {_display(summary['ordered_units'])} шт.",
-        f"Доставлено: {_display(summary['delivered_units'])} шт.",
-        f"Возвраты: {_display(summary['returned_units'])} шт.",
-        f"Сумма заказов: {_display(summary['ordered_revenue'], ' ₽')}",
-        f"Profit before tax: {_display(latest['profit_before_tax'], ' ₽')}",
-        f"Margin: {_display(latest['margin_percent'], '%')}",
-        finance_lag_text(payload), "", "OFFERS",
+        f"OZON BRIEF · {_ru_date(payload['business_date'])}", "", "ИТОГО",
+        f"Заказано: {_display_telegram(summary['ordered_units'])} шт. · {_display_telegram(summary['ordered_revenue'], ' ₽')}",
+        f"Доставки: {_short_missing(summary['delivered_units'])}",
+        f"Возвраты: {_short_missing(summary['returned_units'])}",
+        f"Прибыль до налога: {_display_telegram(latest['profit_before_tax'], ' ₽')}",
+        f"Маржа: {_display_telegram(latest['margin_percent'], '%')}",
+        finance_lag_text(payload), "", "ТОВАРЫ",
     ]
-    for item in payload["compact_report_payload"]["offers"]:
-        lines.append(
-            f"{item['offer_id']} | заказано {_display(item['ordered_units'])} | "
-            f"доставлено {_display(item['delivered_units'])} | возвраты {_display(item['returned_units'])} | "
-            f"заказы {_display(item['ordered_revenue'], ' ₽')} | profit {_display(item['profit_before_tax'], ' ₽')} | "
-            f"margin {_display(item['margin_percent'], '%')}"
-        )
-    attention = [item for item in payload["offers"] if item["attention"]["level"] != "NO_ACTION"]
+    for item in payload["offers"]:
+        row = f"{item['offer_id']} — {_display_telegram(item['demand']['ordered_units'])} шт. · {_display_telegram(item['demand']['ordered_revenue'], ' ₽')}"
+        economics = item["latest_confirmed_economics"]
+        if economics["profit_before_tax"] is not None:
+            row += f" · прибыль {_display_telegram(economics['profit_before_tax'], ' ₽')}"
+        if economics["confirmed_margin_percent"] is not None:
+            row += f" · маржа {_display_telegram(economics['confirmed_margin_percent'], '%')}*"
+        lines.append(row)
+    global_reasons = set(payload.get("data_quality", {}).get("warnings", []))
+    attention = [
+        (item, [reason for reason in item["attention"]["reasons"] if reason not in global_reasons])
+        for item in payload["offers"]
+    ]
+    attention = [(item, reasons) for item, reasons in attention if reasons]
     if attention:
-        lines.extend(["", "ATTENTION"])
-        lines.extend(f"{item['offer_id']}: {item['attention']['level']} — {', '.join(item['attention']['reasons'])}" for item in attention)
-    warnings = payload.get("data_quality", {}).get("warnings", [])
-    if warnings:
-        lines.extend(["", "FRESHNESS", "; ".join(warnings)])
+        lines.extend(["", "ВНИМАНИЕ"])
+        lines.extend(f"{item['offer_id']} — {', '.join(_human_reason(reason) for reason in reasons)}." for item, reasons in attention)
+    else:
+        lines.extend(["", "ВНИМАНИЕ", "Существенных подтверждённых аномалий нет."])
+    if any(item["latest_confirmed_economics"]["confirmed_through_date"] not in (None, payload["business_date"])
+           for item in payload["offers"]):
+        lines.extend(["", f"* Подтверждённая финансовая экономика относится к данным по {_ru_date(latest['confirmed_through_date'])}."])
+    lines.extend(["", "АКТУАЛЬНОСТЬ ДАННЫХ", *_freshness_lines(payload)])
     return "\n".join(lines)
 
 

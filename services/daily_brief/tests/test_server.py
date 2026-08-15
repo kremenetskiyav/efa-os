@@ -56,11 +56,13 @@ class DailyBriefServerTests(unittest.TestCase):
 
     def test_telegram_contains_full_contract_and_all_offers(self):
         payload = build_brief(sources(finance=False), date(2026, 8, 14), datetime(2026, 8, 15, tzinfo=timezone.utc))
+        payload["data_quality"]["warnings"].append("confirmed_finance_not_available_for_business_date")
         template = payload["offers"][0]
         payload["offers"] = []
         payload["compact_report_payload"]["offers"] = []
         for offer in ("УФ 001Б", "УФ 002Б", "УФ 003Б", "УФ 004Б", "УФ 005Б"):
             item = {**template, "offer_id": offer}
+            item["attention"] = {"level": "WATCH", "reasons": ["confirmed_finance_not_available_for_business_date"]}
             payload["offers"].append(item)
             compact = {**payload["compact_report_payload"].get("offers", [{}])[0]} if payload["compact_report_payload"].get("offers") else {
                 "offer_id": offer, "ordered_units": 2, "delivered_units": 2, "returned_units": 1,
@@ -72,10 +74,10 @@ class DailyBriefServerTests(unittest.TestCase):
         app = DailyBriefApplication(lambda _: payload)
         _, _, _, response = self._json(app.handle("GET", "/v1/daily-brief/telegram?date=2026-08-14"))
         text = response["text"]
-        for required in ("TOTAL", "ATTENTION", "FRESHNESS", "УФ 001Б", "УФ 002Б", "УФ 003Б", "УФ 004Б", "УФ 005Б"):
+        for required in ("ИТОГО", "ТОВАРЫ", "ВНИМАНИЕ", "АКТУАЛЬНОСТЬ ДАННЫХ", "УФ 001Б", "УФ 002Б", "УФ 003Б", "УФ 004Б", "УФ 005Б"):
             self.assertIn(required, text)
         self.assertNotIn("выкуп", text.lower())
-        self.assertIn("НЕТ ДАННЫХ", text)
+        self.assertNotIn("null", text)
 
     def test_email_contract(self):
         _, _, _, payload = self.request("/v1/daily-brief/email?date=2026-08-14")
