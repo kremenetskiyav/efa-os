@@ -26,6 +26,20 @@ successful run and 10 immutable details (5 `PARTICIPATING`, 5 `CANDIDATE`) for
 5 mapped offers. Replaying the same `collection_ref` created no additional
 rows. The manual TEST workflow was returned to its default non-persistent mode.
 
+## Promotion Snapshot Automation v0.1 — live, read-only Ozon collection
+
+Separate workflow `Ozon Promotions Snapshot Automation v0.1`
+(`PROMOAUTOV1`) is published on a six-hour schedule and is not connected to
+Phase A. Each run starts from the current Actions list, makes exactly one
+read-only Products request and one read-only Candidates request per returned
+action, preserves their action association, and sends the completed payload
+with `persist: true` only to the private Promotions Collector.
+
+The controlled run covered 4 actions and persisted 5 `PARTICIPATING` plus 14
+`CANDIDATE` records for 5 mapped offers with `mapping_status=valid` and no
+errors. Counts changed from 1/10 to 2/29; the new run has no duplicate logical
+snapshots. The TEST workflow remains manual, disabled and non-persistent.
+
 ## Promotion Recommendation Engine v0.1 — implemented, read-only
 
 The conservative engine combines the latest promotion state with the existing
@@ -36,8 +50,9 @@ but every one of the 10 states remains `REVIEW` with
 delivery/effective-price economics link. The engine does not calculate future
 profit or margin and does not recommend JOIN/LEAVE without that evidence.
 
-Next: automatic accumulation of promotion snapshots to build the required
-promotion-to-delivery economics history.
+Next: accumulate promotion snapshots and then establish a confirmed
+promotion-state → delivery → unit-economics attribution layer. It must
+reconstruct the full commercial state without assuming sales uplift.
 
 ## Repository and source-control status
 

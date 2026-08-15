@@ -2,6 +2,14 @@
 
 ## 2026-08-15
 
+- Added and activated Promotion Snapshot Automation v0.1 as a separate
+  six-hour n8n workflow (`PROMOAUTOV1`). It collects every action returned by
+  the read-only Actions endpoint, preserves per-action Products/Candidates
+  association, and persists only through the private collector. The controlled
+  run stored 5 participating and 14 candidate snapshots across 4 actions with
+  complete mapping and no duplicate logical details; Phase A and the manual
+  non-persistent TEST workflow were not changed.
+
 - Added the read-only Promotion Recommendation Engine v0.1. It reuses the
   persisted promotion state and confirmed v0.2 economics without projecting
   action-price profit or margin. Elastic participation and Maximum candidates

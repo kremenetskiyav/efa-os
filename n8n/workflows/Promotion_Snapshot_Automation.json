@@ -1,0 +1,152 @@
+[
+  {
+    "id": "PROMOAUTOV1",
+    "name": "Ozon Promotions Snapshot Automation v0.1",
+    "active": true,
+    "nodes": [
+      {
+        "parameters": {"rule": {"interval": [{"field": "hours", "hoursInterval": 6}]}},
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.2,
+        "position": [0, 0],
+        "id": "c6eb3a58-6e02-433a-9783-3df3c7478b45",
+        "name": "Every 6 Hours"
+      },
+      {
+        "parameters": {},
+        "type": "n8n-nodes-base.manualTrigger",
+        "typeVersion": 1,
+        "position": [0, 120],
+        "id": "bf0a7f35-48bb-4abe-8fd9-0954e1e6fa08",
+        "name": "Manual Controlled Run"
+      },
+      {
+        "parameters": {
+          "url": "https://api-seller.ozon.ru/v1/actions",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendHeaders": true,
+          "headerParameters": {"parameters": [{"name": "Client-Id", "value": "4767584"}, {"name": "Content-Type", "value": "application/json"}]},
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.4,
+        "position": [240, 0],
+        "id": "5cc5de06-2f3f-45a5-a03e-65eaa827cc3f",
+        "name": "List Actions",
+        "credentials": {"httpHeaderAuth": {"id": "VKCN9mlqrD9VzcmL", "name": "Header Auth account"}}
+      },
+      {
+        "parameters": {"jsCode": "const actions = $input.first().json.result;\nif (!Array.isArray(actions) || actions.length === 0) throw new Error('List Actions returned no actions');\nif (actions.some((action) => !Number.isInteger(action.id))) throw new Error('List Actions returned an action without integer id');\nreturn actions.map((action) => ({ json: { action_id: action.id } }));"},
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [460, 0],
+        "id": "20f39137-f14b-4c1b-9a8a-2f76f38b4d20",
+        "name": "Build Action Worklist"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://api-seller.ozon.ru/v1/actions/products",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendHeaders": true,
+          "headerParameters": {"parameters": [{"name": "Client-Id", "value": "4767584"}, {"name": "Content-Type", "value": "application/json"}]},
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ { action_id: $json.action_id, limit: 1000, offset: 0 } }}",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.4,
+        "position": [900, -100],
+        "id": "3d3836e1-ff60-466a-96e2-1a9b1d263f82",
+        "name": "Action Products",
+        "credentials": {"httpHeaderAuth": {"id": "VKCN9mlqrD9VzcmL", "name": "Header Auth account"}}
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://api-seller.ozon.ru/v1/actions/candidates",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendHeaders": true,
+          "headerParameters": {"parameters": [{"name": "Client-Id", "value": "4767584"}, {"name": "Content-Type", "value": "application/json"}]},
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ { action_id: $json.action_id, limit: 1000, offset: 0 } }}",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.4,
+        "position": [900, 100],
+        "id": "e4442d51-d2d5-4474-84aa-cdb6c5d40b91",
+        "name": "Action Candidates",
+        "credentials": {"httpHeaderAuth": {"id": "VKCN9mlqrD9VzcmL", "name": "Header Auth account"}}
+      },
+      {
+        "parameters": {"jsCode": "return $input.all().map((item) => {\n  const products = item.json.result?.products;\n  if (!Array.isArray(products)) throw new Error('Action Products returned no products array');\n  return { json: { products } };\n});"},
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [1120, -100],
+        "id": "4ea78a9a-2e85-4b32-9bb7-c9cc0c282a96",
+        "name": "Normalize Action Products"
+      },
+      {
+        "parameters": {"jsCode": "return $input.all().map((item) => {\n  const candidates = item.json.result?.products;\n  if (!Array.isArray(candidates)) throw new Error('Action Candidates returned no products array');\n  return { json: { candidates } };\n});"},
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [1120, 100],
+        "id": "8ae6ad1a-25df-4f46-83c6-b8ed6166c5a7",
+        "name": "Normalize Action Candidates"
+      },
+      {
+        "parameters": {"mode": "combineByPosition", "options": {}},
+        "type": "n8n-nodes-base.merge",
+        "typeVersion": 3,
+        "position": [1340, 0],
+        "id": "d984eff8-78a2-440e-9448-e3e24f73eea3",
+        "name": "Merge Action Responses"
+      },
+      {
+        "parameters": {"jsCode": "const worklist = $items('Build Action Worklist');\nreturn $input.all().map(({ json }, index) => {\n  const action_id = worklist[index]?.json.action_id;\n  const { products, candidates } = json;\n  if (!Number.isInteger(action_id) || !Array.isArray(products) || !Array.isArray(candidates)) throw new Error('Products/candidates association is incomplete');\n  return { json: { action_id, products, candidates } };\n});"},
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [1560, 0],
+        "id": "e07e98c2-70b0-463d-8a6f-b04b4ac7e4ab",
+        "name": "Build Action Detail"
+      },
+      {
+        "parameters": {"jsCode": "const actions = $items('List Actions')[0].json.result;\nconst action_details = $input.all().map((item) => ({ action_id: item.json.action_id, products: item.json.products, candidates: item.json.candidates }));\nif (!Array.isArray(actions) || action_details.length !== actions.length) throw new Error('Incomplete action coverage; collection not sent');\nconst now = new Date();\nconst slot = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), Math.floor(now.getUTCHours() / 6) * 6));\nreturn [{ json: { collection_ref: `ozon-actions-6h-${slot.toISOString()}`, collected_at: now.toISOString(), actions, action_details, persist: true } }];"},
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [1780, 0],
+        "id": "90f2bc9e-925f-48fa-94d0-9d9c1b2a4c4b",
+        "name": "Build Persisted Bridge Payload"
+      },
+      {
+        "parameters": {"method": "POST", "url": "http://efa-promotions-collector:8080/v1/promotions/collect", "sendBody": true, "specifyBody": "json", "jsonBody": "={{ $json }}", "options": {}},
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.4,
+        "position": [2000, 0],
+        "id": "2ff95e1e-7a88-4c61-a0ed-2c8cc7d7ab4c",
+        "name": "Send To Promotions Collector"
+      }
+    ],
+    "connections": {
+      "Every 6 Hours": {"main": [[{"node": "List Actions", "type": "main", "index": 0}]]},
+      "Manual Controlled Run": {"main": [[{"node": "List Actions", "type": "main", "index": 0}]]},
+      "List Actions": {"main": [[{"node": "Build Action Worklist", "type": "main", "index": 0}]]},
+      "Build Action Worklist": {"main": [[{"node": "Action Products", "type": "main", "index": 0}, {"node": "Action Candidates", "type": "main", "index": 0}]]},
+      "Action Products": {"main": [[{"node": "Normalize Action Products", "type": "main", "index": 0}]]},
+      "Action Candidates": {"main": [[{"node": "Normalize Action Candidates", "type": "main", "index": 0}]]},
+      "Normalize Action Products": {"main": [[{"node": "Merge Action Responses", "type": "main", "index": 0}]]},
+      "Normalize Action Candidates": {"main": [[{"node": "Merge Action Responses", "type": "main", "index": 1}]]},
+      "Merge Action Responses": {"main": [[{"node": "Build Action Detail", "type": "main", "index": 0}]]},
+      "Build Action Detail": {"main": [[{"node": "Build Persisted Bridge Payload", "type": "main", "index": 0}]]},
+      "Build Persisted Bridge Payload": {"main": [[{"node": "Send To Promotions Collector", "type": "main", "index": 0}]]}
+    },
+    "settings": {"executionOrder": "v1", "binaryMode": "separate"},
+    "pinData": {}
+  }
+]
