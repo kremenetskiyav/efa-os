@@ -19,6 +19,6 @@
   },
   "scripts": {
     "test": "node --test test/*.test.js",
-    "check": "node --check credentials/OzonPerformanceOAuth2Api.credentials.js && node --check lib/token-manager.js && node --check nodes/OzonPerformance/OzonPerformance.node.js"
+    "check": "node --check credentials/OzonPerformanceOAuth2Api.credentials.js && node --check lib/http-error.js && node --check lib/token-manager.js && node --check nodes/OzonPerformance/OzonPerformance.node.js"
   }
 }

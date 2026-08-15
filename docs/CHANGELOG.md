@@ -2,6 +2,14 @@
 
 ## 2026-08-15
 
+- Added a constrained read-only CPC campaign-products operation to the private
+  Ozon Performance node. Real campaign `29798564` returned SKU `4601821825`,
+  which exactly maps through `products.sku` to `УФ 001Б`; no title or fuzzy
+  matching is used. CPO/`SEARCH_PROMO` attribution remains blocked: the CPC
+  endpoint was rejected for campaign `29676456` and will not be reused.
+  Added redacted HTTP-error formatting that exposes status and Ozon error
+  body/code/message without credential material.
+
 - Added the reproducible private n8n Ozon Performance API extension and
   confirmed its runtime-only OAuth2 client-credentials flow through the
   isolated manual/disabled `TEST - Ozon Performance API Contract` workflow.

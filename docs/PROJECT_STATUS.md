@@ -27,6 +27,19 @@ validated. `PROMOAUTOV1` remains active; no Performance or Seller API writes
 and no PostgreSQL changes were made. Next: **campaign → product contract
 validation**.
 
+## CPC campaign-to-product attribution — confirmed
+
+Read-only `GET /api/client/campaign/29798564/v2/products` returned
+`sku=4601821825`. An exact read-only match through `products.sku` maps it to
+canonical offer `УФ 001Б`; title-based and fuzzy attribution are prohibited.
+The CPC product operation and safe HTTP error formatter are part of the private
+custom node. The formatter exposes only HTTP status plus redacted Ozon error
+body/code/message.
+
+CPO `SEARCH_PROMO` product attribution remains blocked until Ozon publishes a
+confirmed read-only CPO product/state contract. The CPC product endpoint was
+rejected by the real CPO campaign and must not be reused for it.
+
 ## Promotions Persistence v0.1 — deployed and verified
 
 The private Promotions Collector now has an explicit, transactional persistence
