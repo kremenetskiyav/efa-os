@@ -28,6 +28,15 @@ class RecommendationConfig:
     max_price_step_percent: Decimal
 
 
+@dataclass(frozen=True)
+class AnomalyConfig:
+    min_period_units: int
+    profit_drop_percent: Decimal
+    margin_drop_percentage_points: Decimal
+    logistics_increase_percent: Decimal
+    commission_increase_percent: Decimal
+
+
 def load_database_config(environ: Mapping[str, str] | None = None) -> DatabaseConfig:
     environment = os.environ if environ is None else environ
     required = ("EFA_DB_HOST", "EFA_DB_PORT", "EFA_DB_NAME", "EFA_DB_USER", "EFA_DB_PASSWORD")
@@ -54,3 +63,19 @@ def load_recommendation_config(environ: Mapping[str, str] | None = None) -> Reco
     if not Decimal("0") < margin < Decimal("100") or not Decimal("0") < max_step <= Decimal("100") or min_units < 1:
         raise ConfigurationError("Recommendation thresholds are outside safe bounds")
     return RecommendationConfig(margin, min_units, max_step)
+
+
+def load_anomaly_config(environ: Mapping[str, str] | None = None) -> AnomalyConfig:
+    environment = os.environ if environ is None else environ
+    try:
+        min_units = int(environment.get("EFA_ANOMALY_MIN_PERIOD_UNITS", "5"))
+        profit_drop = Decimal(environment.get("EFA_ANOMALY_PROFIT_DROP_PERCENT", "20"))
+        margin_drop = Decimal(environment.get("EFA_ANOMALY_MARGIN_DROP_PERCENTAGE_POINTS", "5"))
+        logistics_increase = Decimal(environment.get("EFA_ANOMALY_LOGISTICS_INCREASE_PERCENT", "20"))
+        commission_increase = Decimal(environment.get("EFA_ANOMALY_COMMISSION_INCREASE_PERCENT", "20"))
+    except (InvalidOperation, ValueError) as error:
+        raise ConfigurationError("Anomaly thresholds must be numeric") from error
+    thresholds = (profit_drop, margin_drop, logistics_increase, commission_increase)
+    if min_units < 1 or any(value <= 0 or value > 100 for value in thresholds):
+        raise ConfigurationError("Anomaly thresholds are outside safe bounds")
+    return AnomalyConfig(min_units, profit_drop, margin_drop, logistics_increase, commission_increase)

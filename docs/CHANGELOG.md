@@ -2,6 +2,15 @@
 
 ## 2026-08-15
 
+- Added `get_profit_cost_anomalies` v0.1 to the existing private
+  recommendation sidecar and OZON AI Analyst. It compares equal confirmed
+  delivery periods read-only and supports deterministic profit, margin,
+  logistics, commission, other-expense and data-quality signals.
+- Confirmed the live anomaly-tool call. Optimized its general-answer
+  presentation: `DATA_QUALITY_ISSUE` now reports only insufficient confirmed
+  units and is never presented as a profit/cost business anomaly; detailed
+  period metrics are shown only on an explicit detailed or product request.
+
 - Deployed Price Recommendation Engine v0.2 to the private recommendation-tool
   sidecar and synchronized its v0.2 context with the live OZON AI Analyst.
   End-to-end execution called `get_price_profit_recommendations`; all five

@@ -6,14 +6,19 @@ from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime
 from decimal import Decimal
 
-from config import DatabaseConfig, RecommendationConfig
-from database import fetch_product_economics
+from anomalies import build_profit_cost_anomaly
+from config import AnomalyConfig, DatabaseConfig, RecommendationConfig
+from database import fetch_anomaly_economics, fetch_product_economics
 from models import ProductEconomics, Recommendation
 from rules import build_recommendation
 
 TOOL_NAME = "get_price_profit_recommendations"
 _ACTIONS = ("KEEP", "CONSIDER_RAISE", "CONSIDER_LOWER", "REVIEW_DATA")
 GET_PRICE_PROFIT_RECOMMENDATIONS_TOOL = {"type": "function", "name": TOOL_NAME, "description": "Return verified read-only price/profit recommendations from confirmed observed economics. Never changes Ozon prices.", "strict": True, "parameters": {"type": "object", "properties": {"offer_id": {"type": ["string", "null"]}, "action": {"type": ["string", "null"], "enum": [*_ACTIONS, None]}}, "required": ["offer_id", "action"], "additionalProperties": False}}
+ANOMALY_TOOL_NAME = "get_profit_cost_anomalies"
+_ANOMALIES = ("PROFIT_DROPPED", "MARGIN_DROPPED", "LOGISTICS_INCREASED", "COMMISSION_INCREASED", "OTHER_EXPENSES_APPEARED", "DATA_QUALITY_ISSUE")
+_SEVERITIES = ("low", "medium", "high")
+GET_PROFIT_COST_ANOMALIES_TOOL = {"type": "function", "name": ANOMALY_TOOL_NAME, "description": "Return compact verified read-only profit and cost anomaly signals from two equal confirmed delivery periods. Never changes Ozon data or prices.", "strict": True, "parameters": {"type": "object", "properties": {"offer_id": {"type": ["string", "null"]}, "severity": {"type": ["string", "null"], "enum": [*_SEVERITIES, None]}, "anomaly_type": {"type": ["string", "null"], "enum": [*_ANOMALIES, None]}}, "required": ["offer_id", "severity", "anomaly_type"], "additionalProperties": False}}
 
 
 class ToolInputError(ValueError):
@@ -38,8 +43,32 @@ def _parse_arguments(arguments: Mapping[str, object]) -> tuple[str | None, str |
     return offer_id.strip() if isinstance(offer_id, str) else None, action if isinstance(action, str) else None
 
 
+def get_profit_cost_anomalies(arguments: Mapping[str, object], database_config: DatabaseConfig, anomaly_config: AnomalyConfig, fetch_economics: Callable[[DatabaseConfig], Mapping[str, object]] = fetch_anomaly_economics) -> dict[str, object]:
+    if set(arguments) != {"offer_id", "severity", "anomaly_type"}:
+        raise ToolInputError("arguments must contain exactly: offer_id, severity, anomaly_type")
+    offer_id, severity, anomaly_type = arguments["offer_id"], arguments["severity"], arguments["anomaly_type"]
+    if offer_id is not None and (not isinstance(offer_id, str) or not offer_id.strip()):
+        raise ToolInputError("offer_id must be a non-empty string or null")
+    if severity is not None and severity not in _SEVERITIES:
+        raise ToolInputError("severity must be low, medium, high, or null")
+    if anomaly_type is not None and anomaly_type not in _ANOMALIES:
+        raise ToolInputError("anomaly_type is not supported")
+    items = [build_profit_cost_anomaly(key, value, anomaly_config) for key, value in fetch_economics(database_config).items()]
+    items = [item for item in items if (offer_id is None or item.offer_id == offer_id.strip()) and (severity is None or item.severity == severity) and (anomaly_type is None or anomaly_type in item.anomalies)]
+    return {"tool": ANOMALY_TOOL_NAME, "read_only": True, "count": len(items), "anomalies": [_serialize_anomaly(item) for item in items]}
+
+
 def _serialize_recommendation(item: Recommendation) -> dict[str, object]:
     return {key: _serialize(value) for key, value in item.__dict__.items()} | {"reasons": list(item.reasons)}
+
+
+def _serialize_anomaly(item: object) -> dict[str, object]:
+    data = item.__dict__.copy()
+    for key in ("anomalies", "reasons"):
+        data[key] = list(data[key])
+    for section in ("current", "baseline", "changes"):
+        data[section] = {key: _serialize(value) for key, value in data[section].items()}
+    return {key: _serialize(value) for key, value in data.items()}
 
 
 def _serialize(value: object) -> object:

@@ -63,3 +63,30 @@ class Recommendation:
     last_confirmed_margin: Decimal | None
     current_price_economics_status: str
     current_price_since: datetime | None
+
+
+@dataclass(frozen=True)
+class PeriodEconomics:
+    period_start: datetime | None
+    period_end: datetime | None
+    units: int
+    orders: int
+    revenue: Decimal
+    profit: Decimal
+    commission: Decimal
+    logistics: Decimal
+    other_expenses: Decimal
+    unallocated_expense_lines: int
+
+
+@dataclass(frozen=True)
+class ProfitCostAnomaly:
+    offer_id: str
+    severity: str
+    anomalies: tuple[str, ...]
+    current: dict[str, Decimal | int | datetime | None]
+    baseline: dict[str, Decimal | int | datetime | None]
+    changes: dict[str, Decimal | None]
+    data_quality_status: str
+    reasons: tuple[str, ...]
+    recommended_attention: str

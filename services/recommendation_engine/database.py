@@ -7,6 +7,7 @@ from typing import Iterator
 
 from config import DatabaseConfig
 from models import PriceWindow, ProductEconomics
+from models import PeriodEconomics
 
 class DatabaseError(RuntimeError):
     pass
@@ -85,6 +86,52 @@ LEFT JOIN windows w ON w.offer_id=p.offer_id LEFT JOIN last_windows lw ON lw.off
 ORDER BY p.offer_id, w.price_since
 """
 
+# Two equal delivery-date windows, based only on the established financial view.
+# Financial operation date is deliberately not used as the sale-period timestamp.
+ANOMALY_ECONOMICS_QUERY = """
+WITH delivered AS (
+  SELECT p.posting_number, p.sku, MAX(p.offer_id) AS offer_id,
+         MAX(p.quantity) AS quantity, MAX(p.delivering_date) AS delivery_at
+  FROM postings p
+  WHERE p.status = 'delivered' AND p.quantity > 0 AND p.offer_id IS NOT NULL
+  GROUP BY p.posting_number, p.sku
+), base AS (
+  SELECT regexp_replace(d.posting_number, '-[0-9]+$', '') AS posting_key,
+         d.posting_number, d.sku, d.offer_id, d.quantity, d.delivery_at,
+         f.revenue, f.commission, f.logistics, f.other_expenses, f.payout,
+         p.cost_price
+  FROM delivered d
+  JOIN vw_orders_profit_final f ON f.posting_key = regexp_replace(d.posting_number, '-[0-9]+$', '')
+  JOIN products p ON p.offer_id = d.offer_id
+), key_counts AS (
+  SELECT posting_key, COUNT(*) AS line_count FROM base GROUP BY posting_key
+), confirmed AS (
+  SELECT b.*, CASE WHEN k.line_count = 1 THEN b.other_expenses ELSE 0 END AS allocatable_other_expenses,
+         CASE WHEN k.line_count > 1 AND b.other_expenses <> 0 THEN 1 ELSE 0 END AS unallocated_expense_line,
+         b.payout + CASE WHEN k.line_count = 1 THEN b.other_expenses ELSE 0 END - b.cost_price * b.quantity AS profit
+  FROM base b JOIN key_counts k USING (posting_key)
+), bounds AS (
+  SELECT MAX(delivery_at)::date AS current_end FROM confirmed
+), classified AS (
+  SELECT c.*, CASE
+    WHEN c.delivery_at::date BETWEEN b.current_end - 6 AND b.current_end THEN 'current'
+    WHEN c.delivery_at::date BETWEEN b.current_end - 13 AND b.current_end - 7 THEN 'baseline'
+  END AS period_name
+  FROM confirmed c CROSS JOIN bounds b
+  WHERE c.delivery_at::date BETWEEN b.current_end - 13 AND b.current_end
+)
+SELECT p.offer_id, x.period_name,
+       MIN(x.delivery_at) AS period_start, MAX(x.delivery_at) AS period_end,
+       COALESCE(SUM(x.quantity), 0)::integer AS units,
+       COUNT(DISTINCT x.posting_number)::integer AS orders,
+       COALESCE(SUM(x.revenue), 0) AS revenue, COALESCE(SUM(x.profit), 0) AS profit,
+       COALESCE(SUM(x.commission), 0) AS commission, COALESCE(SUM(x.logistics), 0) AS logistics,
+       COALESCE(SUM(x.allocatable_other_expenses), 0) AS other_expenses,
+       COALESCE(SUM(x.unallocated_expense_line), 0)::integer AS unallocated_expense_lines
+FROM products p LEFT JOIN classified x ON x.offer_id = p.offer_id
+GROUP BY p.offer_id, x.period_name ORDER BY p.offer_id, x.period_name
+"""
+
 @contextmanager
 def open_read_only_connection(config: DatabaseConfig) -> Iterator[object]:
     try:
@@ -115,3 +162,20 @@ def fetch_product_economics(config: DatabaseConfig) -> list[ProductEconomics]:
         if row[18] is not None and "last" not in item:
             item["last"] = PriceWindow(None, row[20] / row[18], row[18], row[19], row[20], row[21], row[22], row[23], row[24], row[25], row[26], row[27], row[28])
     return [ProductEconomics(offer_id, value.get("current_price"), value.get("current_since"), value.get("cost"), tuple(value["windows"]), value.get("last"), tuple(sorted(set(value["issues"])))) for offer_id, value in sorted(grouped.items())]
+
+
+def fetch_anomaly_economics(config: DatabaseConfig) -> dict[str, dict[str, PeriodEconomics]]:
+    try:
+        with open_read_only_connection(config) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(ANOMALY_ECONOMICS_QUERY); rows = cursor.fetchall()
+    except DatabaseError: raise
+    except Exception as error: raise DatabaseError("Read-only anomaly economics query failed") from error
+    result: dict[str, dict[str, PeriodEconomics]] = defaultdict(dict)
+    for row in rows:
+        offer_id, name = row[0], row[1]
+        if name is not None:
+            result[offer_id][name] = PeriodEconomics(*row[2:])
+        else:
+            result.setdefault(offer_id, {})
+    return dict(result)

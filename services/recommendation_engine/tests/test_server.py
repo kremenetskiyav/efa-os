@@ -2,7 +2,7 @@
 
 import unittest
 
-from server import TOOL_PATH, normalize_transport_arguments
+from server import ANOMALY_TOOL_PATH, TOOL_PATH, normalize_transport_arguments
 from tools import ToolInputError
 
 
@@ -25,6 +25,7 @@ class ServerAdapterTests(unittest.TestCase):
 
     def test_endpoint_path_is_stable(self) -> None:
         self.assertEqual(TOOL_PATH, "/v1/get_price_profit_recommendations")
+        self.assertEqual(ANOMALY_TOOL_PATH, "/v1/get_profit_cost_anomalies")
 
 
 if __name__ == "__main__":

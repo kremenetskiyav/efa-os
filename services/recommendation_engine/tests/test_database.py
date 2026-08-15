@@ -2,7 +2,7 @@
 
 import unittest
 
-from database import PRODUCT_ECONOMICS_QUERY
+from database import ANOMALY_ECONOMICS_QUERY, PRODUCT_ECONOMICS_QUERY
 
 
 class UnitEconomicsQueryTests(unittest.TestCase):
@@ -21,3 +21,8 @@ class UnitEconomicsQueryTests(unittest.TestCase):
     def test_price_intervals_use_delivery_not_finance_date(self) -> None:
         self.assertIn("r.delivery_at >= i.price_since", PRODUCT_ECONOMICS_QUERY)
         self.assertNotIn("operation_date >= i.price_since", PRODUCT_ECONOMICS_QUERY)
+
+    def test_anomaly_periods_use_delivery_and_confirmed_financial_view(self) -> None:
+        self.assertIn("vw_orders_profit_final", ANOMALY_ECONOMICS_QUERY)
+        self.assertIn("delivery_at::date", ANOMALY_ECONOMICS_QUERY)
+        self.assertNotIn("operation_date", ANOMALY_ECONOMICS_QUERY)

@@ -181,6 +181,18 @@ run used about 3,336 tokens.
 
 Next: **Profit & Cost Anomaly Tool v0.1** → connection to OZON AI Analyst.
 
+### Profit & Cost Anomaly Tool v0.1
+
+`get_profit_cost_anomalies` is a private, read-only AI tool in the existing
+recommendation sidecar. It compares two equal confirmed delivery periods using
+`vw_orders_profit_final` and reports deterministic profit, margin, commission,
+logistics, other-expense and data-quality signals. The live AI integration is
+confirmed. For general questions its presentation is compact: an insufficient
+period is reported only as `НЕДОСТАТОЧНО ДАННЫХ` with confirmed units versus
+the minimum sample; calculated changes are not presented as business anomalies.
+Detailed current/baseline metrics require a product-specific or explicit
+detail request.
+
 ## Snapshot Layer v1 — architecture complete
 
 The project has completed the architecture and DDL design for the first Autonomous Monitoring Core layer. The relevant documents are:
