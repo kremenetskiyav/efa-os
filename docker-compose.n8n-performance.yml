@@ -1,0 +1,32 @@
+services:
+  efa-n8n:
+    build:
+      context: .
+      dockerfile: n8n/Dockerfile.performance-api
+      args:
+        N8N_BASE_IMAGE: ${EFA_N8N_BASE_IMAGE:-efa-n8n-base:2.32.7-local}
+    image: efa-n8n-performance:0.1.0
+    container_name: efa-n8n
+    restart: "no"
+    environment:
+      N8N_LOCAL_FILES_ACCESS: "true"
+      N8N_BLOCK_FILE_ACCESS_TO: ""
+    ports:
+      - "5678:5678"
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - type: bind
+        source: ${EFA_N8N_FILES_HOST_PATH:?Set locally to the existing efa-n8n /files host path}
+        target: /files
+    networks:
+      - efa-tools
+
+volumes:
+  n8n_data:
+    external: true
+    name: n8n_data
+
+networks:
+  efa-tools:
+    external: true
+    name: efa-tools

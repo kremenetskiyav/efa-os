@@ -11,6 +11,22 @@ Canonical workflow JSON: `n8n/workflows/OZON_workflow_Phase_A.json`.
 
 The repository copy is sanitized for source control. Secrets remain in local n8n credentials and are not committed.
 
+## Ozon Performance API — working read-only baseline
+
+The private `Ozon Performance OAuth2` n8n credential type is deployed with
+runtime-only Client ID and Client Secret storage. Its client-credentials token
+exchange and Bearer-token handling were confirmed by the isolated manual,
+disabled workflow `TEST - Ozon Performance API Contract`
+(`a2qlNkgKiIpsPEmF`). No credential material or access token is serialized in
+the workflow, execution output, logs, or repository.
+
+The real read-only `GET /api/client/campaign` call returned six campaigns: five
+CPC `SKU` campaigns are inactive, and CPO `SEARCH_PROMO` campaign `29676456`
+is running. Product attribution and campaign statistics have not yet been
+validated. `PROMOAUTOV1` remains active; no Performance or Seller API writes
+and no PostgreSQL changes were made. Next: **campaign → product contract
+validation**.
+
 ## Promotions Persistence v0.1 — deployed and verified
 
 The private Promotions Collector now has an explicit, transactional persistence

@@ -1,0 +1,24 @@
+{
+  "name": "n8n-nodes-ozon-performance",
+  "version": "0.1.0",
+  "description": "Private read-only Ozon Performance API node for EFA OS",
+  "license": "UNLICENSED",
+  "keywords": [
+    "n8n-community-node-package"
+  ],
+  "dependencies": {
+    "n8n-workflow": "2.32.1"
+  },
+  "n8n": {
+    "credentials": [
+      "credentials/OzonPerformanceOAuth2Api.credentials.js"
+    ],
+    "nodes": [
+      "nodes/OzonPerformance/OzonPerformance.node.js"
+    ]
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "check": "node --check credentials/OzonPerformanceOAuth2Api.credentials.js && node --check lib/token-manager.js && node --check nodes/OzonPerformance/OzonPerformance.node.js"
+  }
+}

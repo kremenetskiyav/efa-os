@@ -2,6 +2,15 @@
 
 ## 2026-08-15
 
+- Added the reproducible private n8n Ozon Performance API extension and
+  confirmed its runtime-only OAuth2 client-credentials flow through the
+  isolated manual/disabled `TEST - Ozon Performance API Contract` workflow.
+  A real read-only campaign-list call returned six campaigns: five inactive
+  CPC/SKU campaigns and one running CPO/SEARCH_PROMO campaign (`29676456`).
+  Credentials and tokens were not serialized to the workflow, output, logs or
+  repository. Product attribution and campaign statistics remain unvalidated;
+  the next step is campaign → product contract validation.
+
 - Recorded the Promotions checkpoint: the active six-hour Action snapshot
   history is the evidence foundation for future commercial-state analysis.
   Promotion recommendation remains conservative/read-only until promotion
