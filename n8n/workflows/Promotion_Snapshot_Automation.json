@@ -117,7 +117,7 @@
         "name": "Build Action Detail"
       },
       {
-        "parameters": {"jsCode": "const actions = $items('List Actions')[0].json.result;\nconst action_details = $input.all().map((item) => ({ action_id: item.json.action_id, products: item.json.products, candidates: item.json.candidates }));\nif (!Array.isArray(actions) || action_details.length !== actions.length) throw new Error('Incomplete action coverage; collection not sent');\nconst now = new Date();\nconst slot = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), Math.floor(now.getUTCHours() / 6) * 6));\nreturn [{ json: { collection_ref: `ozon-actions-6h-${slot.toISOString()}`, collected_at: now.toISOString(), actions, action_details, persist: true } }];"},
+        "parameters": {"jsCode": "const actions = $items('List Actions')[0].json.result;\nconst action_details = $input.all().map((item) => ({ action_id: item.json.action_id, products: item.json.products, candidates: item.json.candidates }));\nif (!Array.isArray(actions) || action_details.length !== actions.length) throw new Error('Incomplete action coverage; collection not sent');\nconst now = new Date();\nconst slot = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), Math.floor(now.getUTCHours() / 6) * 6));\nconst collection_ref = $execution.mode === 'trigger' ? `ozon-actions-6h-${slot.toISOString()}` : `ozon-actions-controlled-${$execution.id}`;\nreturn [{ json: { collection_ref, collected_at: now.toISOString(), actions, action_details, persist: true } }];"},
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
         "position": [1780, 0],

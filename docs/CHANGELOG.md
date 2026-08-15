@@ -2,6 +2,14 @@
 
 ## 2026-08-15
 
+- Added Commercial Baseline Collection v0.1: immutable daily Seller Analytics
+  demand (`ordered_revenue`, `ordered_units`), dynamic CPC/SKU Performance
+  history with exact SKU-to-offer attribution, and nullable Elastic Boosting
+  fields on new promotion snapshots. Controlled runs mapped all five Seller
+  SKUs and the two CPC rows returned for 2026-08-14; daily workflows are active
+  at 07:10 and 07:30 Europe/Moscow. All Seller/Performance calls remain
+  read-only and no price, promotion, bid, budget, or campaign state is changed.
+
 - Added a constrained read-only CPC campaign-products operation to the private
   Ozon Performance node. Real campaign `29798564` returned SKU `4601821825`,
   which exactly maps through `products.sku` to `УФ 001Б`; no title or fuzzy

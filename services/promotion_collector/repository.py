@@ -52,6 +52,7 @@ def insert_snapshots(cursor: Any, run_id: Any, snapshots: Iterable[dict[str, Any
             row.get("action_start_at"), row.get("action_end_at"), row["source_list_type"],
             row["product_id"], row.get("offer_id"), row.get("add_mode"), row.get("price"),
             row.get("action_price"), row.get("max_action_price"), row["data_quality_status"],
+            row.get("current_boost"), row.get("min_boost"), row.get("max_boost"),
         )
         for row in snapshots
     ]
@@ -61,8 +62,9 @@ def insert_snapshots(cursor: Any, run_id: Any, snapshots: Iterable[dict[str, Any
         """INSERT INTO promotion_snapshots
                (run_id, action_id, action_title, action_type, action_start_at,
                 action_end_at, source_list_type, product_id, offer_id, add_mode,
-                price, action_price, max_action_price, data_quality_status)
-             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                price, action_price, max_action_price, data_quality_status,
+                current_boost, min_boost, max_boost)
+             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
         rows,
     )
 

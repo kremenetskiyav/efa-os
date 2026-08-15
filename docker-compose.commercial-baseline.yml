@@ -1,0 +1,18 @@
+services:
+  efa-commercial-baseline-collector:
+    build:
+      context: ./services/commercial_baseline_collector
+    restart: unless-stopped
+    environment:
+      EFA_DB_HOST: ${EFA_DB_HOST}
+      EFA_DB_PORT: ${EFA_DB_PORT}
+      EFA_DB_NAME: ${EFA_DB_NAME}
+      EFA_DB_USER: ${EFA_DB_USER}
+      EFA_DB_PASSWORD: ${EFA_DB_PASSWORD}
+    networks:
+      - efa-tools
+
+networks:
+  efa-tools:
+    external: true
+    name: efa-tools

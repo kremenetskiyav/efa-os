@@ -1,0 +1,67 @@
+[
+  {
+    "id": "CPCDAILYV1",
+    "name": "CPC Daily Collection v0.1",
+    "active": true,
+    "nodes": [
+      {
+        "parameters":{"rule":{"interval":[{"field":"cronExpression","expression":"30 7 * * *"}]}},
+        "type":"n8n-nodes-base.scheduleTrigger","typeVersion":1.2,"position":[0,0],"id":"afbd425b-55fe-4bb3-84cc-1d086bb99816","name":"Daily 07:30 Moscow"
+      },
+      {
+        "parameters":{},"type":"n8n-nodes-base.manualTrigger","typeVersion":1,"position":[0,120],"id":"7f252932-6016-477b-a434-2110681611c5","name":"Manual Controlled Run"
+      },
+      {
+        "parameters":{"operation":"getCampaigns"},"type":"CUSTOM.ozonPerformance","typeVersion":1,"position":[240,0],"id":"978071dd-e061-44e6-a0c6-ac9be7dad765","name":"Get Performance Campaigns",
+        "credentials":{"ozonPerformanceOAuth2Api":{"id":"AEeFEUH2M1R5b2HL","name":"Ozon Performance API - EFA OS"}}
+      },
+      {
+        "parameters":{"jsCode":"const input = $input.all().map((item) => item.json);\nconst first = input[0];\nconst source = input.length > 1 ? input : (Array.isArray(first) ? first : (first.list ?? first.campaigns ?? []));\nconst campaigns = source.filter((item) => item && item.advObjectType === 'SKU');\nif (!campaigns.length) throw new Error('No CPC/SKU campaigns returned');\nconst ids = campaigns.map((item) => Number(item.id));\nif (ids.some((id) => !Number.isInteger(id))) throw new Error('CPC campaign ID contract mismatch');\nconst business_date = $now.setZone('Europe/Moscow').minus({days:1}).toISODate();\nreturn [{json:{campaigns,campaign_ids:ids.join(','),business_date}}];"},
+        "type":"n8n-nodes-base.code","typeVersion":2,"position":[460,0],"id":"10c13cf3-862f-4d9e-bb52-d102516649bd","name":"Build CPC Worklist"
+      },
+      {
+        "parameters":{"operation":"generateCpcDailyStatisticsReport","campaignIds":"={{ $json.campaign_ids }}","dateFrom":"={{ $json.business_date }}","dateTo":"={{ $json.business_date }}"},
+        "type":"CUSTOM.ozonPerformance","typeVersion":1,"position":[700,0],"id":"5aeed741-8b32-4fd1-b7ce-8f47ee64ed24","name":"Generate CPC Daily Report",
+        "credentials":{"ozonPerformanceOAuth2Api":{"id":"AEeFEUH2M1R5b2HL","name":"Ozon Performance API - EFA OS"}}
+      },
+      {
+        "parameters":{"amount":60,"unit":"seconds"},"type":"n8n-nodes-base.wait","typeVersion":1.1,"position":[920,0],"id":"237c63c8-d6d1-44df-8bbc-a99b34fe69c2","name":"Wait For CPC Report","webhookId":"0a72e0b2-a50b-4531-8e36-4828a2b02ef5"
+      },
+      {
+        "parameters":{"operation":"getCampaignStatisticsReport","reportUuid":"={{ $items('Generate CPC Daily Report')[0].json.UUID }}"},
+        "type":"CUSTOM.ozonPerformance","typeVersion":1,"position":[1140,0],"id":"fc279f33-bbab-4296-8dfd-546c625cd64c","name":"Get CPC Report Status",
+        "credentials":{"ozonPerformanceOAuth2Api":{"id":"AEeFEUH2M1R5b2HL","name":"Ozon Performance API - EFA OS"}}
+      },
+      {
+        "parameters":{"jsCode":"if ($json.state !== 'OK' || typeof $json.link !== 'string') throw new Error(`CPC report is not complete: ${$json.state ?? 'unknown'}`);\nreturn $input.all();"},
+        "type":"n8n-nodes-base.code","typeVersion":2,"position":[1360,0],"id":"e517b5b8-4c22-4d7e-8408-166cf04c69b8","name":"Require Complete CPC Report"
+      },
+      {
+        "parameters":{"operation":"getCampaignStatisticsData","reportUuid":"={{ $items('Generate CPC Daily Report')[0].json.UUID }}"},
+        "type":"CUSTOM.ozonPerformance","typeVersion":1,"position":[1580,0],"id":"eb7159d9-8bf5-41fe-b1ec-dd45de387bf4","name":"Get CPC Daily Data",
+        "credentials":{"ozonPerformanceOAuth2Api":{"id":"AEeFEUH2M1R5b2HL","name":"Ozon Performance API - EFA OS"}}
+      },
+      {
+        "parameters":{"jsCode":"const work = $items('Build CPC Worklist')[0].json;\nconst reportUuid = $items('Generate CPC Daily Report')[0].json.UUID;\nif (!reportUuid || !$json || typeof $json !== 'object') throw new Error('CPC report payload is incomplete');\nreturn [{json:{collection_ref:`cpc-day-${work.business_date}`,collected_at:new Date().toISOString(),business_date:work.business_date,report_uuid:reportUuid,campaigns:work.campaigns,report:$json,persist:true}}];"},
+        "type":"n8n-nodes-base.code","typeVersion":2,"position":[1800,0],"id":"89549abf-0807-4b7f-9df5-bc5bda51cf72","name":"Build CPC Persistence Payload"
+      },
+      {
+        "parameters":{"method":"POST","url":"http://efa-commercial-baseline-collector:8080/v1/commercial/cpc/collect","sendBody":true,"specifyBody":"json","jsonBody":"={{ $json }}","options":{}},
+        "type":"n8n-nodes-base.httpRequest","typeVersion":4.4,"position":[2020,0],"id":"5b5137e5-1864-48fc-993d-4bb14f3b3c71","name":"Persist CPC Daily History"
+      }
+    ],
+    "connections":{
+      "Daily 07:30 Moscow":{"main":[[{"node":"Get Performance Campaigns","type":"main","index":0}]]},
+      "Manual Controlled Run":{"main":[[{"node":"Get Performance Campaigns","type":"main","index":0}]]},
+      "Get Performance Campaigns":{"main":[[{"node":"Build CPC Worklist","type":"main","index":0}]]},
+      "Build CPC Worklist":{"main":[[{"node":"Generate CPC Daily Report","type":"main","index":0}]]},
+      "Generate CPC Daily Report":{"main":[[{"node":"Wait For CPC Report","type":"main","index":0}]]},
+      "Wait For CPC Report":{"main":[[{"node":"Get CPC Report Status","type":"main","index":0}]]},
+      "Get CPC Report Status":{"main":[[{"node":"Require Complete CPC Report","type":"main","index":0}]]},
+      "Require Complete CPC Report":{"main":[[{"node":"Get CPC Daily Data","type":"main","index":0}]]},
+      "Get CPC Daily Data":{"main":[[{"node":"Build CPC Persistence Payload","type":"main","index":0}]]},
+      "Build CPC Persistence Payload":{"main":[[{"node":"Persist CPC Daily History","type":"main","index":0}]]}
+    },
+    "settings":{"executionOrder":"v1","timezone":"Europe/Moscow","binaryMode":"separate"},"pinData":{}
+  }
+]

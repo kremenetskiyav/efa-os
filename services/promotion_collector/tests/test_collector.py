@@ -8,3 +8,9 @@ class PromotionParsingTests(unittest.TestCase):
     def test_missing_product_fields_remain_null(self):
         row=normalize({"id":7},{},"candidate")
         self.assertIsNone(row.product_id)
+    def test_confirmed_elastic_fields_are_preserved_and_missing_is_null(self):
+        action={"id":1,"title":"Elastic","action_type":"ELASTIC_BOOSTING"}
+        row=normalize(action,{"id":10,"current_boost":15,"min_boost":10,"max_boost":75},"participating")
+        self.assertEqual((row.current_boost,row.min_boost,row.max_boost),("15","10","75"))
+        missing=normalize(action,{"id":10},"participating")
+        self.assertEqual((missing.current_boost,missing.min_boost,missing.max_boost),(None,None,None))

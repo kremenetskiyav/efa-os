@@ -41,7 +41,7 @@ def _prepare(payload: object, mapper=map_product_ids) -> tuple[dict[str, object]
                 logical_key = (action_id, source_type, product_id)
                 if logical_key in logical_keys: raise PayloadError(f"duplicate_detail:{action_id}:{source_type}:{product_id}")
                 logical_keys.add(logical_key)
-                normalized.append({"action_id":action_id,"action_title":action.get("title"),"action_type":action.get("action_type"),"action_start_at":action.get("date_start"),"action_end_at":action.get("date_end"),"source_list_type":source_type,"product_id":product_id,"add_mode":record.get("add_mode"),"price":record.get("price"),"action_price":record.get("action_price"),"max_action_price":record.get("max_action_price")})
+                normalized.append({"action_id":action_id,"action_title":action.get("title"),"action_type":action.get("action_type"),"action_start_at":action.get("date_start"),"action_end_at":action.get("date_end"),"source_list_type":source_type,"product_id":product_id,"add_mode":record.get("add_mode"),"price":record.get("price"),"action_price":record.get("action_price"),"max_action_price":record.get("max_action_price"),"current_boost":record.get("current_boost"),"min_boost":record.get("min_boost"),"max_boost":record.get("max_boost")})
             if counter == "participating": participating += len(records)
             else: candidate += len(records)
     mapped=mapper(product_ids); unmapped=sorted(product_ids-set(mapped))

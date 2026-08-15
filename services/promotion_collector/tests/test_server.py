@@ -32,3 +32,10 @@ class BridgeTests(unittest.TestCase):
   collect(p,lambda ids:{10:"УФ"},lambda data,factory:captured.update(data) or {"run_id":"r","idempotent_replay":False},lambda:None)
   rows=captured["snapshots"]; self.assertEqual({r["source_list_type"] for r in rows},{"PARTICIPATING","CANDIDATE"})
   self.assertEqual(next(r for r in rows if r["product_id"]==11)["data_quality_status"],"review")
+ def test_boost_fields_are_forwarded_without_defaulting(self):
+  captured={}; p=payload(); p["persist"]=True; p["action_details"][0]["products"][0].update({"current_boost":15,"min_boost":10,"max_boost":75})
+  collect(p,lambda ids:{10:"УФ",11:"УФ2"},lambda data,factory:captured.update(data) or {"run_id":"r","idempotent_replay":False},lambda:None)
+  participating=next(r for r in captured["snapshots"] if r["source_list_type"]=="PARTICIPATING")
+  self.assertEqual((participating["current_boost"],participating["min_boost"],participating["max_boost"]),(15,10,75))
+  candidate=next(r for r in captured["snapshots"] if r["source_list_type"]=="CANDIDATE")
+  self.assertIsNone(candidate["current_boost"])

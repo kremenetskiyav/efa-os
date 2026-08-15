@@ -11,6 +11,23 @@ Canonical workflow JSON: `n8n/workflows/OZON_workflow_Phase_A.json`.
 
 The repository copy is sanitized for source control. Secrets remain in local n8n credentials and are not committed.
 
+## Commercial Baseline Collection v0.1 — active
+
+Separate read-only daily automations now accumulate commercial flows without
+mixing their time semantics. `Seller Analytics Daily Collection v0.1`
+(`SELLERDAILYV1`, 07:10 Europe/Moscow) stores only confirmed ordered revenue
+and ordered units at `offer_id × business_date`. `CPC Daily Collection v0.1`
+(`CPCDAILYV1`, 07:30 Europe/Moscow) dynamically selects CPC/SKU campaigns and
+stores their confirmed daily Performance metrics with exact SKU attribution.
+Both persist only through the private commercial-baseline collector.
+
+Migration 004 extends new promotion snapshots with the confirmed nullable
+`current_boost`, `min_boost`, and `max_boost` fields; the existing active
+`PROMOAUTOV1` schedule remains every six hours. State, daily demand and
+advertising flows, delivery outcomes, and finance recognition remain separate.
+The next stage is **Safe Commercial Experiment v0.1**; recommendations and all
+commercial control actions remain disabled.
+
 ## Ozon Performance API — working read-only baseline
 
 The private `Ozon Performance OAuth2` n8n credential type is deployed with
@@ -22,10 +39,8 @@ the workflow, execution output, logs, or repository.
 
 The real read-only `GET /api/client/campaign` call returned six campaigns: five
 CPC `SKU` campaigns are inactive, and CPO `SEARCH_PROMO` campaign `29676456`
-is running. Product attribution and campaign statistics have not yet been
-validated. `PROMOAUTOV1` remains active; no Performance or Seller API writes
-and no PostgreSQL changes were made. Next: **campaign → product contract
-validation**.
+is running. CPC product attribution and daily statistics are confirmed and now
+feed the read-only baseline history. CPO attribution remains blocked.
 
 ## CPC campaign-to-product attribution — confirmed
 

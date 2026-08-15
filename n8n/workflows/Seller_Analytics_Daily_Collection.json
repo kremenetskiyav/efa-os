@@ -1,0 +1,54 @@
+[
+  {
+    "id": "SELLERDAILYV1",
+    "name": "Seller Analytics Daily Collection v0.1",
+    "active": true,
+    "nodes": [
+      {
+        "parameters": {"rule":{"interval":[{"field":"cronExpression","expression":"10 7 * * *"}]}},
+        "type": "n8n-nodes-base.scheduleTrigger", "typeVersion": 1.2,
+        "position": [0,0], "id": "b4ec0b2c-4c96-4587-87bb-e5813c7bd102", "name": "Daily 07:10 Moscow"
+      },
+      {
+        "parameters": {}, "type": "n8n-nodes-base.manualTrigger", "typeVersion": 1,
+        "position": [0,120], "id": "94f602ed-bc58-4ba2-9079-43229745b579", "name": "Manual Controlled Run"
+      },
+      {
+        "parameters": {"operation":"executeQuery","query":"SELECT sku FROM products WHERE archived IS NOT TRUE AND sku IS NOT NULL ORDER BY offer_id","options":{}},
+        "type": "n8n-nodes-base.postgres", "typeVersion": 2.6,
+        "position": [240,0], "id": "1bc2fc2f-fde0-48b2-aa3b-e7f98fd4d728", "name": "Get Canonical SKUs",
+        "credentials": {"postgres":{"id":"nw1S6OrTyc326IJL","name":"Postgres account"}}
+      },
+      {
+        "parameters": {"jsCode":"const skus = $input.all().map(({json}) => String(json.sku));\nif (skus.length !== 5 || new Set(skus).size !== 5) throw new Error('Expected exactly five unique canonical SKUs');\nconst business_date = $now.setZone('Europe/Moscow').minus({days:1}).toISODate();\nreturn [{json:{skus,business_date,request_body:{date_from:business_date,date_to:business_date,metrics:['revenue','ordered_units'],dimension:['sku','day'],filters:[],limit:100,offset:0}}}];"},
+        "type": "n8n-nodes-base.code", "typeVersion": 2,
+        "position": [460,0], "id": "89b44f84-09c2-48f5-bc09-b2a6efcbff2b", "name": "Build Batched Analytics Request"
+      },
+      {
+        "parameters": {"method":"POST","url":"https://api-seller.ozon.ru/v1/analytics/data","authentication":"genericCredentialType","genericAuthType":"httpHeaderAuth","sendHeaders":true,"headerParameters":{"parameters":[{"name":"Client-Id","value":"4767584"},{"name":"Content-Type","value":"application/json"}]},"sendBody":true,"specifyBody":"json","jsonBody":"={{ $json.request_body }}","options":{}},
+        "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.4,
+        "position": [700,0], "id": "751b7520-1a96-4916-bdf8-86a0391c93b5", "name": "Get Seller Product Day Analytics",
+        "credentials": {"httpHeaderAuth":{"id":"VKCN9mlqrD9VzcmL","name":"Header Auth account"}}
+      },
+      {
+        "parameters": {"jsCode":"const request = $items('Build Batched Analytics Request')[0].json;\nconst data = $json.result?.data;\nif (!Array.isArray(data)) throw new Error('Seller Analytics returned no result.data');\nconst allowed = new Set(request.skus);\nconst rows = data.map((row) => {\n  const sku = String(row.dimensions?.[0]?.id ?? '');\n  const businessDate = String(row.dimensions?.[1]?.id ?? '');\n  if (!allowed.has(sku) || businessDate !== request.business_date || !Array.isArray(row.metrics) || row.metrics.length !== 2) throw new Error('Seller Analytics attribution/metric contract mismatch');\n  return {sku:Number(sku),ordered_revenue:row.metrics[0],ordered_units:row.metrics[1]};\n});\nconst now = new Date().toISOString();\nreturn [{json:{collection_ref:`seller-analytics-day-${request.business_date}`,collected_at:now,business_date:request.business_date,rows,persist:true}}];"},
+        "type": "n8n-nodes-base.code", "typeVersion": 2,
+        "position": [940,0], "id": "7fc48ae0-6bf4-4c3c-ad17-c683e4d60ee8", "name": "Build Seller Demand Payload"
+      },
+      {
+        "parameters": {"method":"POST","url":"http://efa-commercial-baseline-collector:8080/v1/commercial/seller-demand/collect","sendBody":true,"specifyBody":"json","jsonBody":"={{ $json }}","options":{}},
+        "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.4,
+        "position": [1180,0], "id": "b5012401-26ab-4dbb-9e63-01df8e021ce8", "name": "Persist Seller Demand"
+      }
+    ],
+    "connections": {
+      "Daily 07:10 Moscow":{"main":[[{"node":"Get Canonical SKUs","type":"main","index":0}]]},
+      "Manual Controlled Run":{"main":[[{"node":"Get Canonical SKUs","type":"main","index":0}]]},
+      "Get Canonical SKUs":{"main":[[{"node":"Build Batched Analytics Request","type":"main","index":0}]]},
+      "Build Batched Analytics Request":{"main":[[{"node":"Get Seller Product Day Analytics","type":"main","index":0}]]},
+      "Get Seller Product Day Analytics":{"main":[[{"node":"Build Seller Demand Payload","type":"main","index":0}]]},
+      "Build Seller Demand Payload":{"main":[[{"node":"Persist Seller Demand","type":"main","index":0}]]}
+    },
+    "settings": {"executionOrder":"v1","timezone":"Europe/Moscow","binaryMode":"separate"}, "pinData": {}
+  }
+]

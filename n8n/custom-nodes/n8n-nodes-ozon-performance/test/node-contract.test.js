@@ -17,21 +17,32 @@ test("credential keeps only Client ID and Client Secret in n8n credential storag
 	assert.doesNotMatch(credentialSource, /access_token/);
 });
 
-test("node attaches a Bearer token and exposes only the read-only campaign allowlist", () => {
+test("node attaches a Bearer token and exposes only the campaign/statistics read allowlist", () => {
 	assert.match(nodeSource, /Authorization: `Bearer \$\{accessToken\}`/);
 	assert.match(nodeSource, /method: "GET"/);
+	assert.match(nodeSource, /request\.method = "POST"/);
 	assert.match(nodeSource, /\/api\/client\/campaign"/);
 	assert.match(nodeSource, /\/api\/client\/campaign\/\$\{campaignId\}\/v2\/products/);
+	assert.match(nodeSource, /\/api\/client\/statistics\/json/);
+	assert.match(nodeSource, /\/api\/client\/statistics\/\$\{reportUuid\}/);
+	assert.match(nodeSource, /\/api\/client\/statistics\/report\?UUID=\$\{reportUuid\}/);
+	assert.match(nodeSource, /campaigns: \[campaignId\]/);
+	assert.match(nodeSource, /campaigns: requireCampaignIds/);
+	assert.match(nodeSource, /groupBy: "DATE"/);
 	assert.match(nodeSource, /pageSize/);
-	assert.doesNotMatch(nodeSource, /method: "POST"/);
 	assert.doesNotMatch(nodeSource, /method: "PUT"/);
 	assert.doesNotMatch(nodeSource, /method: "PATCH"/);
 	assert.doesNotMatch(nodeSource, /method: "DELETE"/);
 });
 
+test("daily CPC report deduplicates validated campaign IDs", () => {
+	assert.match(nodeSource, /new Set\(values\.map/);
+	assert.match(nodeSource, /requirePositiveInteger\(item, "Campaign ID"\)/);
+});
+
 test("campaign-products request accepts only numeric campaign IDs", () => {
-	assert.match(nodeSource, /!\/\^\\d\+\$\/\.test\(campaignId\)/);
-	assert.match(nodeSource, /Campaign ID must be a positive integer/);
+	assert.match(nodeSource, /!\/\^\\d\+\$\/\.test\(normalized\)/);
+	assert.match(nodeSource, /\$\{label\} must be a positive integer/);
 });
 
 test("HTTP errors expose Ozon status and body without credential material", () => {
