@@ -2,6 +2,13 @@
 
 ## 2026-08-15
 
+- Added the read-only Promotion Recommendation Engine v0.1. It reuses the
+  persisted promotion state and confirmed v0.2 economics without projecting
+  action-price profit or margin. Elastic participation and Maximum candidates
+  are factual; JOIN/LEAVE remains blocked until promotion-to-delivery
+  economics is observed. The next priority is accumulating promotion
+  snapshots for that evidence.
+
 - Added Promotion Monitoring Tool v0.1 to the private recommendation sidecar
   and live OZON AI Analyst. `get_promotion_monitoring` reads the latest
   successful persisted promotion collection only, exposes deterministic

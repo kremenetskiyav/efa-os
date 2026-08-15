@@ -26,6 +26,19 @@ successful run and 10 immutable details (5 `PARTICIPATING`, 5 `CANDIDATE`) for
 5 mapped offers. Replaying the same `collection_ref` created no additional
 rows. The manual TEST workflow was returned to its default non-persistent mode.
 
+## Promotion Recommendation Engine v0.1 — implemented, read-only
+
+The conservative engine combines the latest promotion state with the existing
+confirmed v0.2 unit-economics output. All current Elastic Boosting
+participation and Maximum Boosting candidate records are confirmed as facts,
+but every one of the 10 states remains `REVIEW` with
+`numeric_projection_allowed=false`: there is no proven promotion-state to
+delivery/effective-price economics link. The engine does not calculate future
+profit or margin and does not recommend JOIN/LEAVE without that evidence.
+
+Next: automatic accumulation of promotion snapshots to build the required
+promotion-to-delivery economics history.
+
 ## Repository and source-control status
 
 ## Promotion Monitoring Tool v0.1 — live and read-only

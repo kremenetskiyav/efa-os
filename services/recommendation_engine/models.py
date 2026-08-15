@@ -109,3 +109,26 @@ class PromotionState:
     collected_at: datetime
     data_quality_status: str
     signals: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class PromotionRecommendation:
+    """Read-only recommendation context; no promotion action is performed."""
+
+    offer_id: str | None
+    action_id: int
+    action_title: str | None
+    action_type: str | None
+    source_list_type: str
+    current_price: Decimal | None
+    action_price: Decimal | None
+    max_action_price: Decimal | None
+    confirmed_effective_price: Decimal | None
+    confirmed_profit_per_unit: Decimal | None
+    confirmed_margin_percent: Decimal | None
+    economics_confidence: str
+    current_price_economics_status: str
+    data_quality_status: str
+    recommendation: str
+    reasons: tuple[str, ...]
+    numeric_projection_allowed: bool
