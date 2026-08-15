@@ -151,6 +151,98 @@ GROUP BY p.offer_id, cp.price, cp.price_since, p.cost_price
 ORDER BY p.offer_id
 """
 
+LATEST_CONFIRMED_ECONOMICS_QUERY = """
+WITH delivered AS (
+  SELECT p.posting_number, p.sku, MAX(p.offer_id) AS offer_id,
+         MAX(p.quantity) AS quantity, MAX(p.delivering_date) AS delivery_at,
+         (MAX(p.delivering_date) AT TIME ZONE 'Europe/Moscow')::date AS business_date
+  FROM postings p
+  WHERE p.status = 'delivered' AND p.quantity > 0 AND p.offer_id IS NOT NULL
+  GROUP BY p.posting_number, p.sku
+), base AS (
+  SELECT regexp_replace(d.posting_number, '-[0-9]+$', '') AS posting_key,
+         d.offer_id, d.quantity, d.business_date, f.revenue, f.payout,
+         f.other_expenses, p.cost_price
+  FROM delivered d
+  JOIN vw_orders_profit_final f ON f.posting_key = regexp_replace(d.posting_number, '-[0-9]+$', '')
+  JOIN products p ON p.offer_id = d.offer_id
+), keyed AS (
+  SELECT *, COUNT(*) OVER (PARTITION BY posting_key) AS line_count FROM base
+), boundary AS (
+  SELECT MAX(business_date) AS confirmed_through_date FROM keyed
+), economics AS (
+  SELECT k.offer_id, b.confirmed_through_date, SUM(k.revenue) AS confirmed_revenue,
+         SUM(k.payout + CASE WHEN k.line_count = 1 THEN k.other_expenses ELSE 0 END - k.cost_price * k.quantity)
+           AS profit_before_tax,
+         SUM(k.quantity)::integer AS delivered_units,
+         SUM(CASE WHEN k.line_count > 1 AND k.other_expenses <> 0 THEN 1 ELSE 0 END)::integer
+           AS unallocated_other_expense_lines
+  FROM keyed k CROSS JOIN boundary b
+  WHERE k.business_date = b.confirmed_through_date
+  GROUP BY k.offer_id, b.confirmed_through_date
+), returned AS (
+  SELECT r.offer_id, COUNT(*)::integer AS return_events, COALESCE(SUM(r.quantity), 0)::integer AS returned_units
+  FROM returns r CROSS JOIN boundary b
+  WHERE r.logistic_return_date::date = b.confirmed_through_date
+  GROUP BY r.offer_id
+)
+SELECT e.offer_id, e.confirmed_through_date, e.confirmed_revenue, e.profit_before_tax,
+       e.delivered_units, COALESCE(r.return_events, 0), COALESCE(r.returned_units, 0),
+       e.unallocated_other_expense_lines
+FROM economics e LEFT JOIN returned r ON r.offer_id = e.offer_id
+ORDER BY e.offer_id
+"""
+
+DEMAND_TREND_QUERY = """
+SELECT offer_id, business_date, ordered_revenue, ordered_units
+FROM seller_product_demand_daily
+WHERE business_date BETWEEN %s - 29 AND %s
+ORDER BY business_date, offer_id
+"""
+
+PRICE_TREND_QUERY = """
+SELECT offer_id, updated_from_ozon, price
+FROM ozon_price_history
+WHERE updated_from_ozon >= (%s::date - 29)
+ORDER BY updated_from_ozon, offer_id, id
+"""
+
+BOOST_TREND_QUERY = """
+SELECT s.offer_id, r.collected_at, s.current_boost
+FROM promotion_snapshots s
+JOIN promotion_runs r ON r.run_id = s.run_id
+WHERE r.status = 'success' AND s.source_list_type = 'PARTICIPATING'
+  AND s.current_boost IS NOT NULL AND r.collected_at >= (%s::date - 29)
+ORDER BY r.collected_at, s.offer_id
+"""
+
+FINANCE_TREND_QUERY = """
+WITH delivered AS (
+  SELECT p.posting_number, p.sku, MAX(p.offer_id) AS offer_id,
+         MAX(p.quantity) AS quantity,
+         (MAX(p.delivering_date) AT TIME ZONE 'Europe/Moscow')::date AS business_date
+  FROM postings p
+  WHERE p.status = 'delivered' AND p.quantity > 0 AND p.offer_id IS NOT NULL
+  GROUP BY p.posting_number, p.sku
+), base AS (
+  SELECT regexp_replace(d.posting_number, '-[0-9]+$', '') AS posting_key,
+         d.offer_id, d.quantity, d.business_date, f.revenue, f.payout,
+         f.other_expenses, p.cost_price
+  FROM delivered d
+  JOIN vw_orders_profit_final f ON f.posting_key = regexp_replace(d.posting_number, '-[0-9]+$', '')
+  JOIN products p ON p.offer_id = d.offer_id
+  WHERE d.business_date BETWEEN %s - 29 AND %s
+), keyed AS (
+  SELECT *, COUNT(*) OVER (PARTITION BY posting_key) AS line_count FROM base
+)
+SELECT offer_id, business_date, SUM(revenue) AS confirmed_revenue,
+       SUM(payout + CASE WHEN line_count = 1 THEN other_expenses ELSE 0 END - cost_price * quantity)
+         AS profit_before_tax
+FROM keyed
+GROUP BY offer_id, business_date
+ORDER BY business_date, offer_id
+"""
+
 
 def fetch_brief_sources(config: DatabaseConfig, business_date: date) -> dict[str, list[tuple[Any, ...]] | tuple[Any, ...]]:
     try:
@@ -165,10 +257,17 @@ def fetch_brief_sources(config: DatabaseConfig, business_date: date) -> dict[str
                 cursor.execute(CPC_QUERY, (business_date,)); cpc = cursor.fetchall()
                 cursor.execute(FRESHNESS_QUERY); freshness = cursor.fetchone()
                 cursor.execute(CURRENT_PRICE_STATUS_QUERY); current_price_status = cursor.fetchall()
+                cursor.execute(LATEST_CONFIRMED_ECONOMICS_QUERY); latest_economics = cursor.fetchall()
+                cursor.execute(DEMAND_TREND_QUERY, (business_date, business_date)); demand_trend = cursor.fetchall()
+                cursor.execute(PRICE_TREND_QUERY, (business_date,)); price_trend = cursor.fetchall()
+                cursor.execute(BOOST_TREND_QUERY, (business_date,)); boost_trend = cursor.fetchall()
+                cursor.execute(FINANCE_TREND_QUERY, (business_date, business_date)); finance_trend = cursor.fetchall()
     except DatabaseError:
         raise
     except Exception as error:
         raise DatabaseError("Daily brief read-only query failed") from error
     return {"products": products, "demand": demand, "deliveries": deliveries, "returns": returns,
             "finance": finance, "promotions": promotions, "cpc": cpc, "freshness": freshness,
-            "current_price_status": current_price_status}
+            "current_price_status": current_price_status, "latest_economics": latest_economics,
+            "trends": {"demand": demand_trend, "price": price_trend,
+                       "boost": boost_trend, "finance": finance_trend}}

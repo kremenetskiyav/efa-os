@@ -94,6 +94,23 @@ inactive CPC attributed orders are historical attribution, not current
 campaign activity. Future PDF/email/Telegram delivery must consume these
 deterministic payloads rather than recompute metrics or use an LLM.
 
+## Daily Brief Delivery v0.1 — prepared, not active
+
+Deterministic renderers now produce a five-page Cyrillic-safe A4 PDF, a short
+HTML email body and a compact Telegram message from the same Daily Brief
+payload. Delivery never recalculates business metrics. The presentation
+separates the operational `business_date` from `confirmed_through_date`; stale
+finance is labelled explicitly, `NULL` is never displayed as zero, cohort
+buyout and after-tax profit remain unavailable.
+
+The channel-independent orchestration contract uses idempotency key
+`channel + business_date + report version`, isolates email/PDF failures from
+Telegram failures, and scopes manual tests separately from production. Target
+schedule is 08:15 Europe/Moscow after morning freshness checks, but no delivery
+workflow is active. Activation requires visual PDF approval plus manually
+created n8n Gmail OAuth2 and Telegram Bot credentials and one manual test per
+channel. Generated previews and all credential material remain outside Git.
+
 ## Ozon Performance API — working read-only baseline
 
 The private `Ozon Performance OAuth2` n8n credential type is deployed with

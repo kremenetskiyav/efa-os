@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-08-16
+
+- Prepared Daily Brief Delivery v0.1 without activating delivery. Added a
+  deterministic five-page A4 PDF renderer, HTML email and Telegram text
+  renderers, latest-confirmed-economics separation, real-data trend charts,
+  channel idempotency and independent failure states. No email or Telegram
+  message was sent; the 08:15 Europe/Moscow target remains inactive pending
+  manual credential setup, channel tests and visual approval.
+
 ## 2026-08-15
 
 - Added Daily Commercial Brief v0.1: a deterministic, read-only CLI that

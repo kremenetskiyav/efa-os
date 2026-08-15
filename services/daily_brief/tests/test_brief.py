@@ -12,7 +12,7 @@ UTC = timezone.utc
 def sources(*, demand=True, finance=True, cpc_state="CAMPAIGN_STATE_RUNNING"):
     day = date(2026, 8, 14)
     return {
-        "products": [("A", 1, 10, Decimal("100"), Decimal("40"), datetime(2026, 8, 14, tzinfo=UTC))],
+        "products": [("A", 1, 10, Decimal("100"), Decimal("40"), datetime(2026, 8, 1, tzinfo=UTC))],
         "demand": [("A", 1, Decimal("250"), 2, datetime(2026, 8, 15, tzinfo=UTC), "valid")] if demand else [],
         "deliveries": [("A", 2)], "returns": [("A", 1, 1)],
         "finance": [("A", Decimal("200"), Decimal("50"), 2, 0)] if finance else [],
@@ -21,8 +21,10 @@ def sources(*, demand=True, finance=True, cpc_state="CAMPAIGN_STATE_RUNNING"):
             ("A", 2, "Candidate", None, "CANDIDATE", Decimal("0"), Decimal("0"), Decimal("0"), Decimal("0"), "valid", datetime(2026, 8, 15, tzinfo=UTC)),
         ],
         "cpc": [("A", 5, cpc_state, "SKU", Decimal("10"), 20, 2, 1, Decimal("90"), "valid")],
-        "freshness": (day, datetime.now(UTC), day, datetime(2026, 8, 14, tzinfo=UTC), datetime(2026, 8, 14, tzinfo=UTC)),
+        "freshness": (day, datetime(2026, 8, 15, tzinfo=UTC), day, datetime(2026, 8, 14, tzinfo=UTC), datetime(2026, 8, 1, tzinfo=UTC)),
         "current_price_status": [("A", "CONFIRMED")],
+        "latest_economics": [("A", day - timedelta(days=4), Decimal("200"), Decimal("50"), 2, 0, 0, 0)],
+        "trends": {"demand": [], "price": [], "boost": [], "finance": []},
     }
 
 
