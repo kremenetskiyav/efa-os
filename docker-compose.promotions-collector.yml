@@ -1,0 +1,11 @@
+services:
+  efa-promotions-collector:
+    build:
+      context: ./services/promotion_collector
+    restart: unless-stopped
+    networks:
+      - efa-tools
+networks:
+  efa-tools:
+    external: true
+    name: efa-tools
