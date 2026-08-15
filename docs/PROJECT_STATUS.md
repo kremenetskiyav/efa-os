@@ -113,6 +113,15 @@ idempotency is persisted by n8n workflow static data with key
 is not resent, while a failed channel remains eligible on the next run.
 Manual test deliveries remain separate, inactive and non-production.
 
+Both production channel paths have completed one controlled manual E2E: Gmail
+OAuth2 delivered the verified HTML plus PDF after desktop/mobile review, and
+Telegram delivered the approved compact summary to the confirmed private
+numeric chat. The first autonomous production delivery is scheduled for
+16.08.2026 at 08:15 Europe/Moscow and has not been manually triggered. The
+next checkpoint is to verify receipt, attachment, business date, freshness,
+workflow status and absence of duplicate channel delivery; only then may this
+status advance to **PRODUCTION / AUTONOMOUS**.
+
 The private `efa-daily-brief` rendering bridge is deployed on the existing
 `efa-tools` network with no host port. It exposes read-only JSON, Telegram,
 HTML-email and streamed PDF representations of the existing deterministic

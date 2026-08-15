@@ -12,15 +12,15 @@
   existing `efa-tools` network. It reuses the deterministic Daily Brief and
   existing Telegram, HTML and PDF renderers, exposes no host port and holds no
   channel or Ozon credentials. A controlled request from `efa-n8n` for
-  2026-08-14 validated all five offers and the five-page Cyrillic PDF; no
-  delivery workflow or schedule was activated.
+  2026-08-14 validated all five offers and the five-page Cyrillic PDF; the
+  initially prepared schedule was subsequently activated as recorded above.
 
-- Prepared Daily Brief Delivery v0.1 without activating delivery. Added a
+- Prepared Daily Brief Delivery v0.1 before its subsequent activation. Added a
   deterministic five-page A4 PDF renderer, HTML email and Telegram text
   renderers, latest-confirmed-economics separation, real-data trend charts,
   channel idempotency and independent failure states. No email or Telegram
-  message was sent; the 08:15 Europe/Moscow target remains inactive pending
-  manual credential setup, channel tests and visual approval.
+  message was sent at that preparation point; later manual channel E2E and
+  visual approval completed before the 08:15 Europe/Moscow activation.
 
 ## 2026-08-15
 
