@@ -2,6 +2,13 @@
 
 ## 2026-08-15
 
+- Deployed Promotions Persistence v0.1 after a verified PostgreSQL backup.
+  Migration 002 created `promotion_runs` and `promotion_snapshots`; the first
+  controlled collection stored 1 successful run and 10 details with complete
+  mapping. Replaying the same `collection_ref` preserved counts at 1/10 and
+  returned `idempotent_replay=true`. The TEST workflow was restored to its
+  manual, non-persistent default.
+
 - Completed the deploy-ready Promotions Persistence v0.1 layer. The private
   collector now supports explicit `persist: true`, one transaction for run,
   batch product mapping, immutable details and final status, rollback on any
