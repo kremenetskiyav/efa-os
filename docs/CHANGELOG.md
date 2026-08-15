@@ -2,6 +2,14 @@
 
 ## 2026-08-15
 
+- Added Daily Commercial Brief v0.1: a deterministic, read-only CLI that
+  assembles canonical product state, Seller ordered flow, delivery/return
+  outcomes, delivery-date confirmed `profit_before_tax`, latest
+  promotion/Elastic Boost state and CPC history into extended and compact
+  JSON-safe payloads. It preserves source freshness and `NULL` versus zero,
+  keeps candidates separate from participation, never calculates cohort
+  buyout or after-tax profit, and performs no Ozon or PostgreSQL write.
+
 - Recorded the taxable-revenue accounting-data checkpoint from official Ozon
   June/July Realization Reports and a two-page, read-only July Finance API
   extraction. July order-level and monthly totals reconcile exactly; the

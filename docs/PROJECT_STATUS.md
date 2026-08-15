@@ -75,6 +75,25 @@ must not be interpreted as current campaign activity. The project remains at
 The next stage is **Safe Commercial Experiment v0.1**; recommendations and all
 commercial control actions remain disabled.
 
+## Daily Commercial Brief v0.1 — read-only deterministic source of truth
+
+`python -m services.daily_brief.main [--date YYYY-MM-DD]` builds a compact and
+an extended JSON-safe report from canonical `products`, Seller daily demand,
+delivery/return outcomes, delivery-date confirmed finance via
+`vw_orders_profit_final`, the latest successful promotion state, and CPC daily
+history. It reads all PostgreSQL sources in a read-only transaction and makes
+no Ozon, database, collector, schedule, or tax-layer change.
+
+The brief makes time semantics explicit: `ordered_revenue` is ordered flow,
+not confirmed revenue; finance is delivery-date confirmed and is not mixed
+into ordered flow; returns are shown as events/units without inventing cohort
+buyout; `profit_before_tax` is the only profit term because the Tax Engine is
+not implemented. Missing or stale sources remain `NULL`/`NOT_AVAILABLE` and
+produce warnings. Participating promotions and candidates remain separate;
+inactive CPC attributed orders are historical attribution, not current
+campaign activity. Future PDF/email/Telegram delivery must consume these
+deterministic payloads rather than recompute metrics or use an LLM.
+
 ## Ozon Performance API — working read-only baseline
 
 The private `Ozon Performance OAuth2` n8n credential type is deployed with
