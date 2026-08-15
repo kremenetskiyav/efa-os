@@ -4,12 +4,13 @@ import json
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
+from database import map_product_ids
 
 PATH = "/v1/promotions/collect"
 
 class PayloadError(ValueError): pass
 
-def collect(payload: object) -> dict[str, object]:
+def collect(payload: object, mapper=map_product_ids) -> dict[str, object]:
     if not isinstance(payload, dict): raise PayloadError("payload must be an object")
     required = {"collection_ref", "collected_at", "actions", "action_details"}
     if set(payload) != required: raise PayloadError("payload must contain exactly collection_ref, collected_at, actions, action_details")
@@ -29,7 +30,9 @@ def collect(payload: object) -> dict[str, object]:
                 product_ids.add(record["id"])
             if counter == "participating": participating += len(records)
             else: candidate += len(records)
-    return {"read_only": True, "collection_ref": payload["collection_ref"], "actions_count": len(payload["actions"]), "participating_records": participating, "candidate_records": candidate, "unique_product_ids": len(product_ids), "errors": errors}
+    mapped=mapper(product_ids); unmapped=sorted(product_ids-set(mapped))
+    if unmapped: errors.append("unmapped_product_ids")
+    return {"read_only": True, "collection_ref": payload["collection_ref"], "actions_count": len(payload["actions"]), "participating_records": participating, "candidate_records": candidate, "unique_product_ids": len(product_ids), "mapped_offer_ids": len(set(mapped.values())), "unmapped_product_ids": unmapped, "mapping_status": "valid" if not unmapped else "review", "errors": errors}
 
 class Handler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
