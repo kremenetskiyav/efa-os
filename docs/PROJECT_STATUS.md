@@ -11,6 +11,48 @@ Canonical workflow JSON: `n8n/workflows/OZON_workflow_Phase_A.json`.
 
 The repository copy is sanitized for source control. Secrets remain in local n8n credentials and are not committed.
 
+## Taxable Revenue investigation — accounting contract confirmed, tax recognition partial
+
+Official Ozon input documents used read-only and kept outside Git are the June
+and July Monthly Realization Reports plus the July Order-Level Realization
+Report. The July order-level document has 433 rows and 433 unique
+`posting_number`; its five-offer totals reconcile exactly to the monthly
+report.
+
+For July 2026, the official accounting contour is: gross realised amount
+138,224.71 RUB, returns 356.77 RUB, net realised amount 137,867.94 RUB,
+partner-loyalty payments 1,803.32 RUB and reversals 3.57 RUB. The resulting
+combined accounting candidate is 139,667.69 RUB. Ozon support confirms that
+partner-loyalty payments are separately reported in the Realization Report,
+enter total accruals, have no separate closing document, and are accounted for
+with sales; return-side payments are recorded separately. This does not by
+itself establish a USN recognition date.
+
+The read-only July Finance API extraction (`/v3/finance/transaction/list`)
+returned 1,185 operations in two pages with no duplicate operation ID. Exact
+report-to-finance coverage is 433/433 by posting and SKU where present. Its
+critical result is that `accruals_for_sale` is neither `realised_amount` nor
+`realised_amount + partner_loyalty_payment`, including both one-ruble cases;
+it is therefore a management-economics/reconciliation field, not an automatic
+taxable-revenue source. No separate same-posting finance operation equal to a
+partner-loyalty payment was found.
+
+Architectural roles are: Order-Level Realization Report — primary candidate
+source for accounting/tax events; Monthly Realization Report — official period
+reconciliation; `finance_operations` — management economics/reconciliation;
+`postings` and `returns` — operational attribution. A future Tax Revenue Layer
+must keep `REALIZATION`, `PARTNER_LOYALTY_PAYMENT`, `RETURN`,
+`PARTNER_LOYALTY_REVERSAL` and `CORRECTION` distinct from commission,
+logistics, advertising, COGS and payout. It may later derive gross revenue,
+adjustments, net revenue, USN tax, a separate additional-1% insurance
+contribution, conditional VAT, and after-tax economic profit.
+
+Tax Engine status: **NOT_IMPLEMENTED / WAITING_FOR_TAX_DATE_CONTRACT**. Before
+implementation, validate official FNS rules for marketplace/agent USN income
+date, loyalty-payment date, return timing, 2026 USN rules, the 2026 additional
+1% insurance limits, and VAT applicability/threshold/rate for this taxpayer.
+Next tax step: **official FNS tax-date / USN / 1% / VAT validation**.
+
 ## Commercial Baseline Collection v0.1 — active
 
 Separate read-only daily automations now accumulate commercial flows without

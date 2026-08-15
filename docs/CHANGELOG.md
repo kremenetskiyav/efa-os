@@ -2,6 +2,15 @@
 
 ## 2026-08-15
 
+- Recorded the taxable-revenue accounting-data checkpoint from official Ozon
+  June/July Realization Reports and a two-page, read-only July Finance API
+  extraction. July order-level and monthly totals reconcile exactly; the
+  433 report rows map exactly to finance by posting/SKU where present.
+  `accruals_for_sale` is confirmed unsuitable as an automatic taxable-revenue
+  field because it differs from both realization-report candidates, including
+  the one-ruble cases. Tax recognition remains partial: no tax engine, formula,
+  database schema, production data or workflow was changed.
+
 - Added Commercial Baseline Collection v0.1: immutable daily Seller Analytics
   demand (`ordered_revenue`, `ordered_units`), dynamic CPC/SKU Performance
   history with exact SKU-to-offer attribution, and nullable Elastic Boosting
