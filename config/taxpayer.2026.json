@@ -1,0 +1,20 @@
+{
+  "version": "v0.1",
+  "tax_year": 2026,
+  "region": "Moscow",
+  "tax_authority": "IFNS 51",
+  "entity_type": "IP",
+  "usn_object": "INCOME",
+  "usn_rate": "0.06",
+  "has_employees": false,
+  "prior_year_business_income": "0",
+  "non_ozon_income_ytd": "0",
+  "insurance_contributions_paid_ytd": "0",
+  "fixed_insurance_contribution": "57390",
+  "additional_contribution_threshold": "300000",
+  "additional_contribution_rate": "0.01",
+  "additional_contribution_cap": "321818",
+  "vat_status": "EXEMPT_UNDER_THRESHOLD",
+  "vat_threshold": "20000000",
+  "vat_warning_ratio": "0.80"
+}

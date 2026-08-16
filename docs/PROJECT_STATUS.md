@@ -538,3 +538,24 @@ Target architecture:
 - It uses one batched, read-only Seller API request for canonical product IDs and exact `product_id → offer_id` validation.
 - `ozon_price_history` remains change-only; `price_collection_runs` is the authoritative freshness signal for successful checked state, including unchanged prices.
 - In the confirmed account contract `marketing_price` is optional/nullable; its absence is recorded as `NULL`, never zero or `marketing_seller_price`.
+
+## Tax Engine v0.1 — ACTIVE / PARTIAL_DATA
+
+- The deterministic 2026 tax layer keeps statutory tax accounting separate
+  from confirmed `profit_before_tax` and all commercial recommendations.
+- Official June and July Ozon Realization workbooks reconcile exactly with
+  their order-level reports and are persisted as immutable monthly tax-ledger
+  events. January–May are confirmed zero-business periods; August is not yet
+  available.
+- Persisted accounting-income candidates are 16,407.14 RUB for June and
+  139,667.69 RUB for July, or 156,074.83 RUB YTD through July. Exact tax dates
+  remain `PERIOD_ONLY`, and partner-loyalty tax semantics remain `PARTIAL`.
+- Migration 007 provides idempotent import runs and events. Replaying both
+  official sources leaves 2 runs and 8 events; a changed workbook for an
+  imported period requires explicit review.
+- Current statutory preview: USN gross 9,364.49 RUB, additional contribution
+  0, estimated USN payable 0 after eligible no-employee insurance reduction,
+  fixed annual obligation 57,390 RUB kept separate, VAT status
+  `EXEMPT_UNDER_THRESHOLD` at 0.78% threshold usage.
+- Tax Engine is not connected to Daily Brief, Price/Profit recommendations,
+  promotions or advertising.

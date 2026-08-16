@@ -2,6 +2,13 @@
 
 ## 2026-08-16
 
+- Added Tax Engine v0.1 and applied migration 007 after a validated PostgreSQL
+  backup. Official June/July monthly Realization reports reconcile exactly with
+  the order-level documents and persist idempotently as 2 import runs and 8
+  period-only events. YTD accounting income through July is 156,074.83 RUB;
+  tax-date and partner-loyalty semantics remain partial, and no Tax Engine
+  output is connected to Daily Brief or commercial decisions.
+
 - Activated Price Refresh Automation v0.1: a six-hour private read-only Seller
   price collection for canonical products. Successful collection runs provide
   price freshness independently of change-only price history; the confirmed
