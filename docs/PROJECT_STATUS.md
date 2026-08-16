@@ -11,6 +11,32 @@ Canonical workflow JSON: `n8n/workflows/OZON_workflow_Phase_A.json`.
 
 The repository copy is sanitized for source control. Secrets remain in local n8n credentials and are not committed.
 
+## Commercial recovery checkpoint — UF004B settlement gate
+
+June is retained as a **LAUNCH_PERIOD**. The historical June–July CPC
+configuration is not sustainable: all five CPC campaigns failed the mandatory
+15% contribution-margin-after-CPC floor and are **DO_NOT_REACTIVATE** under
+their historical configuration. Historical attributed orders do not establish
+incremental profit or reactivation eligibility.
+
+Current non-CPC recovery priority is `УФ 004Б` (`SKU 4642180551`, product
+`4861934500`). Its latest modelled state is 16.45% contribution margin at
+seller price 899 RUB / `marketing_seller_price` 805 RUB, with COGS 179 RUB
+and Elastic Boost 15%. This is **NOT_CONFIRMED**: the current price interval
+started on 2026-08-11 and has no delivered units yet. No commercial write
+experiment is approved.
+
+The read-only settlement gate opens only after at least five `УФ 004Б` units
+are delivered in that post-2026-08-11 interval. Each sample must be exactly
+linked by posting and SKU to price-interval evidence and finance
+`accruals_for_sale`, commission, logistics/services, acquiring and other
+attributable operations. The gate reports mean, median, min, max and weighted
+contribution margin; it passes only at a weighted margin of at least 15%.
+It also validates whether current `marketing_seller_price` 805 RUB exactly
+matches or is consistently related to `accruals_for_sale`. Until then,
+PROMOAUTOV1, SELLERDAILYV1, CPCDAILYV1, Price Snapshot Automation and Daily
+Brief Delivery continue unchanged and the project remains Control Level 0.
+
 ## Taxable Revenue investigation — accounting contract confirmed, tax recognition partial
 
 Official Ozon input documents used read-only and kept outside Git are the June

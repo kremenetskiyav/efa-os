@@ -2,6 +2,14 @@
 
 ## 2026-08-16
 
+- Recorded the commercial recovery checkpoint: June remains a launch period;
+  all historical June–July CPC campaigns are `DO_NOT_REACTIVATE` under the
+  mandatory 15% contribution-margin-after-CPC policy. `УФ 004Б` is the sole
+  current modelled non-CPC priority at 16.45% margin, but is
+  `NOT_CONFIRMED` until five post-2026-08-11 delivered units validate its
+  price interval and finance settlement. No commercial write experiment is
+  approved.
+
 - Recorded the mandatory Commercial Profit Policy: COGS recovery and all
   attributable Ozon, advertising/promotion and management-tax-reserve costs
   precede distributable profit; the hard floor for controlled commercial
