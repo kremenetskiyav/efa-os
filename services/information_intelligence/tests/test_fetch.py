@@ -37,6 +37,7 @@ class FetchTests(unittest.TestCase):
             raise HTTPError(request.full_url, 307, "redirect loop", Message(), None)
         result = fetch_once(SOURCES[0], opener=redirect)
         self.assertEqual(result.status, "SOURCE_UNAVAILABLE")
+        self.assertEqual(result.redirect_state, "REDIRECT_BLOCKED")
         self.assertEqual(len(calls), 1)
 
 

@@ -2,6 +2,21 @@
 
 ## 2026-08-16
 
+- Added Ozon Legal / Contract Monitor v0.1 on the common Information
+  Intelligence model: conservative official-source registry, one-shot public
+  retrieval, outside-Git manual bootstrap, semantic legal-document
+  canonicalization, structural unit diff, numeric/rate/date detection,
+  economic watch concepts and review-only impact routing. Expanded unapplied
+  migration 008 for API/legal/news/manual evidence without adding a new
+  migration. The confirmed seller agreement returned HTTP 307 in its single
+  live preview; no baseline, workflow, schedule or production write was
+  created.
+
+- Finalized Information Intelligence source policy: Legal/Contract, Seller
+  News, Ozon for dev and API contracts are automated candidates; seller
+  `Главное` is manual evidence in the same event model. UI scraping, public
+  Seller-push webhook and automatic Profit/Price/Tax changes are excluded.
+
 - Added the read-only Ozon API Contract Monitor v0.1 for official Seller and
   Performance OpenAPI documents: stable JSON canonicalization, structural
   compatibility diffing, active EFA-OS API usage routing, synthetic fixtures,

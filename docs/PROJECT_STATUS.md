@@ -11,7 +11,7 @@ Canonical workflow JSON: `n8n/workflows/OZON_workflow_Phase_A.json`.
 
 The repository copy is sanitized for source control. Secrets remain in local n8n credentials and are not committed.
 
-## Ozon Information Intelligence — API contract monitor prepared
+## Ozon Information Intelligence — API and Legal monitors prepared
 
 The first read-only Information Intelligence component now provides
 deterministic canonicalization, structural diffing, compatibility classes and
@@ -25,6 +25,23 @@ was attempted. Migration 008 and the hybrid storage contract are prepared but
 **not applied**. Production workflows, schedules and Daily Brief are unchanged.
 An approved operator-supplied official snapshot outside Git is the bootstrap
 path when deterministic public HTTP retrieval is unavailable.
+
+The source strategy is now final: automated official inputs are Ozon
+Legal/Contract, Seller News, Ozon for dev and API contracts. Seller-specific
+`Главное` notices use the same `OzonInformationEvent` model as manual evidence;
+UI scraping, browser/session extraction and a public Seller-push webhook are
+excluded. Gmail inbound remains future research.
+
+The deterministic Legal/Contract Monitor now adds semantic HTML/text
+canonicalization, heading/clause/table units, legal unit diffing, structured
+percentage/RUB/coefficient/date/deadline detection, economic watch concepts
+and review-only impact routing. The canonical seller agreement is registered;
+separate promotion, Performance and legal-entity-buyout URLs remain
+`NEEDS_SOURCE_CONFIRMATION`. Its one live request returned HTTP 307 and is
+`SOURCE_UNAVAILABLE`, so no baseline was created. The manual official-file
+bootstrap is ready outside Git. Migration 008 was expanded before first use to
+support API, legal, news and manual evidence in one normalized event model; it
+remains **not applied**. No workflow, schedule, Daily Brief or engine changed.
 
 ## Commercial recovery checkpoint — UF004B settlement gate
 

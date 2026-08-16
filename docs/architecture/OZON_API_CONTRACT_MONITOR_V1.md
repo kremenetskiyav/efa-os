@@ -1,5 +1,8 @@
 # Ozon API Contract Monitor v0.1
 
+This is the API-specific adapter inside the common Information Intelligence
+architecture documented in `OZON_INFORMATION_INTELLIGENCE_V1.md`.
+
 ## Boundary
 
 The first Information Intelligence component monitors only the official Ozon

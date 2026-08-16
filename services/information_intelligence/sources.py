@@ -9,6 +9,7 @@ class OpenAPISource:
     canonical_url: str
     api_family: str
     authority: str = "OFFICIAL_OZON"
+    accept: str = "application/json"
 
 
 SOURCES = (
