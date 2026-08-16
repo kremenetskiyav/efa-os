@@ -1,0 +1,23 @@
+{
+  "id": "nw3DytLJdwTieOgJ",
+  "name": "Ozon Price Snapshot Automation v0.1",
+  "active": true,
+  "settings": {"executionOrder": "v1", "timezone": "Europe/Moscow", "saveManualExecutions": true},
+  "nodes": [
+    {"id":"sched","name":"Every 6 Hours at :20","type":"n8n-nodes-base.scheduleTrigger","typeVersion":1.2,"position":[0,0],"parameters":{"rule":{"interval":[{"field":"cronExpression","expression":"20 */6 * * *"}]}}},
+    {"id":"manual","name":"Manual Controlled Run","type":"n8n-nodes-base.manualTrigger","typeVersion":1,"position":[0,120],"parameters":{}},
+    {"id":"products","name":"Get Canonical Products","type":"n8n-nodes-base.postgres","typeVersion":2.6,"position":[240,0],"parameters":{"operation":"executeQuery","query":"SELECT product_id, offer_id FROM products WHERE archived IS NOT TRUE AND product_id IS NOT NULL ORDER BY offer_id","options":{}},"credentials":{"postgres":{"id":"nw1S6OrTyc326IJL","name":"Postgres account"}}},
+    {"id":"build","name":"Build Price Request","type":"n8n-nodes-base.code","typeVersion":2,"position":[460,0],"parameters":{"jsCode":"const products=$input.all().map(({json})=>({product_id:Number(json.product_id),offer_id:String(json.offer_id)}));\nif(!products.length||new Set(products.map(x=>x.product_id)).size!==products.length) throw new Error('Canonical product contract invalid');\nreturn [{json:{products,request_body:{filter:{product_id:products.map(x=>String(x.product_id)),visibility:'ALL'},limit:1000}}}];"}},
+    {"id":"ozon","name":"Get Current Prices","type":"n8n-nodes-base.httpRequest","typeVersion":4.4,"position":[700,0],"parameters":{"method":"POST","url":"https://api-seller.ozon.ru/v5/product/info/prices","authentication":"genericCredentialType","genericAuthType":"httpHeaderAuth","sendHeaders":true,"headerParameters":{"parameters":[{"name":"Client-Id","value":"4767584"},{"name":"Content-Type","value":"application/json"}]},"sendBody":true,"specifyBody":"json","jsonBody":"={{ $json.request_body }}","options":{}},"credentials":{"httpHeaderAuth":{"id":"VKCN9mlqrD9VzcmL","name":"Header Auth account"}}},
+    {"id":"payload","name":"Build Price Collection Payload","type":"n8n-nodes-base.code","typeVersion":2,"position":[940,0],"parameters":{"jsCode":"const request=$items('Build Price Request')[0].json;\nconst items=$json.items;\nif(!Array.isArray(items)) throw new Error('Price API returned no items');\nconst expected=new Map(request.products.map(x=>[x.product_id,x.offer_id]));\nif(items.length!==expected.size) throw new Error(`Expected ${expected.size} price items, got ${items.length}`);\nfor(const item of items){if(expected.get(Number(item.product_id))!==String(item.offer_id)) throw new Error('Price attribution contract mismatch');}\nconst now=new Date(); const slotHour=Math.floor(now.getUTCHours()/6)*6; now.setUTCHours(slotHour,0,0,0);\nreturn [{json:{collection_ref:`ozon-prices-6h-${now.toISOString()}`,collected_at:new Date().toISOString(),items,persist:true}}];"}},
+    {"id":"persist","name":"Persist Price Collection","type":"n8n-nodes-base.httpRequest","typeVersion":4.4,"position":[1180,0],"parameters":{"method":"POST","url":"http://efa-commercial-baseline-collector:8080/v1/commercial/prices/collect","sendBody":true,"specifyBody":"json","jsonBody":"={{ $json }}","options":{}}}
+  ],
+  "connections": {
+    "Every 6 Hours at :20":{"main":[[{"node":"Get Canonical Products","type":"main","index":0}]]},
+    "Manual Controlled Run":{"main":[[{"node":"Get Canonical Products","type":"main","index":0}]]},
+    "Get Canonical Products":{"main":[[{"node":"Build Price Request","type":"main","index":0}]]},
+    "Build Price Request":{"main":[[{"node":"Get Current Prices","type":"main","index":0}]]},
+    "Get Current Prices":{"main":[[{"node":"Build Price Collection Payload","type":"main","index":0}]]},
+    "Build Price Collection Payload":{"main":[[{"node":"Persist Price Collection","type":"main","index":0}] ]}
+  }
+}

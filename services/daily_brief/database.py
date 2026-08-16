@@ -122,7 +122,9 @@ SELECT
   -- CPC source. Detail rows describe activity; the run describes collection.
   (SELECT MAX(business_date) FROM cpc_collection_runs WHERE status = 'success'),
   (SELECT MAX(delivering_date) FROM postings WHERE status = 'delivered'),
-  (SELECT MAX(updated_from_ozon) FROM products)
+  -- Current-price freshness is a collection-success signal. Change history
+  -- may legitimately be older when the seller price is unchanged.
+  (SELECT MAX(collected_at) FROM price_collection_runs WHERE status = 'success')
 """
 
 CPC_COLLECTION_QUERY = """

@@ -531,3 +531,10 @@ Target architecture:
 - Do not make causal claims from simple correlation without supporting data.
 - Do not automatically change prices, promotions, advertising or inventory parameters.
 - Build deterministic monitoring before adding more autonomous AI behavior.
+
+## Price Refresh Automation v0.1 — ACTIVE
+
+- `Ozon Price Snapshot Automation v0.1` (`nw3DytLJdwTieOgJ`) runs every six hours at minute 20 Europe/Moscow.
+- It uses one batched, read-only Seller API request for canonical product IDs and exact `product_id → offer_id` validation.
+- `ozon_price_history` remains change-only; `price_collection_runs` is the authoritative freshness signal for successful checked state, including unchanged prices.
+- In the confirmed account contract `marketing_price` is optional/nullable; its absence is recorded as `NULL`, never zero or `marketing_seller_price`.

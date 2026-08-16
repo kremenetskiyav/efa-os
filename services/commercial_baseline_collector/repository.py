@@ -117,3 +117,65 @@ def persist_cpc(collection: dict[str, Any], connection_factory: Callable[[], Any
         raise
     finally:
         connection.close()
+
+
+def persist_prices(collection: dict[str, Any], connection_factory: Callable[[], Any]) -> dict[str, Any]:
+    connection = connection_factory()
+    try:
+        cursor = connection.cursor()
+        cursor.execute("SELECT run_id, status, products_count, changed_records, unchanged_records FROM price_collection_runs WHERE collection_ref=%s", (collection["collection_ref"],))
+        existing = cursor.fetchone()
+        if existing is not None:
+            if existing[1] != "success":
+                raise PersistenceError("price collection_ref belongs to incomplete run")
+            connection.rollback()
+            return {"run_id": existing[0], "idempotent_replay": True, "products_count": existing[2], "changed_records": existing[3], "unchanged_records": existing[4]}
+
+        product_ids = [row["product_id"] for row in collection["rows"]]
+        cursor.execute("""SELECT p.product_id, p.offer_id, p.price, p.old_price, p.min_price,
+                                  p.marketing_price,
+                                  (SELECT h.marketing_seller_price FROM ozon_price_history h
+                                    WHERE h.product_id=p.product_id ORDER BY h.updated_from_ozon DESC,h.id DESC LIMIT 1)
+                             FROM products p WHERE p.product_id = ANY(%s) FOR UPDATE""", (product_ids,))
+        current = {row[0]: row[1:] for row in cursor.fetchall()}
+        unmapped = sorted(set(product_ids) - set(current))
+        mismatched = [row["product_id"] for row in collection["rows"] if row["offer_id"] and current.get(row["product_id"], (None,))[0] != row["offer_id"]]
+        if unmapped or mismatched or len(current) != len(collection["rows"]):
+            raise PersistenceError("price payload does not map exactly to canonical products")
+
+        cursor.execute("""INSERT INTO price_collection_runs
+            (collection_ref,collected_at,status,products_count,data_quality_status)
+            VALUES (%s,%s,'running',%s,'valid') RETURNING run_id""",
+            (collection["collection_ref"], collection["collected_at"], len(collection["rows"])))
+        run_id = cursor.fetchone()[0]
+        changed = 0
+        for row in collection["rows"]:
+            previous = current[row["product_id"]]
+            values = (row["price"], row["old_price"], row["min_price"], row["marketing_price"], row["marketing_seller_price"])
+            is_changed = tuple(previous[1:]) != values
+            cursor.execute("""UPDATE products SET price=%s,old_price=%s,min_price=%s,marketing_price=%s,
+                updated_from_ozon=%s WHERE product_id=%s AND offer_id=%s""",
+                (*values[:4], collection["collected_at"], row["product_id"], previous[0]))
+            if cursor.rowcount != 1:
+                raise PersistenceError("canonical product update failed")
+            if is_changed:
+                cursor.execute("""INSERT INTO ozon_price_history
+                    (product_id,offer_id,price,old_price,min_price,marketing_price,marketing_seller_price,updated_from_ozon)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s)""",
+                    (row["product_id"], previous[0], row["price"], row["old_price"], row["min_price"],
+                     row["marketing_price"], row["marketing_seller_price"], collection["collected_at"]))
+                changed += 1
+        unchanged = len(collection["rows"]) - changed
+        cursor.execute("""UPDATE price_collection_runs SET status='success',changed_records=%s,
+            unchanged_records=%s WHERE run_id=%s AND status='running'""", (changed, unchanged, run_id))
+        if cursor.rowcount != 1:
+            raise PersistenceError("price run lifecycle update failed")
+        connection.commit()
+        return {"run_id": run_id, "idempotent_replay": False, "products_count": len(collection["rows"]),
+                "changed_records": changed, "unchanged_records": unchanged, "unmapped_products": [] ,
+                "collection_status": "SUCCESS_CHANGED" if changed else "SUCCESS_UNCHANGED"}
+    except Exception:
+        connection.rollback()
+        raise
+    finally:
+        connection.close()

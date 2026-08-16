@@ -38,6 +38,12 @@ def _decimal(value: Any, name: str) -> Decimal:
     return parsed
 
 
+def _optional_decimal(source: dict[str, Any], name: str) -> Decimal | None:
+    """An omitted or JSON-null optional Seller field remains unknown, never zero."""
+    value = source.get(name)
+    return None if value is None else _decimal(value, name)
+
+
 def _omitted_zero_int(source: dict[str, Any], name: str) -> int:
     """Performance statistics omit some counters when their value is zero."""
     return _positive_int(source.get(name, 0), name)
@@ -130,3 +136,33 @@ def normalize_cpc(payload: object) -> dict[str, Any]:
         "business_date": str(data["business_date"]), "report_uuid": str(data["report_uuid"]),
         "campaigns_count": len(campaigns),
     }
+
+
+def normalize_prices(payload: object) -> dict[str, Any]:
+    data = _required(payload, {"collection_ref", "collected_at", "items"})
+    if not isinstance(data["items"], list) or not data["items"]:
+        raise PayloadError("items must be a non-empty array")
+    rows: list[dict[str, Any]] = []
+    seen: set[int] = set()
+    for source in data["items"]:
+        if not isinstance(source, dict):
+            raise PayloadError("price item must be an object")
+        product_id = _positive_int(source.get("product_id"), "product_id", allow_zero=False)
+        if product_id in seen:
+            raise PayloadError(f"duplicate product_id:{product_id}")
+        seen.add(product_id)
+        price = source.get("price")
+        if not isinstance(price, dict):
+            raise PayloadError(f"price object is required:{product_id}")
+        rows.append({
+            "product_id": product_id,
+            "offer_id": str(source.get("offer_id") or "").strip(),
+            "price": _decimal(price.get("price"), "price"),
+            "old_price": _decimal(price.get("old_price"), "old_price"),
+            "min_price": _decimal(price.get("min_price"), "min_price"),
+            # v5 account response confirms this field may be absent.
+            "marketing_price": _optional_decimal(price, "marketing_price"),
+            "marketing_seller_price": _decimal(price.get("marketing_seller_price"), "marketing_seller_price"),
+        })
+    return {"kind": "prices", "persist": bool(data.get("persist", False)), "rows": rows,
+            "collection_ref": str(data["collection_ref"]), "collected_at": str(data["collected_at"])}

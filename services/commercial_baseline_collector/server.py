@@ -8,19 +8,20 @@ from typing import Any
 
 try:
     from .database import connect_database
-    from .normalization import PayloadError, normalize_cpc, normalize_seller_demand
-    from .repository import persist_cpc, persist_seller_demand
+    from .normalization import PayloadError, normalize_cpc, normalize_prices, normalize_seller_demand
+    from .repository import persist_cpc, persist_prices, persist_seller_demand
 except ImportError:
     from database import connect_database
-    from normalization import PayloadError, normalize_cpc, normalize_seller_demand
-    from repository import persist_cpc, persist_seller_demand
+    from normalization import PayloadError, normalize_cpc, normalize_prices, normalize_seller_demand
+    from repository import persist_cpc, persist_prices, persist_seller_demand
 
 SELLER_PATH = "/v1/commercial/seller-demand/collect"
 CPC_PATH = "/v1/commercial/cpc/collect"
+PRICE_PATH = "/v1/commercial/prices/collect"
 
 
 def collect(path: str, payload: object, connection_factory=connect_database) -> dict[str, Any]:
-    collection = normalize_seller_demand(payload) if path == SELLER_PATH else normalize_cpc(payload)
+    collection = normalize_seller_demand(payload) if path == SELLER_PATH else (normalize_cpc(payload) if path == CPC_PATH else normalize_prices(payload))
     summary = {
         "read_only_api": True,
         "collection_ref": collection["collection_ref"],
@@ -28,14 +29,14 @@ def collect(path: str, payload: object, connection_factory=connect_database) -> 
         "persisted": False,
     }
     if collection["persist"]:
-        result = persist_seller_demand(collection, connection_factory) if collection["kind"] == "seller_demand" else persist_cpc(collection, connection_factory)
+        result = persist_seller_demand(collection, connection_factory) if collection["kind"] == "seller_demand" else (persist_cpc(collection, connection_factory) if collection["kind"] == "cpc" else persist_prices(collection, connection_factory))
         summary.update({"persisted": True, **result})
     return summary
 
 
 class Handler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
-        if self.path not in {SELLER_PATH, CPC_PATH}:
+        if self.path not in {SELLER_PATH, CPC_PATH, PRICE_PATH}:
             return self._send(HTTPStatus.NOT_FOUND, {"error": "not_found"})
         try:
             payload = json.loads(self.rfile.read(int(self.headers.get("Content-Length", "0"))))

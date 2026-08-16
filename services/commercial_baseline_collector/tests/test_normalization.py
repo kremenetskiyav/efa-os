@@ -1,6 +1,6 @@
 import unittest
 
-from commercial_baseline_collector.normalization import PayloadError, normalize_cpc, normalize_seller_demand
+from commercial_baseline_collector.normalization import PayloadError, normalize_cpc, normalize_prices, normalize_seller_demand
 
 
 class NormalizationTests(unittest.TestCase):
@@ -38,3 +38,23 @@ class NormalizationTests(unittest.TestCase):
             "report":{"29798536":{"report":{"rows":[{"date":"14.08.2026","sku":"4671345564","price":"599,00","ctr":"0,00","avgBid":"0,00","moneySpent":"0,00","orders":1,"ordersMoney":"598,00","drr":"0,0","general_drr":"0,0","product_gmv":"599,00"}]}}},
         })
         self.assertEqual((result["rows"][0]["views"], result["rows"][0]["clicks"]), (0, 0))
+
+    def test_prices_confirmed_contract(self):
+        result = normalize_prices({"collection_ref":"p1","collected_at":"2026-08-16T00:00:00Z","persist":True,"items":[
+            {"product_id":4861934525,"offer_id":"УФ 001Б","price":{"price":"757","old_price":"2900","min_price":"700","marketing_price":"624","marketing_seller_price":"757"}}
+        ]})
+        self.assertEqual(result["rows"][0]["product_id"],4861934525)
+        self.assertEqual(str(result["rows"][0]["marketing_price"]),"624")
+
+    def test_prices_duplicate_product_rejected(self):
+        item={"product_id":1,"offer_id":"x","price":{"price":1,"old_price":1,"min_price":1,"marketing_price":1,"marketing_seller_price":1}}
+        with self.assertRaises(PayloadError):
+            normalize_prices({"collection_ref":"p","collected_at":"x","items":[item,item]})
+
+    def test_real_price_contract_allows_absent_marketing_price_and_sku(self):
+        result = normalize_prices({"collection_ref":"real","collected_at":"2026-08-16T10:44:39Z","items":[{
+            "product_id":4861934525,"offer_id":"УФ 001Б",
+            "price":{"price":757,"old_price":2900,"min_price":700,"marketing_seller_price":624},
+        }]})
+        self.assertIsNone(result["rows"][0]["marketing_price"])
+        self.assertNotIn("sku", result["rows"][0])

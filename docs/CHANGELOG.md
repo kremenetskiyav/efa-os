@@ -2,6 +2,11 @@
 
 ## 2026-08-16
 
+- Activated Price Refresh Automation v0.1: a six-hour private read-only Seller
+  price collection for canonical products. Successful collection runs provide
+  price freshness independently of change-only price history; the confirmed
+  optional `marketing_price` field is stored as `NULL` when absent.
+
 - Added the local-only Daily Brief runtime-secret deployment contract: a
   tracked names-only template, masked interactive initializer with
   current-user ACL, and a fail-safe, `--env-file` Docker Compose wrapper that
