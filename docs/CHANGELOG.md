@@ -2,6 +2,12 @@
 
 ## 2026-08-16
 
+- Ingested the first two manually verified seller-specific Ozon `Главное`
+  notices through the common Information Intelligence `MANUAL_EVIDENCE`
+  contract. The FBS operational notice is `ACTION_REQUIRED`; the legal-entity
+  buyout notice is `WATCH`. Exact replay is idempotent. Automated Seller Hub
+  collection and Daily Brief integration remain inactive.
+
 - Initialized Information Intelligence production storage by applying
   migration 008 after a validated PostgreSQL backup. Added text-layer PDF
   support to the Legal Monitor and persisted the official 100-page

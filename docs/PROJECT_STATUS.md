@@ -40,9 +40,12 @@ and review-only impact routing. The canonical seller agreement is registered;
 separate promotion, Performance and legal-entity-buyout URLs remain
 `NEEDS_SOURCE_CONFIRMATION`. The first legal baseline is persisted through the
 manual official-file path because deterministic HTTP retrieval is unavailable.
-Seller `Главное` remains a schema-ready `MANUAL_EVIDENCE_SOURCE`, but its two
-known notices have not been ingested. API baselines are not yet bootstrapped.
-No workflow, schedule, Daily Brief or engine changed.
+Seller `Главное` manual-evidence ingestion is active through the same common
+event model: the first two operator-verified notices are persisted as one
+`ACTION_REQUIRED` FBS review and one `WATCH` legal-entity-buyout review. There
+is no automated Seller Hub collector. API baselines are not yet bootstrapped,
+and Daily Brief integration is not active. No workflow, schedule or engine
+changed.
 
 ## Commercial recovery checkpoint — UF004B settlement gate
 
