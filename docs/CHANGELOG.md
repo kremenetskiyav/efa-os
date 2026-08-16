@@ -2,15 +2,13 @@
 
 ## 2026-08-16
 
-- Added Ozon Legal / Contract Monitor v0.1 on the common Information
-  Intelligence model: conservative official-source registry, one-shot public
-  retrieval, outside-Git manual bootstrap, semantic legal-document
-  canonicalization, structural unit diff, numeric/rate/date detection,
-  economic watch concepts and review-only impact routing. Expanded unapplied
-  migration 008 for API/legal/news/manual evidence without adding a new
-  migration. The confirmed seller agreement returned HTTP 307 in its single
-  live preview; no baseline, workflow, schedule or production write was
-  created.
+- Initialized Information Intelligence production storage by applying
+  migration 008 after a validated PostgreSQL backup. Added text-layer PDF
+  support to the Legal Monitor and persisted the official 100-page
+  `OZON_SELLER_AGREEMENT` as the first immutable baseline. Exact replay is
+  `SUCCESS_ZERO`: one source, one snapshot and zero change events remain.
+  Automated legal polling, Seller `Главное` ingestion, API baselines and Daily
+  Brief integration are not active.
 
 - Finalized Information Intelligence source policy: Legal/Contract, Seller
   News, Ozon for dev and API contracts are automated candidates; seller

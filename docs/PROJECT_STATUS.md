@@ -11,7 +11,7 @@ Canonical workflow JSON: `n8n/workflows/OZON_workflow_Phase_A.json`.
 
 The repository copy is sanitized for source control. Secrets remain in local n8n credentials and are not committed.
 
-## Ozon Information Intelligence — API and Legal monitors prepared
+## Ozon Information Intelligence — production storage initialized
 
 The first read-only Information Intelligence component now provides
 deterministic canonicalization, structural diffing, compatibility classes and
@@ -20,11 +20,12 @@ contracts. Initial observations are `BASELINE_CREATED`, not change alerts;
 equivalent later observations are `SUCCESS_ZERO` / `NO_CHANGE`.
 
 Both official URLs returned HTTP 307 anti-bot redirects during the single
-approved live preview, so no baseline was persisted and no browser workaround
-was attempted. Migration 008 and the hybrid storage contract are prepared but
-**not applied**. Production workflows, schedules and Daily Brief are unchanged.
-An approved operator-supplied official snapshot outside Git is the bootstrap
-path when deterministic public HTTP retrieval is unavailable.
+approved live preview, so no browser workaround was attempted. Migration 008
+is now applied. The manually supplied official 100-page seller-agreement PDF
+was validated outside Git and persisted as the first immutable
+`OZON_SELLER_AGREEMENT` baseline. Its repeat import is `SUCCESS_ZERO`: one
+source and one snapshot remain, with no legal change event. Automated legal
+polling and Daily Brief integration remain **not active**.
 
 The source strategy is now final: automated official inputs are Ozon
 Legal/Contract, Seller News, Ozon for dev and API contracts. Seller-specific
@@ -32,16 +33,16 @@ Legal/Contract, Seller News, Ozon for dev and API contracts. Seller-specific
 UI scraping, browser/session extraction and a public Seller-push webhook are
 excluded. Gmail inbound remains future research.
 
-The deterministic Legal/Contract Monitor now adds semantic HTML/text
+The deterministic Legal/Contract Monitor now adds semantic HTML/text/PDF
 canonicalization, heading/clause/table units, legal unit diffing, structured
 percentage/RUB/coefficient/date/deadline detection, economic watch concepts
 and review-only impact routing. The canonical seller agreement is registered;
 separate promotion, Performance and legal-entity-buyout URLs remain
-`NEEDS_SOURCE_CONFIRMATION`. Its one live request returned HTTP 307 and is
-`SOURCE_UNAVAILABLE`, so no baseline was created. The manual official-file
-bootstrap is ready outside Git. Migration 008 was expanded before first use to
-support API, legal, news and manual evidence in one normalized event model; it
-remains **not applied**. No workflow, schedule, Daily Brief or engine changed.
+`NEEDS_SOURCE_CONFIRMATION`. The first legal baseline is persisted through the
+manual official-file path because deterministic HTTP retrieval is unavailable.
+Seller `Главное` remains a schema-ready `MANUAL_EVIDENCE_SOURCE`, but its two
+known notices have not been ingested. API baselines are not yet bootstrapped.
+No workflow, schedule, Daily Brief or engine changed.
 
 ## Commercial recovery checkpoint — UF004B settlement gate
 
