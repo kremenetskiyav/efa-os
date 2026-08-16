@@ -2,6 +2,12 @@
 
 ## 2026-08-16
 
+- Recorded the mandatory Commercial Profit Policy: COGS recovery and all
+  attributable Ozon, advertising/promotion and management-tax-reserve costs
+  precede distributable profit; the hard floor for controlled commercial
+  decisions is 15% contribution margin after applicable reserve. The annual
+  57,390 RUB insurance obligation remains business-level.
+
 - Added Tax Engine v0.1 and applied migration 007 after a validated PostgreSQL
   backup. Official June/July monthly Realization reports reconcile exactly with
   the order-level documents and persist idempotently as 2 import runs and 8

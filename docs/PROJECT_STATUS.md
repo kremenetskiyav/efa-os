@@ -532,6 +532,24 @@ Target architecture:
 - Do not automatically change prices, promotions, advertising or inventory parameters.
 - Build deterministic monitoring before adding more autonomous AI behavior.
 
+## Commercial Profit Policy — mandatory guardrail
+
+- A commercial sale must first recover COGS for inventory replenishment and
+  cover attributable Ozon, advertising/promotion and applicable management-tax
+  reserve costs before it is treated as distributable or reinvestable profit.
+- The hard floor for any commercial recommendation or controlled experiment is
+  `contribution_margin_after_tax_reserve >= 15%`; the target operating range is
+  15–20%, with more than 20% preferred where market conditions allow.
+- `contribution_after_tax_reserve` is recognised/effective revenue less COGS,
+  attributable Ozon variable expenses, advertising/promotion spend and the
+  applicable management tax reserve. Positive profit, orders or revenue alone
+  do not satisfy this policy.
+- The fixed annual insurance obligation (57,390 RUB) remains business-level and
+  is not arbitrarily allocated to an offer or order; aggregate contribution
+  must nevertheless cover it.
+- CPC, promotion, price and boosting evaluation must retain these guardrails.
+  Expected uplift is never assumed without historical evidence.
+
 ## Price Refresh Automation v0.1 — ACTIVE
 
 - `Ozon Price Snapshot Automation v0.1` (`nw3DytLJdwTieOgJ`) runs every six hours at minute 20 Europe/Moscow.
