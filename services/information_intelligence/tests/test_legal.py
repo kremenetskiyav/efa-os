@@ -36,6 +36,11 @@ class LegalCanonicalizationTests(unittest.TestCase):
         with self.assertRaises(LegalDocumentError):
             canonicalize_legal(b"%PDF-fake", content_type="application/pdf", filename="terms.pdf")
 
+    def test_plain_pdf_text_uses_first_level_numbering_as_headings(self):
+        parsed = canonicalize_legal("1. Общие положения\n1.1. Комиссия 42%".encode("utf-8"), content_type="text/plain")
+        clause = next(unit for unit in parsed.units if unit.clause_number == "1.1")
+        self.assertEqual(clause.heading_path, ("1. Общие положения",))
+
 
 class LegalDiffTests(unittest.TestCase):
     def assert_numeric(self, old: str, new: str, expected_type: str, concept: str):
@@ -99,6 +104,17 @@ class WatchRoutingTests(unittest.TestCase):
         self.assertIn("OZON_FUNDED_POINTS", found)
         self.assertIn("SELLER_COMMISSION", found)
         self.assertIn("DOCUMENT_FLOW", found)
+
+    def test_structural_preview_has_contextual_facts_and_watch_references(self):
+        from services.information_intelligence.legal import structural_preview
+        preview = structural_preview(doc("<h1>Тарифы</h1><p>1.1. Комиссия 42%, FBS логистика 130 RUB</p>"))
+        self.assertEqual(preview["watch_matches"]["SELLER_COMMISSION"][0]["section"], "Тарифы")
+        self.assertIn("RUB_AMOUNT", [item["type"] for item in preview["numeric_facts"]])
+
+    def test_russian_textual_effective_date_is_a_baseline_date_fact(self):
+        from services.information_intelligence.legal import structural_preview
+        preview = structural_preview(canonicalize_legal("1. Условия\nРедакция действует с 24 сентября 2026 года.".encode("utf-8"), content_type="text/plain"))
+        self.assertIn("24 сентября 2026", [item["value"] for item in preview["numeric_facts"] if item["type"] == "DATE"])
 
 
 if __name__ == "__main__":

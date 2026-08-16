@@ -161,7 +161,15 @@ def _reject_invalid_source(raw: bytes, text: str) -> None:
 
 
 def _text_blocks(text: str) -> list[tuple[str, str, str | None]]:
-    return [("paragraph", item, None) for item in (_normalize_text(line) for line in text.splitlines()) if item]
+    blocks: list[tuple[str, str, str | None]] = []
+    for item in (_normalize_text(line) for line in text.splitlines()):
+        if not item:
+            continue
+        # PDFs do not retain HTML heading tags. A standalone first-level
+        # numbered heading is the least-assumptive stable section signal.
+        kind = "h1" if re.match(r"^\d+\.\s+\D", item) else "paragraph"
+        blocks.append((kind, item, None))
+    return blocks
 
 
 def _units(blocks: Iterable[tuple[str, str, str | None]]) -> tuple[DocumentUnit, ...]:
@@ -218,6 +226,23 @@ def canonicalize_legal(raw: bytes, *, content_type: str | None = None, filename:
     )
 
 
+def canonicalize_legal_pdf(raw: bytes) -> tuple[CanonicalLegalDocument, object]:
+    """Canonicalize PDF semantic text while retaining the original-byte hash."""
+    from .legal_pdf import extract_pdf_text
+
+    extraction = extract_pdf_text(raw)
+    text_document = canonicalize_legal(extraction.text.encode("utf-8"), content_type="text/plain", filename="document.txt")
+    return (
+        CanonicalLegalDocument(
+            raw_sha256=hashlib.sha256(raw).hexdigest(),
+            canonical_sha256=text_document.canonical_sha256,
+            canonical_text=text_document.canonical_text,
+            units=text_document.units,
+        ),
+        extraction,
+    )
+
+
 WATCH_PATTERNS = {
     "OZON_FUNDED_POINTS": ("балл", "лояльност"),
     "SELLER_COMMISSION": ("комисси", "вознагражден"),
@@ -253,6 +278,7 @@ def detect_watch_concepts(text: str) -> tuple[str, ...]:
 
 
 NUMBER_PATTERNS = (
+    ("DATE", re.compile(r"(?<!\d)(\d{1,2}\s+(?:января|февраля|марта|апреля|мая|июня|июля|августа|сентября|октября|ноября|декабря)\s+\d{4})\s*(?:г(?:ода|\.)?)?", re.I), None),
     ("PERCENTAGE", re.compile(r"(?<!\w)(\d+(?:[.,]\d+)?)\s*%"), "%"),
     ("RUB_AMOUNT", re.compile(r"(?<!\w)(\d[\d\s]*(?:[.,]\d+)?)\s*(?:руб(?:\.|лей|ля)?\b|₽|rub\b)", re.I), "RUB"),
     ("DATE", re.compile(r"(?<!\d)(\d{2}\.\d{2}\.\d{4})(?!\d)"), None),
@@ -266,7 +292,10 @@ def _numbers(text: str) -> dict[str, list[tuple[str, str | None]]]:
     for kind, pattern, fixed_unit in NUMBER_PATTERNS:
         for match in pattern.finditer(text):
             unit = fixed_unit or (match.group(2) if match.lastindex and match.lastindex >= 2 else None)
-            found.setdefault(kind, []).append((match.group(1).replace(" ", "").replace(",", "."), unit))
+            value = match.group(1)
+            if kind not in {"DATE"}:
+                value = value.replace(" ", "").replace(",", ".")
+            found.setdefault(kind, []).append((value, unit))
     return found
 
 
@@ -341,10 +370,25 @@ def diff_legal(old: CanonicalLegalDocument, new: CanonicalLegalDocument, *, effe
 
 
 def structural_preview(document: CanonicalLegalDocument) -> dict:
-    text = "\n".join(unit.text for unit in document.units)
+    watch_matches = {name: [] for name in WATCH_PATTERNS}
+    numeric_facts: list[dict] = []
+    for unit in document.units:
+        section = " / ".join(unit.heading_path) or "DOCUMENT"
+        for concept in detect_watch_concepts(unit.text):
+            watch_matches[concept].append({"section": section, "identity": unit.identity, "excerpt": _excerpt(unit.text)})
+        for kind, values in _numbers(unit.text).items():
+            for value, unit_name in values:
+                numeric_facts.append({
+                    "type": kind,
+                    "value": value,
+                    "unit": unit_name,
+                    "section": section,
+                    "context": _excerpt(unit.text),
+                })
     return {
         "units": [asdict(unit) for unit in document.units],
         "unit_count": len(document.units),
-        "watch_concepts": list(detect_watch_concepts(text)),
-        "numeric_facts": {kind: values for kind, values in _numbers(text).items()},
+        "watch_concepts": [name for name, matches in watch_matches.items() if matches],
+        "watch_matches": watch_matches,
+        "numeric_facts": numeric_facts,
     }

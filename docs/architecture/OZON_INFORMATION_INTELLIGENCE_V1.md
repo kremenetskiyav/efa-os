@@ -50,8 +50,9 @@ python -m services.information_intelligence.legal_bootstrap --source-id OZON_SEL
 ```
 
 The preview rejects empty, corrupt, unsupported and recognisable anti-bot
-pages. It validates and canonicalizes the document but performs no PostgreSQL
-write. Raw evidence should later be retained, compressed where useful, under a
+pages. Official PDF input is supported only where it has a usable text layer;
+OCR is deliberately not enabled. It validates and canonicalizes the document
+but performs no PostgreSQL write. Raw evidence should later be retained, compressed where useful, under a
 user-local EFA OS evidence directory. PostgreSQL stores source metadata,
 hashes, normalized structure, events and the external evidence reference—not
 unnecessary repeated blobs.
