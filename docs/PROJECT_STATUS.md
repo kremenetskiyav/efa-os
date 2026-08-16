@@ -27,8 +27,11 @@ was validated outside Git and persisted as the first immutable
 source and one snapshot remain, with no legal change event. Automated legal
 polling and Daily Brief integration remain **not active**.
 
-The source strategy is now final: automated official inputs are Ozon
-Legal/Contract, Seller News, Ozon for dev and API contracts. Seller-specific
+The source strategy is now final: automated official candidates are Ozon
+Legal/Contract, Seller News, Ozon for dev and API contracts. Seller News is
+currently `SOURCE_UNAVAILABLE / MANUAL_ONLY`: its confirmed official listing
+returned HTTP 307 during the single allowed public preview, so no source or
+article baseline was persisted and no schedule was created. Seller-specific
 `Главное` notices use the same `OzonInformationEvent` model as manual evidence;
 UI scraping, browser/session extraction and a public Seller-push webhook are
 excluded. Gmail inbound remains future research.

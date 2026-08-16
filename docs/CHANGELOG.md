@@ -2,6 +2,13 @@
 
 ## 2026-08-16
 
+- Added a deterministic `MANUAL_ONLY` fallback contract for official Ozon
+  Seller News. The single approved request to the confirmed listing returned
+  HTTP 307 `SOURCE_UNAVAILABLE`, so no source registration, article baseline,
+  event, workflow or schedule was created. Synthetic tests cover canonical
+  permalink identity, updates, economic numeric changes, effective dates,
+  listing reorder and tracking-parameter noise.
+
 - Ingested the first two manually verified seller-specific Ozon `Главное`
   notices through the common Information Intelligence `MANUAL_EVIDENCE`
   contract. The FBS operational notice is `ACTION_REQUIRED`; the legal-entity

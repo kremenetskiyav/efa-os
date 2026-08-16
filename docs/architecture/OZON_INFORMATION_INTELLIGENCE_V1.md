@@ -18,6 +18,17 @@ push covers operational events and hub coverage is unproven. UI scraping,
 browser/session emulation, undocumented endpoints and a public webhook are
 prohibited. Gmail inbound is future research only.
 
+The confirmed Seller News listing is
+`https://seller.ozon.ru/media/news/`. Its first one-shot public retrieval
+returned HTTP 307 and is `SOURCE_UNAVAILABLE`; no redirect or anti-bot bypass
+is permitted. Article identity, pagination and live DOM/feed contracts are
+therefore not claimed. The v0.1 adapter is `MANUAL_ONLY`: an operator may
+provide a JSON manifest outside Git containing an official Ozon permalink,
+title, publication date, optional update/category/official links and captured
+article HTML/text. The fallback preview validates official HTTPS URLs,
+canonicalizes semantic content, strips tracking parameters and persists
+nothing. Automated Seller News polling is not active.
+
 ## Legal source registry
 
 `OZON_SELLER_AGREEMENT` is the confirmed canonical Level-1 source at
@@ -97,7 +108,7 @@ that an effective-now change invalidates active economics.
 
 ## Persistence, failures and future orchestration
 
-Migration 008 remains prepared and not applied. Its four normalized tables now
+Migration 008 is applied. Its four normalized tables now
 support API and legal snapshots, checks/freshness, numeric legal changes, news
 events and manual evidence through the common event model.
 
@@ -106,8 +117,10 @@ States are `SUCCESS`, `SUCCESS_ZERO`, `BASELINE_CREATED`,
 `DIFF_FAILED`, `STALE`. No change is `SUCCESS_ZERO`; failed checks preserve the
 last good snapshot.
 
-Recommended future polling is once daily at 06:15–06:30 Europe/Moscow before
-the 08:15 Daily Brief. No workflow or schedule exists yet. A future
+If deterministic Seller News retrieval later becomes available, its candidate
+polling time is 06:20 Europe/Moscow between Legal Monitor at 06:15 and API
+Monitor at 06:30, before the 08:15 Daily Brief. No workflow or schedule exists
+yet. A future
 deterministic brief fragment may be:
 
 ```json
