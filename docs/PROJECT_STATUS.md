@@ -11,6 +11,21 @@ Canonical workflow JSON: `n8n/workflows/OZON_workflow_Phase_A.json`.
 
 The repository copy is sanitized for source control. Secrets remain in local n8n credentials and are not committed.
 
+## Ozon Information Intelligence — API contract monitor prepared
+
+The first read-only Information Intelligence component now provides
+deterministic canonicalization, structural diffing, compatibility classes and
+an exact EFA-OS usage map for the official Seller and Performance OpenAPI
+contracts. Initial observations are `BASELINE_CREATED`, not change alerts;
+equivalent later observations are `SUCCESS_ZERO` / `NO_CHANGE`.
+
+Both official URLs returned HTTP 307 anti-bot redirects during the single
+approved live preview, so no baseline was persisted and no browser workaround
+was attempted. Migration 008 and the hybrid storage contract are prepared but
+**not applied**. Production workflows, schedules and Daily Brief are unchanged.
+An approved operator-supplied official snapshot outside Git is the bootstrap
+path when deterministic public HTTP retrieval is unavailable.
+
 ## Commercial recovery checkpoint — UF004B settlement gate
 
 June is retained as a **LAUNCH_PERIOD**. The historical June–July CPC

@@ -2,6 +2,14 @@
 
 ## 2026-08-16
 
+- Added the read-only Ozon API Contract Monitor v0.1 for official Seller and
+  Performance OpenAPI documents: stable JSON canonicalization, structural
+  compatibility diffing, active EFA-OS API usage routing, synthetic fixtures,
+  one-shot public retrieval and an outside-Git manual bootstrap preview.
+  Prepared migration 008 without applying it. Both live official URLs returned
+  HTTP 307 anti-bot redirects; no browser emulation, business API calls,
+  workflow changes or production writes were performed.
+
 - Recorded the commercial recovery checkpoint: June remains a launch period;
   all historical June–July CPC campaigns are `DO_NOT_REACTIVATE` under the
   mandatory 15% contribution-margin-after-CPC policy. `УФ 004Б` is the sole

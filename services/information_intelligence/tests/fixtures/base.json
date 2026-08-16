@@ -1,0 +1,23 @@
+{
+  "openapi": "3.0.3",
+  "info": {"title": "Synthetic API", "version": "1.0"},
+  "paths": {
+    "/items": {
+      "post": {
+        "operationId": "ListItems",
+        "parameters": [{"name": "limit", "in": "query", "required": false, "schema": {"type": "integer"}}],
+        "requestBody": {"required": false, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Request"}}}},
+        "responses": {"200": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/Response"}}}}},
+        "security": [{"ApiKey": []}],
+        "description": "Original description"
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Request": {"type": "object", "properties": {"query": {"type": "string"}}, "required": []},
+      "Response": {"type": "object", "properties": {"status": {"type": "string", "enum": ["OK", "WAIT"]}}, "required": ["status"]}
+    },
+    "securitySchemes": {"ApiKey": {"type": "apiKey", "in": "header", "name": "Api-Key"}}
+  }
+}
