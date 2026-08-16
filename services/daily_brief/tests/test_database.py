@@ -18,6 +18,11 @@ class DailyBriefQueryTests(unittest.TestCase):
         self.assertIn("WHERE status = 'success'", database.PROMOTIONS_QUERY)
         self.assertIn("LIMIT 1", database.PROMOTIONS_QUERY)
 
+    def test_cpc_freshness_uses_successful_collection_runs_not_detail_rows(self):
+        self.assertIn("cpc_collection_runs", database.FRESHNESS_QUERY)
+        self.assertIn("status = 'success'", database.FRESHNESS_QUERY)
+        self.assertIn("records_count", database.CPC_COLLECTION_QUERY)
+
     def test_current_price_status_uses_confirmed_delivery_not_finance_operation_date(self):
         self.assertIn("vw_orders_profit_final", database.CURRENT_PRICE_STATUS_QUERY)
         self.assertIn("delivering_date >= cp.price_since", database.CURRENT_PRICE_STATUS_QUERY)

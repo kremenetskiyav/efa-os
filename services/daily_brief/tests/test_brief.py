@@ -21,6 +21,7 @@ def sources(*, demand=True, finance=True, cpc_state="CAMPAIGN_STATE_RUNNING"):
             ("A", 2, "Candidate", None, "CANDIDATE", Decimal("0"), Decimal("0"), Decimal("0"), Decimal("0"), "valid", datetime(2026, 8, 15, tzinfo=UTC)),
         ],
         "cpc": [("A", 5, cpc_state, "SKU", Decimal("10"), 20, 2, 1, Decimal("90"), "valid")],
+        "cpc_collection": ("success", 1, 1, "valid", datetime(2026, 8, 15, tzinfo=UTC)),
         "freshness": (day, datetime(2026, 8, 15, tzinfo=UTC), day, datetime(2026, 8, 14, tzinfo=UTC), datetime(2026, 8, 1, tzinfo=UTC)),
         "current_price_status": [("A", "CONFIRMED")],
         "latest_economics": [("A", day - timedelta(days=4), Decimal("200"), Decimal("50"), 2, 0, 0, 0)],
@@ -70,6 +71,20 @@ class DailyBriefTests(unittest.TestCase):
     def test_inactive_cpc_orders_are_not_current_activity(self):
         item = build_brief(sources(cpc_state="CAMPAIGN_STATE_INACTIVE"), date(2026, 8, 14))["offers"][0]
         self.assertEqual(item["advertising"]["inactive_attribution_note"], "orders_are_attributed_history_not_current_activity")
+
+    def test_successful_zero_cpc_run_is_fresh_without_synthetic_details(self):
+        value = sources(); value["cpc"] = []; value["cpc_collection"] = ("success", 0, 1, "valid", datetime(2026, 8, 15, tzinfo=UTC))
+        result = build_brief(value, date(2026, 8, 14))
+        self.assertNotIn("cpc_daily_missing_or_stale_for_business_date", result["data_quality"]["warnings"])
+        self.assertEqual((result["data_quality"]["sources"]["cpc_collection_status"], result["offers"][0]["advertising"]["status"]), ("SUCCESS_ZERO", "SUCCESS_ZERO"))
+        self.assertEqual((result["summary"]["cpc_spend"], result["summary"]["cpc_orders"]), ("0", 0))
+        self.assertEqual(result["offers"][0]["advertising"]["cpc"], [])
+
+    def test_missing_or_failed_cpc_run_is_not_zero_activity(self):
+        missing = sources(); missing["cpc"] = []; missing["cpc_collection"] = None; missing["freshness"] = (*missing["freshness"][:2], date(2026, 8, 13), *missing["freshness"][3:])
+        self.assertIn("cpc_daily_missing_or_stale_for_business_date", build_brief(missing, date(2026, 8, 14))["data_quality"]["warnings"])
+        failed = sources(); failed["cpc"] = []; failed["cpc_collection"] = ("failed", 0, 1, "invalid", datetime(2026, 8, 15, tzinfo=UTC))
+        self.assertIn("cpc_daily_failed", build_brief(failed, date(2026, 8, 14))["data_quality"]["warnings"])
 
     def test_tax_layer_is_explicitly_not_implemented(self):
         self.assertEqual(build_brief(sources(), date(2026, 8, 14))["tax_status"], "NOT_IMPLEMENTED")

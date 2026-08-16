@@ -118,9 +118,19 @@ FRESHNESS_QUERY = """
 SELECT
   (SELECT MAX(business_date) FROM seller_product_demand_daily),
   (SELECT MAX(collected_at) FROM promotion_runs WHERE status = 'success'),
-  (SELECT MAX(business_date) FROM cpc_advertising_daily),
+  -- A successful Performance report with zero detail rows is still a fresh
+  -- CPC source. Detail rows describe activity; the run describes collection.
+  (SELECT MAX(business_date) FROM cpc_collection_runs WHERE status = 'success'),
   (SELECT MAX(delivering_date) FROM postings WHERE status = 'delivered'),
   (SELECT MAX(updated_from_ozon) FROM products)
+"""
+
+CPC_COLLECTION_QUERY = """
+SELECT status, records_count, campaigns_count, mapping_status, collected_at
+FROM cpc_collection_runs
+WHERE business_date = %s
+ORDER BY collected_at DESC, created_at DESC
+LIMIT 1
 """
 
 # Mirrors the established Price Recommendation v0.2 confirmation criterion:
@@ -256,6 +266,7 @@ def fetch_brief_sources(config: DatabaseConfig, business_date: date) -> dict[str
                 cursor.execute(PROMOTIONS_QUERY); promotions = cursor.fetchall()
                 cursor.execute(CPC_QUERY, (business_date,)); cpc = cursor.fetchall()
                 cursor.execute(FRESHNESS_QUERY); freshness = cursor.fetchone()
+                cursor.execute(CPC_COLLECTION_QUERY, (business_date,)); cpc_collection = cursor.fetchone()
                 cursor.execute(CURRENT_PRICE_STATUS_QUERY); current_price_status = cursor.fetchall()
                 cursor.execute(LATEST_CONFIRMED_ECONOMICS_QUERY); latest_economics = cursor.fetchall()
                 cursor.execute(DEMAND_TREND_QUERY, (business_date, business_date)); demand_trend = cursor.fetchall()
@@ -268,6 +279,7 @@ def fetch_brief_sources(config: DatabaseConfig, business_date: date) -> dict[str
         raise DatabaseError("Daily brief read-only query failed") from error
     return {"products": products, "demand": demand, "deliveries": deliveries, "returns": returns,
             "finance": finance, "promotions": promotions, "cpc": cpc, "freshness": freshness,
+            "cpc_collection": cpc_collection,
             "current_price_status": current_price_status, "latest_economics": latest_economics,
             "trends": {"demand": demand_trend, "price": price_trend,
                        "boost": boost_trend, "finance": finance_trend}}

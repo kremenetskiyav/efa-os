@@ -60,6 +60,7 @@ def _freshness_lines(payload: dict[str, Any]) -> list[str]:
     labels = {
         "seller_daily_missing_or_stale_for_business_date": "Операционный отчёт требует обновления.",
         "cpc_daily_missing_or_stale_for_business_date": "Отчёт CPC требует обновления.",
+        "cpc_daily_failed": "Отчёт CPC завершился с ошибкой.",
         "promotion_state_missing": "Состояние акций пока недоступно.",
         "promotion_state_stale": "Состояние акций требует обновления.",
         "price_state_missing": "Состояние цены пока недоступно.",

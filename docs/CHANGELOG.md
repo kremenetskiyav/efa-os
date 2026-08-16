@@ -2,6 +2,14 @@
 
 ## 2026-08-16
 
+- Fixed Daily Brief CPC freshness to use successful `cpc_collection_runs`, not
+  the presence of CPC detail rows. A successful zero-row report is now
+  explicitly `SUCCESS_ZERO`, preserves zero spend/orders without synthetic
+  SKU rows, and no longer produces the false "CPC requires refresh" warning.
+- Updated the shared n8n PostgreSQL credential host from
+  `host.docker.internal` to private Docker DNS `efa-postgres:5432`, removing
+  the unnecessary host-gateway dependency for n8n-to-PostgreSQL traffic.
+
 - Activated `Ozon Daily Commercial Brief Delivery v1` (`Kf241Y5kzETghygL`) at
   08:15 Europe/Moscow. It uses the existing deterministic rendering bridge for
   Gmail HTML/PDF and compact Telegram delivery, keeps per-channel production

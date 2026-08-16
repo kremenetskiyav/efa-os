@@ -36,12 +36,24 @@ def _group(rows: list[tuple[Any, ...]]) -> dict[str, list[tuple[Any, ...]]]:
     return grouped
 
 
-def _quality(freshness: tuple[Any, ...], business_date: date, generated_at: datetime) -> tuple[dict[str, Any], list[str]]:
+def _cpc_collection_status(run: tuple[Any, ...] | None) -> str:
+    if run is None:
+        return "NOT_COLLECTED"
+    if run[0] != "success":
+        return "FAILED"
+    return "SUCCESS_ZERO" if run[1] == 0 else "SUCCESS_WITH_ACTIVITY"
+
+
+def _quality(freshness: tuple[Any, ...], business_date: date, generated_at: datetime,
+             cpc_collection: tuple[Any, ...] | None = None) -> tuple[dict[str, Any], list[str]]:
     demand_date, promotion_at, cpc_date, finance_delivery_at, price_at = freshness
     warnings: list[str] = []
     if demand_date != business_date:
         warnings.append("seller_daily_missing_or_stale_for_business_date")
-    if cpc_date != business_date:
+    cpc_status = _cpc_collection_status(cpc_collection)
+    if cpc_status == "FAILED":
+        warnings.append("cpc_daily_failed")
+    elif cpc_date != business_date:
         warnings.append("cpc_daily_missing_or_stale_for_business_date")
     if promotion_at is None:
         warnings.append("promotion_state_missing")
@@ -60,6 +72,7 @@ def _quality(freshness: tuple[Any, ...], business_date: date, generated_at: date
             "seller_daily": _date(demand_date), "promotions": _date(promotion_at),
             "cpc": _date(cpc_date), "confirmed_finance_delivery": _date(finance_delivery_at),
             "price": _date(price_at),
+            "cpc_collection_status": cpc_status,
         },
         "missing_sources": sorted(warnings), "warnings": sorted(warnings),
     }, warnings
@@ -75,7 +88,9 @@ def build_brief(sources: dict[str, Any], business_date: date, generated_at: date
     cpc_rows = _group(sources["cpc"])
     current_price_status = _index(sources["current_price_status"])
     latest_economics = _index(sources.get("latest_economics", []))
-    quality, global_warnings = _quality(sources["freshness"], business_date, generated)
+    cpc_collection = sources.get("cpc_collection")
+    cpc_collection_status = _cpc_collection_status(cpc_collection)
+    quality, global_warnings = _quality(sources["freshness"], business_date, generated, cpc_collection)
     offers: list[dict[str, Any]] = []
     for offer_id, sku, product_id, price, cost_price, price_at in sources["products"]:
         demand_row, delivery_row = demand.get(offer_id), deliveries.get(offer_id)
@@ -134,7 +149,9 @@ def build_brief(sources: dict[str, Any], business_date: date, generated_at: date
                            "candidates": [_promotion(row) for row in candidates],
                            "status": "NOT_AVAILABLE" if not promo else "valid" if all(row[9] == "valid" for row in promo) else "review"},
             "advertising": {"cpc": [_cpc(row) for row in cpc],
-                            "status": "NOT_AVAILABLE" if not cpc else "valid" if all(row[9] == "valid" for row in cpc) else "review",
+                            "status": ("SUCCESS_ZERO" if cpc_collection_status == "SUCCESS_ZERO" else
+                                       "FAILED" if cpc_collection_status == "FAILED" else
+                                       "NOT_AVAILABLE") if not cpc else "valid" if all(row[9] == "valid" for row in cpc) else "review",
                             "inactive_attribution_note": "orders_are_attributed_history_not_current_activity" if any(row[2] == "CAMPAIGN_STATE_INACTIVE" and row[7] > 0 for row in cpc) else None},
             "attention": {"level": level, "reasons": sorted(set(reasons))},
         })
@@ -175,7 +192,11 @@ def _summary(offers: list[dict[str, Any]]) -> dict[str, Any]:
     ordered_revenue = _sum_decimal([item["demand"]["ordered_revenue"] for item in offers])
     profit = _sum_decimal([item["economics"]["profit_before_tax"] for item in offers])
     revenue = _sum_decimal([item["economics"]["confirmed_revenue"] for item in offers])
-    cpc_spend = _sum_decimal([entry["spend"] for item in offers for entry in item["advertising"]["cpc"]])
+    cpc_entries = [entry for item in offers for entry in item["advertising"]["cpc"]]
+    cpc_spend = _sum_decimal([entry["spend"] for entry in cpc_entries])
+    cpc_orders = sum(entry["orders"] for entry in cpc_entries) if cpc_entries else None
+    if not cpc_entries and any(item["advertising"]["status"] == "SUCCESS_ZERO" for item in offers):
+        cpc_spend, cpc_orders = Decimal("0"), 0
     return {"ordered_revenue": _decimal(ordered_revenue),
             "ordered_units": sum(item["demand"]["ordered_units"] or 0 for item in offers) if any(item["demand"]["ordered_units"] is not None for item in offers) else None,
             "delivered_units": sum(item["fulfilment"]["delivered_units"] or 0 for item in offers) if any(item["fulfilment"]["delivered_units"] is not None for item in offers) else None,
@@ -183,6 +204,7 @@ def _summary(offers: list[dict[str, Any]]) -> dict[str, Any]:
             "confirmed_revenue": _decimal(revenue), "profit_before_tax": _decimal(profit),
             "margin_percent": _decimal(profit / revenue * Decimal("100")) if profit is not None and revenue else None,
             "cpc_spend": _decimal(cpc_spend),
+            "cpc_orders": cpc_orders,
             "offers_action": sum(item["attention"]["level"] in ("ACTION", "CRITICAL") for item in offers),
             "offers_watch": sum(item["attention"]["level"] == "WATCH" for item in offers)}
 

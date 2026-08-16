@@ -63,6 +63,12 @@ and ordered units at `offer_id × business_date`. `CPC Daily Collection v0.1`
 stores their confirmed daily Performance metrics with exact SKU attribution.
 Both persist only through the private commercial-baseline collector.
 
+A successful CPC collection run is the freshness source of truth, while
+`cpc_advertising_daily` rows describe activity only. Therefore a successful
+run with zero detail rows is represented as `SUCCESS_ZERO`: CPC is fresh and
+its confirmed spend/orders are zero, without synthetic product rows or a
+false stale-source warning. Missing and failed collection remain distinct.
+
 Migration 004 extends new promotion snapshots with the confirmed nullable
 `current_boost`, `min_boost`, and `max_boost` fields; the existing active
 `PROMOAUTOV1` schedule remains every six hours. State, daily demand and
@@ -131,6 +137,13 @@ Gmail, Telegram or Docker-socket access. A real 2026-08-14 request from
 `efa-n8n` confirmed all five canonical offers, explicit finance freshness and
 a five-page Cyrillic-safe PDF. Delivery is now scheduled, while generated
 previews and all credential material remain outside Git.
+
+### Internal PostgreSQL connectivity
+
+The shared n8n PostgreSQL credential now targets `efa-postgres:5432` on the
+private `efa-tools` Docker network instead of `host.docker.internal`. This
+removes an unnecessary host-gateway dependency while preserving the existing
+database, SSL and credential-secret settings.
 
 ## Ozon Performance API — working read-only baseline
 
