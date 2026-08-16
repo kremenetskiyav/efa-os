@@ -68,6 +68,9 @@ A successful CPC collection run is the freshness source of truth, while
 run with zero detail rows is represented as `SUCCESS_ZERO`: CPC is fresh and
 its confirmed spend/orders are zero, without synthetic product rows or a
 false stale-source warning. Missing and failed collection remain distinct.
+The private `efa-daily-brief` runtime was redeployed with this fix and a
+read-only 2026-08-15 validation confirmed 3 ordered units / 1,847 RUB,
+`SUCCESS_ZERO` CPC, zero CPC spend/orders, and no false CPC refresh warning.
 
 Migration 004 extends new promotion snapshots with the confirmed nullable
 `current_boost`, `min_boost`, and `max_boost` fields; the existing active
@@ -151,7 +154,10 @@ Private Docker services receive database runtime settings from a user-local
 `runtime.env`, outside the repository. The tracked template contains names
 only. `Scripts/Initialize-EfaRuntimeSecrets.ps1` creates the file through
 masked interactive password input and restricts its Windows ACL to the current
-user. `Scripts/Deploy-DailyBrief.ps1` validates required names and
+user. Where the existing private `efa-postgres` runtime already holds the
+password, `Scripts/Bootstrap-EfaRuntimeSecretsFromPostgres.ps1` can transfer
+it directly into that protected local file without printing it.
+`Scripts/Deploy-DailyBrief.ps1` validates required names and
 `efa-postgres:5432` before it rebuilds/recreates only `efa-daily-brief`; it
 keeps an image rollback reference and never displays values.
 

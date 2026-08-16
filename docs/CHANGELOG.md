@@ -6,6 +6,9 @@
   tracked names-only template, masked interactive initializer with
   current-user ACL, and a fail-safe, `--env-file` Docker Compose wrapper that
   targets only `efa-daily-brief` and retains an image rollback reference.
+- Redeployed `efa-daily-brief` using the protected local runtime env and
+  confirmed the 2026-08-15 `SUCCESS_ZERO` CPC presentation through one
+  read-only Telegram representation request. No channel message was sent.
 
 - Fixed Daily Brief CPC freshness to use successful `cpc_collection_runs`, not
   the presence of CPC detail rows. A successful zero-row report is now
