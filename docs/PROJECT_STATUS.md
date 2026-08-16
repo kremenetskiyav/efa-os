@@ -145,6 +145,16 @@ private `efa-tools` Docker network instead of `host.docker.internal`. This
 removes an unnecessary host-gateway dependency while preserving the existing
 database, SSL and credential-secret settings.
 
+### Local Runtime Secrets
+
+Private Docker services receive database runtime settings from a user-local
+`runtime.env`, outside the repository. The tracked template contains names
+only. `Scripts/Initialize-EfaRuntimeSecrets.ps1` creates the file through
+masked interactive password input and restricts its Windows ACL to the current
+user. `Scripts/Deploy-DailyBrief.ps1` validates required names and
+`efa-postgres:5432` before it rebuilds/recreates only `efa-daily-brief`; it
+keeps an image rollback reference and never displays values.
+
 ## Ozon Performance API — working read-only baseline
 
 The private `Ozon Performance OAuth2` n8n credential type is deployed with

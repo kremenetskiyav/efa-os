@@ -2,6 +2,11 @@
 
 ## 2026-08-16
 
+- Added the local-only Daily Brief runtime-secret deployment contract: a
+  tracked names-only template, masked interactive initializer with
+  current-user ACL, and a fail-safe, `--env-file` Docker Compose wrapper that
+  targets only `efa-daily-brief` and retains an image rollback reference.
+
 - Fixed Daily Brief CPC freshness to use successful `cpc_collection_runs`, not
   the presence of CPC detail rows. A successful zero-row report is now
   explicitly `SUCCESS_ZERO`, preserves zero spend/orders without synthetic
