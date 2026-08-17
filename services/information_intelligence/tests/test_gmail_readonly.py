@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import base64
 import unittest
+from unittest.mock import patch
+from urllib.error import HTTPError
 
 from services.information_intelligence.gmail_readonly import (
     ALLOWED_GMAIL_OPERATIONS, GMAIL_READONLY_SCOPE, is_confirmed_ozon,
@@ -9,6 +11,7 @@ from services.information_intelligence.gmail_readonly import (
 )
 from services.information_intelligence.gmail_routing import EVENT_CANDIDATE, ROUTINE_OPERATIONAL, route_message
 from services.information_intelligence.gmail_persistence import _collection_ref
+from services.information_intelligence.gmail_polling import run
 
 
 def b64(value: str) -> str:
@@ -71,6 +74,26 @@ class GmailReadOnlyTests(unittest.TestCase):
         ], "mimeType": "text/html", "body": {"data": b64("<style>.fbs{content:'изменение'}</style><p>FBS: новый заказ</p>")}}})
         self.assertEqual(message.normalized_text, "FBS: новый заказ")
         self.assertEqual(route_message(message)[0], ROUTINE_OPERATIONAL)
+
+    def test_polling_maps_auth_failure_without_writes(self):
+        with patch("services.information_intelligence.gmail_polling.load_token", return_value={}), \
+             patch("services.information_intelligence.gmail_polling.read_recent_messages", side_effect=HTTPError("u", 401, "", None, None)):
+            self.assertEqual(run(2)["status"], "AUTH_FAILED")
+
+    def test_expired_token_refresh_rejects_broader_scope(self):
+        from services.information_intelligence.gmail_readonly import refresh_access_token
+        from pathlib import Path
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory:
+            token_file = Path(directory) / "token.json"
+            token = {"access_token": "old", "refresh_token": "refresh", "scopes": [GMAIL_READONLY_SCOPE]}
+            with patch("services.information_intelligence.gmail_readonly.client_config_path", return_value=Path(directory) / "client.json"), \
+                 patch("services.information_intelligence.gmail_readonly.urlopen") as opener:
+                (Path(directory) / "client.json").write_text('{"client_id":"id","client_secret":"secret"}', encoding="utf-8")
+                response = opener.return_value.__enter__.return_value
+                response.read.return_value = b'{"access_token":"new","scope":"https://www.googleapis.com/auth/gmail.modify"}'
+                with self.assertRaises(ValueError):
+                    refresh_access_token(token, token_file)
 
 
 if __name__ == "__main__":

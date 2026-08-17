@@ -12,6 +12,7 @@ import hashlib
 import json
 from pathlib import Path
 import re
+import time
 from typing import Any, Callable
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
@@ -19,6 +20,7 @@ from urllib.request import Request, urlopen
 
 GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly"
 GMAIL_API_ROOT = "https://gmail.googleapis.com/gmail/v1/users/me"
+GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 ALLOWED_GMAIL_OPERATIONS = frozenset({"messages.list", "messages.get"})
 MAX_CANDIDATE_MESSAGES = 50
 
@@ -46,6 +48,31 @@ def load_token(path: Path | None = None) -> dict[str, Any]:
     require_exact_scope(token.get("scopes"))
     if not isinstance(token.get("access_token"), str) or not token["access_token"]:
         raise ValueError("Gmail token is missing access_token")
+    if token.get("expires_at", 0) <= time.time() + 60:
+        return refresh_access_token(token, path)
+    return token
+
+
+def refresh_access_token(token: dict[str, Any], path: Path) -> dict[str, Any]:
+    """Refresh only the local OAuth token; this never calls a Gmail write API."""
+    if not isinstance(token.get("refresh_token"), str) or not token["refresh_token"]:
+        raise ValueError("Gmail token is missing refresh_token")
+    config = json.loads(client_config_path().read_text(encoding="utf-8"))
+    payload = urlencode({"client_id": config["client_id"], "client_secret": config["client_secret"],
+                         "refresh_token": token["refresh_token"], "grant_type": "refresh_token"}).encode()
+    request = Request(GOOGLE_TOKEN_URL, data=payload, headers={"Content-Type": "application/x-www-form-urlencoded"}, method="POST")
+    with urlopen(request, timeout=20) as response:
+        refreshed = json.loads(response.read().decode("utf-8"))
+    scopes = refreshed.get("scope", " ".join(token["scopes"])).split()
+    require_exact_scope(scopes)
+    token["access_token"] = refreshed["access_token"]
+    token["scopes"] = scopes
+    token["expires_at"] = time.time() + int(refreshed.get("expires_in", 3600))
+    path.write_text(json.dumps(token, ensure_ascii=False, indent=2), encoding="utf-8")
+    try:
+        path.chmod(0o600)
+    except OSError:
+        pass
     return token
 
 

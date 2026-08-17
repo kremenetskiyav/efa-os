@@ -6,6 +6,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
 from pathlib import Path
 import secrets
+import time
 from urllib.parse import parse_qs, urlencode, urlparse
 from urllib.request import Request, urlopen
 import webbrowser
@@ -67,6 +68,7 @@ def _exchange(client: dict[str, str], code: str) -> dict:
     scopes = token.get("scope", "").split()
     require_exact_scope(scopes)
     token["scopes"] = scopes
+    token["expires_at"] = time.time() + int(token.get("expires_in", 3600))
     return token
 
 

@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-08-17 — Automated Ozon Gmail polling
+
+- Activated the single hourly host scheduler for `OZON_GMAIL_NOTIFICATIONS`
+  with a 48-hour overlap window, local OAuth token refresh and a concurrency
+  lock. The Python adapter retains `gmail.readonly` only; no Gmail write path
+  or Daily Brief integration was added.
+- Confirmed the scheduled path with routine-only FBS mail: `SUCCESS_ZERO`, two
+  operational notifications filtered and zero Information Intelligence events.
+- Aborted the unused manual Premium Exit Probe and removed its uncommitted
+  artifacts. Natural trial expiry and existing production collectors remain the
+  entitlement evidence path.
+
 ## 2026-08-17 — Read-only Ozon Gmail ingestion
 
 - Added a local Python Gmail Authorization Code adapter with the exact

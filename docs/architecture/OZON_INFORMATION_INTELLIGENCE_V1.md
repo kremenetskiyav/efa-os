@@ -29,7 +29,9 @@ must confirm Ozon provenance before ingestion. Routine order, status, stock and
 movement notices are `ROUTINE_OPERATIONAL / NO_EVENT`, as their operational data
 already comes from Seller API. Policy, commission, contract, finance, logistics,
 promotion, advertising, Premium, marking and compliance notices are deterministic
-review candidates. Polling and Daily Brief integration are not active.
+review candidates. Polling is active hourly with a 48-hour overlap window and
+uses a single Windows host task because the protected token is intentionally
+outside n8n. Daily Brief integration is not active.
 
 The confirmed Seller News listing is
 `https://seller.ozon.ru/media/news/`. Its first one-shot public retrieval

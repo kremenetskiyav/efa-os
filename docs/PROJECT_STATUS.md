@@ -15,19 +15,16 @@
 - Detailed restore order and mode controls are documented in
   `docs/TRANSFER_RECOVERY.md`.
 
-## Premium exit baseline v0.1 — PREPARED / BEFORE PENDING
+## Premium exit baseline v0.1 — ABORTED / NOT REQUIRED FOR DECISION
 
 - The home computer remains the only `PRODUCTION` host; any second computer is
   `DEV_ONLY`.
 - The Premium trial is approved to expire without purchase at 00:20
   Europe/Moscow on 2026-08-19. The decision is `FREE OBSERVATION`.
-- `services/premium_exit_baseline` defines eight bounded read-only capability
-  checks, deterministic result classification, secret-redacted local evidence
-  and BEFORE/AFTER comparison. Evidence belongs only in
-  `C:\Users\Andrey\.efa-os\evidence\premium_exit\`.
-- BEFORE is pending because the existing n8n manual workflows do not expose the
-  complete eight-call set without persistence/fan-out. No credential is read
-  outside n8n and no production workflow has been changed.
+- The trial will expire naturally without a Premium, Plus or Pro purchase.
+  Post-expiry production collectors remain the authoritative entitlement
+  evidence. The unfinished manual probe was intentionally discarded; no
+  production workflow was changed.
 
 ## Baseline
 
@@ -68,7 +65,9 @@ excluded. A dedicated local `gmail.readonly` adapter now reads the technical
 `OZON_GMAIL_NOTIFICATIONS` is registered through the same source/check/event
 model. The first controlled collection found two authenticated FBS order
 notifications; both were correctly classified `ROUTINE_OPERATIONAL / NO_EVENT`.
-Gmail polling and Daily Brief integration remain **not active**.
+Gmail polling is **active hourly** with a 48-hour overlap window through the
+protected local Python adapter. Its scope remains `gmail.readonly`; Daily Brief
+integration is **not yet active**.
 
 The deterministic Legal/Contract Monitor now adds semantic HTML/text/PDF
 canonicalization, heading/clause/table units, legal unit diffing, structured
