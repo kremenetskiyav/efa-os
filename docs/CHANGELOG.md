@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-08-17 — Premium exit baseline preparation
+
+- Added deterministic, credential-free Premium entitlement evidence contracts
+  for BEFORE, AFTER and comparison phases.
+- Added eight read-only API contracts, secret redaction, result classification
+  and synthetic comparison coverage.
+- Recorded the approved free-observation decision and the n8n credential-bound
+  execution gate; no Premium entitlement result has been claimed yet.
+
 ## 2026-08-17 — Transfer/recovery checkpoint
 
 - Added a reproducible PostgreSQL recovery Compose definition without secrets.
