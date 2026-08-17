@@ -63,7 +63,12 @@ returned HTTP 307 during the single allowed public preview, so no source or
 article baseline was persisted and no schedule was created. Seller-specific
 `Главное` notices use the same `OzonInformationEvent` model as manual evidence;
 UI scraping, browser/session extraction and a public Seller-push webhook are
-excluded. Gmail inbound remains future research.
+excluded. A dedicated local `gmail.readonly` adapter now reads the technical
+`info.efa.ozon@gmail.com` mailbox without n8n, mailbox mutation or polling.
+`OZON_GMAIL_NOTIFICATIONS` is registered through the same source/check/event
+model. The first controlled collection found two authenticated FBS order
+notifications; both were correctly classified `ROUTINE_OPERATIONAL / NO_EVENT`.
+Gmail polling and Daily Brief integration remain **not active**.
 
 The deterministic Legal/Contract Monitor now adds semantic HTML/text/PDF
 canonicalization, heading/clause/table units, legal unit diffing, structured

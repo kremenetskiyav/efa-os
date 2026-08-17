@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-08-17 — Read-only Ozon Gmail ingestion
+
+- Added a local Python Gmail Authorization Code adapter with the exact
+  `gmail.readonly` scope, protected outside-Git token storage, deterministic
+  RFC 2047 header normalization and no Gmail write operations.
+- Applied migration 009 after a validated PostgreSQL backup. It narrowly adds
+  `GMAIL_READ_ONLY` and `EMAIL_EVENT` to the existing Information Intelligence
+  contract.
+- Registered `OZON_GMAIL_NOTIFICATIONS`. Its first clean 30-day collection
+  confirmed two FBS order notifications as `ROUTINE_OPERATIONAL / NO_EVENT`;
+  no Gmail snapshot or Information Intelligence event was created. Exact replay
+  was idempotent. Polling and Daily Brief integration remain inactive.
+
 ## 2026-08-17 — Premium exit baseline preparation
 
 - Added deterministic, credential-free Premium entitlement evidence contracts

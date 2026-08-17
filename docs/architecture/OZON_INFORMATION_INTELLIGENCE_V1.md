@@ -16,7 +16,20 @@ The seller-specific Ozon Seller `Главное` hub is a high-value
 `MANUAL_EVIDENCE_SOURCE` for v0.1. A supported pull API was not found, Seller
 push covers operational events and hub coverage is unproven. UI scraping,
 browser/session emulation, undocumented endpoints and a public webhook are
-prohibited. Gmail inbound is future research only.
+prohibited.
+
+Authenticated Ozon Gmail is a separate, local read-only source. The dedicated
+technical mailbox is accessed only by a Python Authorization Code adapter with
+the exact `https://www.googleapis.com/auth/gmail.readonly` scope; tokens and
+client configuration stay in the protected user-local EFA OS directory, never
+in n8n or Git. It uses only Gmail `messages.list` and `messages.get`, retains
+normalized text and attachment metadata only, and never downloads attachments,
+loads remote images or changes mailbox state. Sender/domain and message context
+must confirm Ozon provenance before ingestion. Routine order, status, stock and
+movement notices are `ROUTINE_OPERATIONAL / NO_EVENT`, as their operational data
+already comes from Seller API. Policy, commission, contract, finance, logistics,
+promotion, advertising, Premium, marking and compliance notices are deterministic
+review candidates. Polling and Daily Brief integration are not active.
 
 The confirmed Seller News listing is
 `https://seller.ozon.ru/media/news/`. Its first one-shot public retrieval
@@ -108,9 +121,12 @@ that an effective-now change invalidates active economics.
 
 ## Persistence, failures and future orchestration
 
-Migration 008 is applied. Its four normalized tables now
+Migrations 008 and 009 are applied. The four normalized tables now
 support API and legal snapshots, checks/freshness, numeric legal changes, news
-events and manual evidence through the common event model.
+events, manual evidence and authenticated Gmail evidence through the common
+event model. Migration 009 narrowly adds the `GMAIL_READ_ONLY` retrieval method
+and `EMAIL_EVENT` kind; routine Gmail notifications create a `SUCCESS_ZERO`
+source check, not a snapshot or event.
 
 States are `SUCCESS`, `SUCCESS_ZERO`, `BASELINE_CREATED`,
 `SOURCE_UNAVAILABLE`, `HTTP_FAILED`, `PARSE_FAILED`, `CONTRACT_CHANGED`,
