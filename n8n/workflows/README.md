@@ -2,11 +2,11 @@
 
 ## OZON workflow - Phase A
 
-Canonical local workflow ID: `q0yXnbt8BqFnukQj`
+Canonical local workflow ID: `B2DiIq630Yb2fXR8`.
 
-Latest supplied export version: `2b069584-6423-4fd6-a849-6f9b4769c94d`
-
-The workflow contains 51 nodes and is currently inactive in the supplied export.
+The workflow contains 57 nodes and is inactive in both the canonical export and
+the current production instance. Older local workflows with similar names are
+not recovery sources.
 
 The production n8n instance remains local. GitHub stores the sanitized source-control representation and documentation.
 
@@ -14,7 +14,9 @@ The production n8n instance remains local. GitHub stores the sanitized source-co
 
 The OZON API key must never be stored in this repository. The sanitized local export replaces the API key with `__OZON_API_KEY__`. The real credential remains in local n8n credential storage.
 
-The current workflow uses seven OZON HTTP Request nodes that require the API credential:
+The workflow uses the local Seller API header credential. Credential IDs and
+secret values are deliberately absent from the canonical export and must be
+bound manually during an authorised recovery.
 
 - Get Products
 - Get Product Info

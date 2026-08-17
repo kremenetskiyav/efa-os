@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-08-17 — Transfer/recovery checkpoint
+
+- Added a reproducible PostgreSQL recovery Compose definition without secrets.
+- Documented `DEV_ONLY`, `STANDBY` and single-instance `PRODUCTION` modes.
+- Recorded recovery order, credential reconstruction requirements and the
+  duplicate-production safety gate.
+- Extended ignore rules for local backups, imports, evidence, PDFs, generated
+  previews and browser/session data.
+
 ## 2026-08-16
 
 - Added a deterministic `MANUAL_ONLY` fallback contract for official Ozon

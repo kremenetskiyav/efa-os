@@ -40,12 +40,20 @@ logs/
 postgres_data/
 n8n_data/
 docker-data/
+backups/
+transfer/
+imports/
+evidence/
+browser-data/
+sessions/
+generated-previews/
 
 # Local source data and spreadsheets are not part of the GitHub repository
 EFA Products/
 *.xlsx
 *.xls
 *.csv
+*.pdf
 
 # Versioned PostgreSQL schema migrations
 !database/

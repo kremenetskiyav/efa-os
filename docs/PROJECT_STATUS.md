@@ -1,5 +1,20 @@
 # Project Status
 
+## Transfer/recovery checkpoint — 2026-08-17
+
+- GitHub `main` is canonical for code, migrations, sanitised workflow
+  definitions, configuration templates and recovery documentation.
+- The home computer remains the only production runtime. A second computer must
+  default to `DEV_ONLY`; duplicate schedules and deliveries are prohibited.
+- A validated PostgreSQL recovery backup and metadata-only transfer bundle are
+  stored outside Git under `C:\Users\Andrey\.efa-os\`.
+- Full recovery requires manual restoration of protected runtime settings and
+  manual recreation/re-authorisation of n8n credentials. Secret values and
+  private Ozon evidence are intentionally excluded from Git and the default
+  manifest.
+- Detailed restore order and mode controls are documented in
+  `docs/TRANSFER_RECOVERY.md`.
+
 ## Baseline
 
 Date: 2026-08-14

@@ -1,0 +1,29 @@
+# Recovery-only definition of the base EFA OS PostgreSQL runtime.
+# Real values must come from a local runtime.env and must never be committed.
+# The external volume and network are created explicitly during recovery so an
+# existing production volume cannot be replaced implicitly by Compose.
+services:
+  efa-postgres:
+    image: postgres:16@sha256:33f923b05f64ca54ac4401c01126a6b92afe839a0aa0a52bc5aeb5cc958e5f20
+    container_name: efa-postgres
+    restart: "no"
+    environment:
+      POSTGRES_DB: ${EFA_DB_NAME}
+      POSTGRES_USER: ${EFA_DB_USER}
+      POSTGRES_PASSWORD: ${EFA_DB_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+      - efa_pgdata:/var/lib/postgresql/data
+    networks:
+      - efa-tools
+
+volumes:
+  efa_pgdata:
+    external: true
+    name: efa_pgdata
+
+networks:
+  efa-tools:
+    external: true
+    name: efa-tools
