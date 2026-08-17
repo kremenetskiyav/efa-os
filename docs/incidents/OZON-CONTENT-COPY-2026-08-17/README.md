@@ -98,4 +98,3 @@ rights to the content. This is `OWNER_OBSERVED_SUPPORT_GUIDANCE`, not an
 independently verified legal policy. The package is `NOT_READY`: original EFA
 card URLs/IDs, immutable case captures and rights/provenance evidence are still
 missing. No complaint draft is part of this phase.
-

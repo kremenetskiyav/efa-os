@@ -58,4 +58,3 @@ review.
   evidence capture and comparison.
 - `P3`: reserved for future partial/uncertain discoveries; none are registered
   yet.
-
