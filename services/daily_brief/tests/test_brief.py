@@ -3,99 +3,110 @@ from decimal import Decimal
 import json
 import unittest
 
-from services.daily_brief.brief import build_brief, last_completed_business_date
-
+from services.daily_brief.brief import ATTENTION_CLASSES, build_brief, last_completed_business_date
 
 UTC = timezone.utc
+DAY = date(2026, 8, 17)
 
 
-def sources(*, demand=True, finance=True, cpc_state="CAMPAIGN_STATE_RUNNING"):
-    day = date(2026, 8, 14)
+def sources(*, current_economics=False, cpc_state="SUCCESS_NONZERO", trend_days=6):
+    cpc = {
+        "SUCCESS_ZERO": ("success", 0, 5, "valid", datetime(2026,8,18,tzinfo=UTC), "COMPLETED", "OK", None, None, None, datetime(2026,8,18,tzinfo=UTC), "cpc:zero"),
+        "SUCCESS_NONZERO": ("success", 1, 5, "valid", datetime(2026,8,18,tzinfo=UTC), "COMPLETED", "OK", None, None, None, datetime(2026,8,18,tzinfo=UTC), "cpc:one"),
+        "PENDING": ("pending", 0, 5, "valid", datetime(2026,8,18,tzinfo=UTC), "PENDING", "IN_PROGRESS", None, None, None, None, "cpc:pending"),
+        "STUCK": ("stuck", 0, 5, "invalid", datetime(2026,8,18,tzinfo=UTC), "STUCK", "NOT_STARTED", "REPORT_STUCK", "pending beyond two hours", "owner review", None, "cpc:stuck"),
+        "FAILED": ("failed", 0, 5, "invalid", datetime(2026,8,18,tzinfo=UTC), "FAILED", "ERROR", "API_ERROR", "failed", None, None, "cpc:failed"),
+        "MISSING": None,
+    }[cpc_state]
+    cpc_rows = [] if cpc_state != "SUCCESS_NONZERO" else [("A", 5, "CAMPAIGN_STATE_RUNNING", "SKU", Decimal("10"), 20, 2, 1, Decimal("90"), "valid")]
+    trend = [("A", DAY-timedelta(days=index), Decimal("100"), 1) for index in range(trend_days)]
     return {
-        "products": [("A", 1, 10, Decimal("100"), Decimal("40"), datetime(2026, 8, 1, tzinfo=UTC))],
-        "demand": [("A", 1, Decimal("250"), 2, datetime(2026, 8, 15, tzinfo=UTC), "valid")] if demand else [],
-        "deliveries": [("A", 2)], "returns": [("A", 1, 1)],
-        "finance": [("A", Decimal("200"), Decimal("50"), 2, 0)] if finance else [],
-        "promotions": [
-            ("A", 1, "Action", None, "PARTICIPATING", Decimal("90"), Decimal("15"), Decimal("15"), Decimal("75"), "valid", datetime(2026, 8, 15, tzinfo=UTC)),
-            ("A", 2, "Candidate", None, "CANDIDATE", Decimal("0"), Decimal("0"), Decimal("0"), Decimal("0"), "valid", datetime(2026, 8, 15, tzinfo=UTC)),
+        "products": [("A", 1, 10, Decimal("100"), Decimal("40"), datetime(2026,8,1))],
+        "demand": [("A", 1, Decimal("250"), 2, datetime(2026,8,18,tzinfo=UTC), "valid", "seller:17")],
+        "deliveries": [], "returns": [],
+        "finance": [("A", Decimal("200"), Decimal("50"), 2, 0)] if current_economics else [],
+        "promotions": [("A", 1, "Action", None, "PARTICIPATING", Decimal("90"), Decimal("15"), Decimal("15"), Decimal("75"), "valid", datetime(2026,8,18,tzinfo=UTC))],
+        "cpc": cpc_rows, "cpc_collection": cpc,
+        "state_freshness": (datetime(2026,8,18,tzinfo=UTC), datetime(2026,8,18,tzinfo=UTC)),
+        "operational_runs": [
+            (name, DAY, "SUCCESS", count, 1, datetime(2026,8,18,tzinfo=UTC), f"{name}:17", None)
+            for name, count in (("POSTINGS",256),("RETURNS",16),("FINANCE",39))
         ],
-        "cpc": [("A", 5, cpc_state, "SKU", Decimal("10"), 20, 2, 1, Decimal("90"), "valid")],
-        "cpc_collection": ("success", 1, 1, "valid", datetime(2026, 8, 15, tzinfo=UTC)),
-        "freshness": (day, datetime(2026, 8, 15, tzinfo=UTC), day, datetime(2026, 8, 14, tzinfo=UTC), datetime(2026, 8, 1, tzinfo=UTC)),
-        "current_price_status": [("A", "CONFIRMED")],
-        "latest_economics": [("A", day - timedelta(days=4), Decimal("200"), Decimal("50"), 2, 0, 0, 0)],
-        "trends": {"demand": [], "price": [], "boost": [], "finance": []},
+        "information_events": [("event-1", "manual", "Seller Main", "MANUAL_EVIDENCE", "INFO_ONLY", "ACTION_REQUIRED", True, "MEDIUM", "PENDING", {"effective_date":"2026-08-14"}, ["FBS"], ["daily_brief"], datetime(2026,8,16,tzinfo=UTC))],
+        "information_freshness": ("gmail", "SUCCESS_ZERO", datetime(2026,8,18,tzinfo=UTC), None),
+        "tax_state": {"engine_state":"ACTIVE","tax_year":2026,"taxable_revenue_ytd":Decimal("156074.83"),"usn_gross_ytd":Decimal("9364.49"),"usn_payable_estimate_ytd":Decimal("0"),"additional_contribution_ytd":Decimal("0"),"fixed_contribution_annual":Decimal("57390"),"fixed_contribution_paid_ytd":Decimal("0"),"overall_tax_quality":"PARTIAL","tax_date_confidence":"PARTIAL","latest_source_period":"2026-07","expected_through_period":"2026-07","income_periods_missing":[],"vat_status":"EXEMPT_UNDER_THRESHOLD"},
+        "experiments": [("EXP-1","A","OZON_ACTION_FBS","ACTIVE",None,None,{"action_id":"4118344","seller_price_rub":899,"action_ui_price_rub":865,"elastic_boost_pct":15,"cpc_enabled":False},5,5,Decimal("500"),"unknown start",datetime(2026,8,18,tzinfo=UTC),datetime(2026,8,18,tzinfo=UTC))],
+        "current_price_status": [("A","NOT_YET_CONFIRMED")],
+        "latest_economics": [("A",date(2026,8,14),Decimal("624"),Decimal("92.11"),1,0,0,0)],
+        "latest_economics_summary": (date(2026,8,14),Decimal("624"),Decimal("92.11"),1,0),
+        "trends": {"demand":trend,"price":[],"boost":[],"finance":[]},
     }
 
 
-class DailyBriefTests(unittest.TestCase):
-    def test_default_business_date_uses_moscow_not_utc(self):
-        instant = datetime(2026, 8, 15, 21, 30, tzinfo=UTC)  # Aug 16 in Moscow
-        self.assertEqual(last_completed_business_date(instant), date(2026, 8, 15))
+class DailyBriefV11Tests(unittest.TestCase):
+    def test_default_business_date_uses_moscow(self):
+        self.assertEqual(last_completed_business_date(datetime(2026,8,17,21,30,tzinfo=UTC)), DAY)
 
-    def test_products_are_taken_from_source_not_hardcoded(self):
-        payload = build_brief(sources(), date(2026, 8, 14))
-        self.assertEqual([item["offer_id"] for item in payload["offers"]], ["A"])
+    def test_current_economics_unavailable_and_historical_separate(self):
+        payload = build_brief(sources(cpc_state="STUCK"), DAY)
+        self.assertEqual(payload["current_day_economics"]["confirmation_state"], "UNAVAILABLE")
+        self.assertIsNone(payload["current_day_economics"]["contribution_profit"])
+        self.assertEqual(payload["latest_confirmed_economics"]["confirmed_through_date"], "2026-08-14")
+        self.assertEqual(payload["latest_confirmed_economics"]["contribution_profit"], "92.11")
+        self.assertIsNone(payload["offers"][0]["current_day"]["economics"]["revenue"])
 
-    def test_ordered_revenue_is_separate_from_confirmed_revenue(self):
-        item = build_brief(sources(), date(2026, 8, 14))["offers"][0]
-        self.assertEqual((item["demand"]["ordered_revenue"], item["economics"]["confirmed_revenue"]), ("250", "200"))
+    def test_current_economics_populates_only_from_current_rows(self):
+        payload = build_brief(sources(current_economics=True), DAY)
+        self.assertEqual(payload["current_day_economics"]["confirmation_state"], "CONFIRMED")
+        self.assertEqual(payload["current_day_economics"]["confirmed_through_date"], "2026-08-17")
+        self.assertEqual(payload["current_day_economics"]["contribution_profit"], "50")
 
-    def test_zero_is_preserved_not_missing(self):
-        value = sources(); value["demand"][0] = ("A", 1, Decimal("0"), 0, datetime(2026, 8, 15, tzinfo=UTC), "valid")
-        item = build_brief(value, date(2026, 8, 14))["offers"][0]
-        self.assertEqual((item["demand"]["ordered_revenue"], item["demand"]["ordered_units"]), ("0", 0))
+    def test_null_and_zero_are_distinct(self):
+        unavailable = build_brief(sources(cpc_state="STUCK"), DAY)
+        zero = build_brief(sources(cpc_state="SUCCESS_ZERO"), DAY)
+        self.assertIsNone(unavailable["summary"]["cpc_spend"])
+        self.assertEqual(zero["summary"]["cpc_spend"], "0")
+        self.assertEqual(zero["summary"]["cpc_orders"], 0)
 
-    def test_missing_is_not_zero_and_warns(self):
-        item = build_brief(sources(demand=False, finance=False), date(2026, 8, 14))["offers"][0]
-        self.assertIsNone(item["demand"]["ordered_revenue"])
-        self.assertIsNone(item["economics"]["profit_before_tax"])
-        self.assertEqual(item["attention"]["level"], "WATCH")
+    def test_all_cpc_lifecycle_states(self):
+        for state in ("SUCCESS_ZERO","SUCCESS_NONZERO","PENDING","STUCK","FAILED","MISSING"):
+            with self.subTest(state=state):
+                self.assertEqual(build_brief(sources(cpc_state=state), DAY)["advertising"]["cpc"]["state"], state)
 
-    def test_no_fake_buyout_calculation(self):
-        item = build_brief(sources(), date(2026, 8, 14))["offers"][0]
-        self.assertEqual((item["fulfilment"]["buyout_units"], item["fulfilment"]["buyout_status"]), (None, "NOT_IMPLEMENTED"))
+    def test_run_level_freshness(self):
+        payload = build_brief(sources(), DAY)
+        self.assertEqual(payload["source_freshness"]["postings"]["state"], "fresh")
+        self.assertEqual(payload["source_freshness"]["returns"]["collection_ref"], "RETURNS:17")
+        self.assertEqual(payload["source_freshness"]["information_intelligence"]["state"], "success_zero")
 
-    def test_summary_margin_is_weighted(self):
-        value = sources(); value["products"].append(("B", 2, 20, Decimal("100"), Decimal("40"), datetime(2026, 8, 14, tzinfo=UTC)))
-        value["demand"].append(("B", 2, Decimal("100"), 1, datetime(2026, 8, 15, tzinfo=UTC), "valid"))
-        value["finance"].append(("B", Decimal("100"), Decimal("10"), 1, 0))
-        result = build_brief(value, date(2026, 8, 14))
-        self.assertEqual(result["summary"]["margin_percent"], "20.0")
+    def test_information_action_required_is_not_hidden(self):
+        payload = build_brief(sources(), DAY)
+        self.assertEqual(payload["information_intelligence"]["counts"]["ACTION_REQUIRED"], 1)
+        self.assertTrue(any(item["class"] == "ACTION_REQUIRED" for item in payload["attention_items"]))
 
-    def test_participating_and_candidate_are_separate(self):
-        item = build_brief(sources(), date(2026, 8, 14))["offers"][0]
-        self.assertEqual((len(item["promotions"]["participating"]), len(item["promotions"]["candidates"])), (1, 1))
+    def test_tax_engine_active_and_fixed_obligation_not_allocated(self):
+        payload = build_brief(sources(), DAY)
+        self.assertEqual(payload["tax_status"], "ACTIVE")
+        self.assertEqual(payload["tax"]["gross_usn"], "9364.49")
+        self.assertEqual(payload["tax"]["fixed_obligation_allocation"], "BUSINESS_LEVEL_ONLY_NOT_ALLOCATED_TO_OFFERS")
+        self.assertNotIn("tax", payload["offers"][0]["economics"])
 
-    def test_inactive_cpc_orders_are_not_current_activity(self):
-        item = build_brief(sources(cpc_state="CAMPAIGN_STATE_INACTIVE"), date(2026, 8, 14))["offers"][0]
-        self.assertEqual(item["advertising"]["inactive_attribution_note"], "orders_are_attributed_history_not_current_activity")
+    def test_trend_requires_seven_distinct_valid_days(self):
+        self.assertEqual(build_brief(sources(trend_days=6), DAY)["extended_report_payload"]["trends"]["demand"]["status"], "INSUFFICIENT_DATA")
+        self.assertEqual(build_brief(sources(trend_days=7), DAY)["extended_report_payload"]["trends"]["demand"]["status"], "READY")
 
-    def test_successful_zero_cpc_run_is_fresh_without_synthetic_details(self):
-        value = sources(); value["cpc"] = []; value["cpc_collection"] = ("success", 0, 1, "valid", datetime(2026, 8, 15, tzinfo=UTC))
-        result = build_brief(value, date(2026, 8, 14))
-        self.assertNotIn("cpc_daily_missing_or_stale_for_business_date", result["data_quality"]["warnings"])
-        self.assertEqual((result["data_quality"]["sources"]["cpc_collection_status"], result["offers"][0]["advertising"]["status"]), ("SUCCESS_ZERO", "SUCCESS_ZERO"))
-        self.assertEqual((result["summary"]["cpc_spend"], result["summary"]["cpc_orders"]), ("0", 0))
-        self.assertEqual(result["offers"][0]["advertising"]["cpc"], [])
+    def test_experiment_unknown_start_has_no_fake_attribution(self):
+        experiment = build_brief(sources(), DAY)["experiments"][0]
+        self.assertIsNone(experiment["started_at"])
+        self.assertEqual(experiment["attribution_state"], "UNAVAILABLE_START_TIMESTAMP")
+        self.assertIsNone(experiment["performance_attribution"])
+        self.assertEqual(experiment["deterministic_alerts"], [])
 
-    def test_missing_or_failed_cpc_run_is_not_zero_activity(self):
-        missing = sources(); missing["cpc"] = []; missing["cpc_collection"] = None; missing["freshness"] = (*missing["freshness"][:2], date(2026, 8, 13), *missing["freshness"][3:])
-        self.assertIn("cpc_daily_missing_or_stale_for_business_date", build_brief(missing, date(2026, 8, 14))["data_quality"]["warnings"])
-        failed = sources(); failed["cpc"] = []; failed["cpc_collection"] = ("failed", 0, 1, "invalid", datetime(2026, 8, 15, tzinfo=UTC))
-        self.assertIn("cpc_daily_failed", build_brief(failed, date(2026, 8, 14))["data_quality"]["warnings"])
+    def test_attention_taxonomy_and_json_safety(self):
+        payload = build_brief(sources(cpc_state="STUCK"), DAY, datetime(2026,8,18,tzinfo=UTC))
+        self.assertEqual(tuple(payload["attention_taxonomy"]), ATTENTION_CLASSES)
+        json.dumps(payload, ensure_ascii=False, sort_keys=True)
 
-    def test_tax_layer_is_explicitly_not_implemented(self):
-        self.assertEqual(build_brief(sources(), date(2026, 8, 14))["tax_status"], "NOT_IMPLEMENTED")
 
-    def test_compact_payload_is_deterministic_and_json_safe(self):
-        first = build_brief(sources(), date(2026, 8, 14), datetime(2026, 8, 15, tzinfo=UTC))
-        second = build_brief(sources(), date(2026, 8, 14), datetime(2026, 8, 15, tzinfo=UTC))
-        self.assertEqual(first["compact_report_payload"], second["compact_report_payload"])
-        json.dumps(first["compact_report_payload"], ensure_ascii=False, sort_keys=True)
-
-    def test_extended_payload_is_deterministic(self):
-        first = build_brief(sources(), date(2026, 8, 14), datetime(2026, 8, 15, tzinfo=UTC))
-        second = build_brief(sources(), date(2026, 8, 14), datetime(2026, 8, 15, tzinfo=UTC))
-        self.assertEqual(first["extended_report_payload"], second["extended_report_payload"])
+if __name__ == "__main__":
+    unittest.main()

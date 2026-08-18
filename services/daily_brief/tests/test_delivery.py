@@ -5,12 +5,12 @@ import unittest
 from services.daily_brief.brief import build_brief
 from services.daily_brief.delivery import InMemoryDeliveryLedger, deliver_channels
 from services.daily_brief.renderers import render_email_html, render_telegram_text
-from services.daily_brief.tests.test_brief import sources
+from services.daily_brief.tests.test_brief import DAY, sources
 
 
 class DeliveryContractTests(unittest.TestCase):
     def setUp(self):
-        self.payload = build_brief(sources(), date(2026, 8, 14), datetime(2026, 8, 15, tzinfo=timezone.utc))
+        self.payload = build_brief(sources(), DAY, datetime(2026, 8, 18, tzinfo=timezone.utc))
 
     def test_channel_idempotency_and_test_scope(self):
         ledger = InMemoryDeliveryLedger(); sent = []

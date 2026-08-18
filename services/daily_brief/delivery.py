@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from hashlib import sha256
 from typing import Any, Callable, Protocol
 
-REPORT_VERSION = "v0.1"
+REPORT_VERSION = "v1.1"
 TARGET_SCHEDULE = "08:15 Europe/Moscow"
 
 

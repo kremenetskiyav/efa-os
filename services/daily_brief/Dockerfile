@@ -7,6 +7,7 @@ RUN apt-get update \
 COPY services/daily_brief/requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir -r /tmp/requirements.txt
 COPY services /app/services
+COPY config/taxpayer.2026.json /app/config/taxpayer.2026.json
 
 USER nobody
 EXPOSE 8080

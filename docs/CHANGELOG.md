@@ -1,5 +1,28 @@
 # Changelog
 
+## 2026-08-18 — Daily Brief v1.1
+
+- Separated `current_day_economics` from `latest_confirmed_economics` globally
+  and per offer. Historical contribution is never presented as the requested
+  day's result; null, zero, missing, pending, stuck and stale remain distinct.
+- Added run-level freshness for Seller Analytics, Postings, Returns, Finance,
+  CPC, Information Intelligence and Tax Engine. CPC now consumes the durable
+  async lifecycle and represents the 2026-08-17 report as `STUCK`, not zero.
+- Integrated persisted Information Intelligence `ACTION_REQUIRED` / `WATCH`
+  events and the existing deterministic Tax Engine without copying its tax
+  formulas or allocating fixed annual insurance to SKU economics.
+- Added migration 012 and registered `FBS-UF004B-4118344-V0.1` with
+  `started_at=NULL`, approved configuration/limits and explicitly unavailable
+  performance attribution.
+- Added the unified attention taxonomy and the seven-distinct-day trend gate;
+  refreshed compact Telegram, HTML and five-page PDF renderers.
+- Created and verified the pre-migration PostgreSQL backup, applied migration
+  012, passed the focused 38-test suite, and deployed the healthy private
+  `efa-daily-brief` service. The 2026-08-17 production dry-run confirmed 4
+  units / 2,695 RUB, current economics unavailable, latest confirmed 14.08,
+  CPC `STUCK`, Tax `ACTIVE / PARTIAL`, one `ACTION_REQUIRED`, one `WATCH`, and
+  unknown experiment start. No Telegram or email was sent.
+
 ## 2026-08-18 — Operational collectors lifecycle v1
 
 - Activated `CPCREPORTPOLLERV1` on its existing ten-minute schedule. It checks

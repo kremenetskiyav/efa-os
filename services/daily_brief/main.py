@@ -22,13 +22,17 @@ def main() -> int:
         print(f"ERROR: {error}")
         return 2
     if args.table:
-        print("offer_id | ordered_units | delivered_units | returned_units | ordered_revenue | profit_before_tax | margin | boost | promotion | cpc_spend | attention")
+        print("offer_id | ordered_units | delivered_units | returned_units | ordered_revenue | current_contribution | current_margin | latest_date | latest_contribution | cpc_state | attention")
         for item in brief["offers"]:
-            active = item["promotions"]["participating"]
-            boost = active[0]["current_boost"] if active else None
-            promotion = active[0]["action_title"] if active else None
-            spend = sum((float(entry["spend"]) for entry in item["advertising"]["cpc"]), 0) if item["advertising"]["cpc"] else None
-            print(" | ".join(str(value) if value is not None else "NULL" for value in (item["offer_id"], item["demand"]["ordered_units"], item["fulfilment"]["delivered_units"], item["fulfilment"]["returned_units"], item["demand"]["ordered_revenue"], item["economics"]["profit_before_tax"], item["economics"]["confirmed_margin_percent"], boost, promotion, spend, item["attention"]["level"])))
+            current = item["current_day"]["economics"]
+            latest = item["latest_confirmed_economics"]
+            print(" | ".join(str(value) if value is not None else "NULL" for value in (
+                item["offer_id"], item["demand"]["ordered_units"], item["fulfilment"]["delivered_units"],
+                item["fulfilment"]["returned_units"], item["demand"]["ordered_revenue"],
+                current["contribution_profit"], current["contribution_margin_pct"],
+                latest["confirmed_through_date"], latest["contribution_profit"],
+                item["advertising"]["state"], item["attention"]["level"],
+            )))
         print("summary: " + json.dumps(brief["summary"], ensure_ascii=False, sort_keys=True))
     else:
         print(json.dumps(brief, ensure_ascii=False, sort_keys=True))

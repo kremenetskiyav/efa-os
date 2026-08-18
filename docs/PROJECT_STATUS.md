@@ -145,11 +145,11 @@ logistics, advertising, COGS and payout. It may later derive gross revenue,
 adjustments, net revenue, USN tax, a separate additional-1% insurance
 contribution, conditional VAT, and after-tax economic profit.
 
-Tax Engine status: **NOT_IMPLEMENTED / WAITING_FOR_TAX_DATE_CONTRACT**. Before
-implementation, validate official FNS rules for marketplace/agent USN income
-date, loyalty-payment date, return timing, 2026 USN rules, the 2026 additional
-1% insurance limits, and VAT applicability/threshold/rate for this taxpayer.
-Next tax step: **official FNS tax-date / USN / 1% / VAT validation**.
+Tax Engine status: **ACTIVE / PARTIAL_DATA**. Its deterministic statutory state
+is available from the persisted June/July ledger and the existing 2026 taxpayer
+configuration. Exact tax dates and partner-loyalty semantics remain partial;
+the engine therefore exposes its quality explicitly and does not convert
+partial accounting evidence into confirmed offer-level tax economics.
 
 ## Commercial Baseline Collection v0.1 — active
 
@@ -221,30 +221,43 @@ must not be interpreted as current campaign activity. The project remains at
 The next stage is **Safe Commercial Experiment v0.1**; recommendations and all
 commercial control actions remain disabled.
 
-## Daily Commercial Brief v0.1 — read-only deterministic source of truth
+## Daily Commercial Brief v1.1 — read-only deterministic source of truth
 
-`python -m services.daily_brief.main [--date YYYY-MM-DD]` builds a compact and
-an extended JSON-safe report from canonical `products`, Seller daily demand,
-delivery/return outcomes, delivery-date confirmed finance via
-`vw_orders_profit_final`, the latest successful promotion state, and CPC daily
-history. It reads all PostgreSQL sources in a read-only transaction and makes
-no Ozon, database, collector, schedule, or tax-layer change.
+`python -m services.daily_brief.main [--date YYYY-MM-DD]` now builds the v1.1
+compact and extended payload from the same private read-only service. Current
+day demand/operations and `current_day_economics` are physically separate from
+`latest_confirmed_economics`; historical contribution is never carried into a
+current-day result. For 2026-08-17 current economics are `UNAVAILABLE`, while
+the latest confirmed economics are dated 2026-08-14.
 
-The brief makes time semantics explicit: `ordered_revenue` is ordered flow,
-not confirmed revenue; finance is delivery-date confirmed and is not mixed
-into ordered flow; returns are shown as events/units without inventing cohort
-buyout; `profit_before_tax` is the only profit term because the Tax Engine is
-not implemented. Missing or stale sources remain `NULL`/`NOT_AVAILABLE` and
-produce warnings. Participating promotions and candidates remain separate;
-inactive CPC attributed orders are historical attribution, not current
-campaign activity. Future PDF/email/Telegram delivery must consume these
-deterministic payloads rather than recompute metrics or use an LLM.
+Run-level freshness covers Seller Analytics, Postings, Returns, Finance, CPC,
+Information Intelligence and Tax Engine. Durable CPC lifecycle states remain
+distinct: `SUCCESS_ZERO`, `SUCCESS_NONZERO`, `PENDING`, `STUCK`, `FAILED` and
+`MISSING`; the 2026-08-17 report is represented as `STUCK`, not zero. Pending
+Information Intelligence `ACTION_REQUIRED` and `WATCH` events are included
+from persisted data. Tax Engine is `ACTIVE / PARTIAL_DATA` and supplies taxable
+revenue, gross USN, estimated payable, additional 1% and fixed insurance as a
+business-level obligation; no tax formula is copied into the brief and the
+fixed obligation is not allocated to offers.
+
+Migration 012 creates the minimal `commercial_experiments` registry. Existing
+experiment `FBS-UF004B-4118344-V0.1` is registered as active for `УФ 004Б`
+with its approved limits and configuration; `started_at` is intentionally
+`NULL`, so performance attribution is unavailable and no result is invented.
+Trend calculation requires at least seven distinct valid business days per
+offer series; shorter coverage is `INSUFFICIENT_DATA`.
+
+The unified deterministic attention classes are `ANOMALY`, `DATA_QUALITY`,
+`WATCH`, `ACTION_REQUIRED`, `INFORMATION_EVENT` and `EXPERIMENT_ALERT`.
+Telegram remains compact and the five-page PDF contains executive summary,
+freshness, offer economics, advertising/operations, experiments, Information
+Intelligence, Tax and data-quality notes.
 
 ## Production Daily Commercial Brief Delivery v1 — active
 
 Deterministic renderers now produce a five-page Cyrillic-safe A4 PDF, a short
 HTML email body and a compact Telegram message from the same Daily Brief
-payload. Delivery never recalculates business metrics. The presentation
+v1.1 payload. Delivery never recalculates business metrics. The presentation
 separates the operational `business_date` from `confirmed_through_date`; stale
 finance is labelled explicitly, `NULL` is never displayed as zero, cohort
 buyout and after-tax profit remain unavailable.
@@ -717,5 +730,6 @@ Target architecture:
   0, estimated USN payable 0 after eligible no-employee insurance reduction,
   fixed annual obligation 57,390 RUB kept separate, VAT status
   `EXEMPT_UNDER_THRESHOLD` at 0.78% threshold usage.
-- Tax Engine is not connected to Daily Brief, Price/Profit recommendations,
-  promotions or advertising.
+- Tax Engine is connected read-only to Daily Brief v1.1 through its existing
+  deterministic calculator and persisted ledger. It remains disconnected from
+  Price/Profit recommendations, promotions and advertising decisions.
