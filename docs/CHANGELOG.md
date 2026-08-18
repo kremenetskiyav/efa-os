@@ -11,6 +11,9 @@
 - Integrated persisted Information Intelligence `ACTION_REQUIRED` / `WATCH`
   events and the existing deterministic Tax Engine without copying its tax
   formulas or allocating fixed annual insurance to SKU economics.
+- Aligned Information Intelligence freshness with its persisted current event
+  set: successful data with events is `fresh`; `success_zero` now means a
+  successful source with zero relevant events only.
 - Added migration 012 and registered `FBS-UF004B-4118344-V0.1` with
   `started_at=NULL`, approved configuration/limits and explicitly unavailable
   performance attribution.

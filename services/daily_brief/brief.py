@@ -103,11 +103,12 @@ def _source_freshness(sources: dict[str, Any], business_date: date) -> dict[str,
     }
     info = sources.get("information_freshness")
     info_status = str(info[1]).upper() if info else ""
-    if info_status == "SUCCESS_ZERO":
-        info_state = "success_zero"
-    elif info_status in {"SUCCESS", "BASELINE_CREATED"}:
-        info_state = "fresh"
-    elif info_status in {"SOURCE_UNAVAILABLE", "STALE"}:
+    relevant_events_count = len(sources.get("information_events", []))
+    if info_status in {"SUCCESS", "SUCCESS_ZERO", "BASELINE_CREATED"}:
+        info_state = "fresh" if relevant_events_count else "success_zero"
+    elif info_status == "SOURCE_UNAVAILABLE":
+        info_state = "missing"
+    elif info_status == "STALE":
         info_state = "stale"
     elif info:
         info_state = "failed"
@@ -117,6 +118,7 @@ def _source_freshness(sources: dict[str, Any], business_date: date) -> dict[str,
         "state": info_state, "source_id": info[0] if info else None,
         "checked_at": _date(info[2]) if info else None,
         "run_status": info[1] if info else None, "error": info[3] if info else None,
+        "relevant_events_count": relevant_events_count,
     }
     tax = sources.get("tax_state") or {}
     tax_state = "missing"

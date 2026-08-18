@@ -235,7 +235,10 @@ Information Intelligence and Tax Engine. Durable CPC lifecycle states remain
 distinct: `SUCCESS_ZERO`, `SUCCESS_NONZERO`, `PENDING`, `STUCK`, `FAILED` and
 `MISSING`; the 2026-08-17 report is represented as `STUCK`, not zero. Pending
 Information Intelligence `ACTION_REQUIRED` and `WATCH` events are included
-from persisted data. Tax Engine is `ACTIVE / PARTIAL_DATA` and supplies taxable
+from persisted data. Its aggregate freshness is event-aware: a successful
+source with relevant current events is `fresh`, while `success_zero` is
+reserved for a successful source with zero relevant events. Tax Engine is
+`ACTIVE / PARTIAL_DATA` and supplies taxable
 revenue, gross USN, estimated payable, additional 1% and fixed insurance as a
 business-level obligation; no tax formula is copied into the brief and the
 fixed obligation is not allocated to offers.

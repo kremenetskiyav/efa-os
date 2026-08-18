@@ -24,7 +24,10 @@ class RendererV11Tests(unittest.TestCase):
         for required in ("ПРОДАЖИ", "ЭКОНОМИКА", "РЕКЛАМА", "ОПЕРАЦИИ", "ЭКСПЕРИМЕНТЫ", "ИНФОРМАЦИЯ", "НАЛОГ", "ВНИМАНИЕ"):
             self.assertIn(required, text)
         self.assertIn("CPC 2026-08-17: STUCK", text)
+        self.assertIn("Info FRESH", text)
+        self.assertNotIn("Info SUCCESS_ZERO", text)
         self.assertIn("ACTION_REQUIRED: Seller Main", text)
+        self.assertIn("WATCH: Ozon Changes", text)
         self.assertIn("Tax ACTIVE", text)
         self.assertIn("start UNKNOWN · атрибуция недоступна", text)
         self.assertNotIn("существенных подтверждённых аномалий нет", text.lower())
@@ -51,6 +54,8 @@ class RendererV11Tests(unittest.TestCase):
             self.assertEqual(len(reader.pages), 5)
             for required in ("Daily Commercial Brief v1.1", "Source freshness", "Experiments", "Information Intelligence", "Tax Engine", "Trend coverage"):
                 self.assertIn(required, text)
+            self.assertIn("information_intelligence fresh", " ".join(text.split()))
+            self.assertNotIn("information_intelligence success_zero", " ".join(text.split()))
             self.assertGreater(path.stat().st_size, 10_000)
 
 

@@ -32,7 +32,10 @@ def sources(*, current_economics=False, cpc_state="SUCCESS_NONZERO", trend_days=
             (name, DAY, "SUCCESS", count, 1, datetime(2026,8,18,tzinfo=UTC), f"{name}:17", None)
             for name, count in (("POSTINGS",256),("RETURNS",16),("FINANCE",39))
         ],
-        "information_events": [("event-1", "manual", "Seller Main", "MANUAL_EVIDENCE", "INFO_ONLY", "ACTION_REQUIRED", True, "MEDIUM", "PENDING", {"effective_date":"2026-08-14"}, ["FBS"], ["daily_brief"], datetime(2026,8,16,tzinfo=UTC))],
+        "information_events": [
+            ("event-1", "manual", "Seller Main", "MANUAL_EVIDENCE", "INFO_ONLY", "ACTION_REQUIRED", True, "MEDIUM", "PENDING", {"effective_date":"2026-08-14"}, ["FBS"], ["daily_brief"], datetime(2026,8,16,tzinfo=UTC)),
+            ("event-2", "manual", "Ozon Changes", "POLICY_UPDATE", "INFO_ONLY", "WATCH", False, "MEDIUM", "PENDING", {"effective_date":"2026-08-17"}, ["FBS"], ["daily_brief"], datetime(2026,8,17,tzinfo=UTC)),
+        ],
         "information_freshness": ("gmail", "SUCCESS_ZERO", datetime(2026,8,18,tzinfo=UTC), None),
         "tax_state": {"engine_state":"ACTIVE","tax_year":2026,"taxable_revenue_ytd":Decimal("156074.83"),"usn_gross_ytd":Decimal("9364.49"),"usn_payable_estimate_ytd":Decimal("0"),"additional_contribution_ytd":Decimal("0"),"fixed_contribution_annual":Decimal("57390"),"fixed_contribution_paid_ytd":Decimal("0"),"overall_tax_quality":"PARTIAL","tax_date_confidence":"PARTIAL","latest_source_period":"2026-07","expected_through_period":"2026-07","income_periods_missing":[],"vat_status":"EXEMPT_UNDER_THRESHOLD"},
         "experiments": [("EXP-1","A","OZON_ACTION_FBS","ACTIVE",None,None,{"action_id":"4118344","seller_price_rub":899,"action_ui_price_rub":865,"elastic_boost_pct":15,"cpc_enabled":False},5,5,Decimal("500"),"unknown start",datetime(2026,8,18,tzinfo=UTC),datetime(2026,8,18,tzinfo=UTC))],
@@ -77,11 +80,21 @@ class DailyBriefV11Tests(unittest.TestCase):
         payload = build_brief(sources(), DAY)
         self.assertEqual(payload["source_freshness"]["postings"]["state"], "fresh")
         self.assertEqual(payload["source_freshness"]["returns"]["collection_ref"], "RETURNS:17")
+        self.assertEqual(payload["source_freshness"]["information_intelligence"]["state"], "fresh")
+        self.assertEqual(payload["source_freshness"]["information_intelligence"]["run_status"], "SUCCESS_ZERO")
+        self.assertEqual(payload["source_freshness"]["information_intelligence"]["relevant_events_count"], 2)
+
+    def test_information_success_zero_requires_zero_relevant_events(self):
+        value = sources()
+        value["information_events"] = []
+        payload = build_brief(value, DAY)
         self.assertEqual(payload["source_freshness"]["information_intelligence"]["state"], "success_zero")
+        self.assertEqual(payload["source_freshness"]["information_intelligence"]["relevant_events_count"], 0)
 
     def test_information_action_required_is_not_hidden(self):
         payload = build_brief(sources(), DAY)
         self.assertEqual(payload["information_intelligence"]["counts"]["ACTION_REQUIRED"], 1)
+        self.assertEqual(payload["information_intelligence"]["counts"]["WATCH"], 1)
         self.assertTrue(any(item["class"] == "ACTION_REQUIRED" for item in payload["attention_items"]))
 
     def test_tax_engine_active_and_fixed_obligation_not_allocated(self):
