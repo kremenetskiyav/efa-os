@@ -45,6 +45,15 @@ creates at most one Performance report and registers its UUID without waiting.
 
 [`CPC_Report_Poller_v1.json`](CPC_Report_Poller_v1.json) contains the separate
 ten-minute status/download poller (`CPCREPORTPOLLERV1`). It checks only leased
-`PENDING` UUIDs and has no report-creation node. The production poller is kept
-inactive until the owner approves the first controlled poll of the migrated
-17.08 report.
+`PENDING` UUIDs and has no report-creation node. The production poller is
+active; the migrated 17.08 report is final `STUCK / NOT_STARTED` and is not
+reopened.
+
+## Ozon Operational Finance Daily Collection v1
+
+[`Ozon_Operational_Finance_Daily_Collection_v1.json`](Ozon_Operational_Finance_Daily_Collection_v1.json)
+is the active 05:40 `Europe/Moscow` sequential collector (`OPFINDAILYV1`) for
+FBS Postings, Returns and Finance. It retains the existing source endpoints and
+business-table keys, uses bounded pagination and HTTP retry, and persists
+independent run freshness through migration 011. Runtime Seller API and
+PostgreSQL credentials remain bound only in local n8n storage.

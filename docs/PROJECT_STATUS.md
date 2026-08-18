@@ -153,23 +153,44 @@ Next tax step: **official FNS tax-date / USN / 1% / VAT validation**.
 
 ## Commercial Baseline Collection v0.1 — active
 
-### CPC Async Report Lifecycle v1 — CREATE active / POLLER awaiting approval
+### CPC Async Report Lifecycle v1 — CREATE active / POLLER active
 
 The asynchronous Performance report lifecycle is now durable in the existing
 `cpc_collection_runs` table. `CPCDAILYV1` remains active at 07:30
 Europe/Moscow but now ends after reserving a business date, creating at most
 one report and registering its UUID. It contains no wait or status loop.
 
-`CPC Report Poller v1` (`CPCREPORTPOLLERV1`) is deployed with a ten-minute
-schedule definition but remains inactive until the owner approves the first
-controlled poll. It leases at most one pending UUID, makes one status request,
+`CPC Report Poller v1` (`CPCREPORTPOLLERV1`) is active every ten minutes. It
+leases at most one pending UUID, makes one status request,
 persists ready data transactionally and maps pending, terminal and two-hour
 stuck states deterministically. It has no report-creation path.
 
 Migration 010 is applied. The existing 2026-08-17 UUID
 `191827e5-2c73-429a-9ce1-34b48f560a46` is retained as
-`PENDING / NOT_STARTED`; no replacement report or recovery API call was made.
+`STUCK / NOT_STARTED`; the active poller does not reopen it and no replacement
+report was created.
 Daily Brief code and delivery remain unchanged.
+
+### Operational / Finance Daily Collection v1 — active and runtime validated
+
+`Ozon Operational Finance Daily Collection v1` (`OPFINDAILYV1`) is active at
+05:40 Europe/Moscow. It collects Postings, Returns and Finance sequentially,
+uses bounded pagination, one-second inter-source spacing, and three total HTTP
+attempts with five seconds between attempts. Migration 011 records independent
+`SUCCESS`, `SUCCESS_ZERO` or `FAILED` freshness for each source and business
+date without changing the existing business-table keys.
+
+The controlled recovery execution `1107` on 2026-08-18 completed the Finance
+branch: 39 unique operations for 2026-08-14 through 2026-08-17. Its inclusive
+upper-bound overread was corrected to the approved end-of-day boundary.
+Postings and Returns initially failed before an external request because their
+n8n JSON-body expressions did not compile (`invalid syntax`). After correcting
+those expressions, the single approved node-level execution `1111` ran only
+Postings and Returns and stopped before Finance. Both external requests,
+normalization and persistence completed successfully in one page: Postings
+`SUCCESS` with 256 normalized rows and Returns `SUCCESS` with 16 normalized
+rows. The business tables contain 377 postings and 27 returns with zero key
+duplicates. No Daily Brief delivery was triggered.
 
 Separate read-only daily automations now accumulate commercial flows without
 mixing their time semantics. `Seller Analytics Daily Collection v0.1`

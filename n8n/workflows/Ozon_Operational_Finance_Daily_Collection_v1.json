@@ -1,0 +1,402 @@
+{
+  "id": "OPFINDAILYV1",
+  "name": "Ozon Operational Finance Daily Collection v1",
+  "active": true,
+  "nodes": [
+    {
+      "id": "schedule-0540",
+      "name": "Daily 05:40 Moscow",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-1680, -160],
+      "parameters": {"rule": {"interval": [{"field": "cronExpression", "expression": "40 5 * * *"}]}}
+    },
+    {
+      "id": "manual-recovery",
+      "name": "Manual Controlled Recovery",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [-1680, 80],
+      "parameters": {}
+    },
+    {
+      "id": "daily-context",
+      "name": "Build Daily Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-1440, -160],
+      "parameters": {
+        "jsCode": "const now = new Date();\nconst msk = new Date(now.getTime() + 3 * 60 * 60 * 1000);\nconst day = new Date(Date.UTC(msk.getUTCFullYear(), msk.getUTCMonth(), msk.getUTCDate() - 1));\nconst start = new Date(day); start.setUTCDate(start.getUTCDate() - 29);\nconst financeStart = new Date(day); financeStart.setUTCDate(financeStart.getUTCDate() - 13);\nconst end = new Date(day); end.setUTCHours(23, 59, 59, 999);\nconst businessDate = day.toISOString().slice(0, 10);\nreturn [{json: {business_date: businessDate, collection_ref: `operational-daily:${businessDate}:${$execution.id}`, started_at: now.toISOString(), postings_from: start.toISOString(), returns_from: start.toISOString(), finance_from: financeStart.toISOString(), window_to: end.toISOString(), mode: 'DAILY'}}];"
+      }
+    },
+    {
+      "id": "recovery-context",
+      "name": "Build Controlled Recovery Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-1440, 80],
+      "parameters": {
+        "jsCode": "const now = new Date();\nconst day = new Date('2026-08-17T00:00:00.000Z');\nconst start = new Date(day); start.setUTCDate(start.getUTCDate() - 29);\nconst end = new Date('2026-08-17T23:59:59.999Z');\nreturn [{json: {business_date: '2026-08-17', collection_ref: `operational-recovery:2026-08-14:2026-08-17:${$execution.id}`, started_at: now.toISOString(), postings_from: start.toISOString(), returns_from: start.toISOString(), finance_from: '2026-08-14T00:00:00.000Z', window_to: end.toISOString(), mode: 'CONTROLLED_RECOVERY'}}];"
+      }
+    },
+    {
+      "id": "collection-context",
+      "name": "Collection Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-1200, -40],
+      "parameters": {"jsCode": "return $input.all();"}
+    },
+    {
+      "id": "get-postings",
+      "name": "Get FBS Postings",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [-960, -40],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput",
+      "credentials": {"httpHeaderAuth": {"id": "__OZON_SELLER_CREDENTIAL_ID__", "name": "Header Auth account"}},
+      "parameters": {
+        "method": "POST",
+        "url": "https://api-seller.ozon.ru/v3/posting/fbs/list",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {"parameters": [{"name": "Client-Id", "value": "4767584"}]},
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ (() => { const body = {filter: {since: $json.postings_from, to: $json.window_to}, limit: 1000, offset: 0}; body['with'] = {analytics_data: true, financial_data: true}; return JSON.stringify(body); })() }}",
+        "options": {
+          "pagination": {"pagination": {"paginationMode": "updateAParameterInEachRequest", "parameters": {"parameters": [{"type": "body", "name": "offset", "value": "={{ $pageCount * 1000 }}"}]}, "paginationCompleteWhen": "other", "completeExpression": "={{ !$response.body.result || !$response.body.result.has_next }}", "limitPagesFetched": true, "maxRequests": 10, "requestInterval": 1000}},
+          "timeout": 60000
+        }
+      }
+    },
+    {
+      "id": "normalize-postings",
+      "name": "Normalize Postings",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-720, -40],
+      "parameters": {
+        "jsCode": "const ctx = $('Collection Context').first().json;\nconst pages = $input.all().map(i => i.json);\nconst failed = pages.find(x => x?.error);\nconst errorText = failed ? String(failed.error?.message ?? failed.error ?? 'Unknown HTTP error').slice(0, 2000) : null;\nif (failed || !pages.length || pages.some(x => !Array.isArray(x?.result?.postings))) return [{json: {...ctx, source: 'POSTINGS', ok: false, status: 'FAILED', pages_count: pages.length, records_count: 0, error_message: errorText ?? 'Unexpected postings response contract', window_from: ctx.postings_from, window_to: ctx.window_to, rows: []}}];\nconst unique = new Map();\nfor (const page of pages) for (const posting of page.result.postings) for (const product of (posting.products ?? [])) {\n  const row = {posting_number: posting.posting_number, order_number: posting.order_number ?? null, status: posting.status ?? null, offer_id: product.offer_id, sku: product.sku ?? null, name: product.name ?? null, quantity: product.quantity ?? null, shipment_date: posting.shipment_date ?? null, delivering_date: posting.delivering_date ?? null, updated_from_ozon: new Date().toISOString()};\n  if (row.posting_number && row.offer_id) unique.set(`${row.posting_number}\\u0000${row.offer_id}`, row);\n}\nconst rows = [...unique.values()];\nreturn [{json: {...ctx, source: 'POSTINGS', ok: true, status: rows.length ? 'SUCCESS' : 'SUCCESS_ZERO', pages_count: pages.length, records_count: rows.length, error_message: null, window_from: ctx.postings_from, window_to: ctx.window_to, rows}}];"
+      }
+    },
+    {
+      "id": "check-postings",
+      "name": "Postings Succeeded",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [-480, -40],
+      "parameters": {"conditions": {"options": {"caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2}, "conditions": [{"leftValue": "={{ $json.ok }}", "rightValue": true, "operator": {"type": "boolean", "operation": "true", "singleValue": true}}], "combinator": "and"}, "options": {}}
+    },
+    {
+      "id": "expand-postings",
+      "name": "Expand Postings Rows",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-240, -160],
+      "parameters": {"jsCode": "const data = $input.first().json;\nif (!data.rows.length) return [{json: {is_zero: true}}];\nreturn data.rows.map(row => ({json: {...row, is_zero: false}}));"}
+    },
+    {
+      "id": "persist-postings",
+      "name": "Persist Postings",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [0, -160],
+      "alwaysOutputData": true,
+      "credentials": {"postgres": {"id": "__POSTGRES_CREDENTIAL_ID__", "name": "Postgres account"}},
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO postings (posting_number, order_number, status, offer_id, sku, name, quantity, shipment_date, delivering_date, updated_from_ozon) SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10 WHERE NOT $11::boolean ON CONFLICT (posting_number, offer_id) DO UPDATE SET order_number=EXCLUDED.order_number, status=EXCLUDED.status, sku=EXCLUDED.sku, name=EXCLUDED.name, quantity=EXCLUDED.quantity, shipment_date=EXCLUDED.shipment_date, delivering_date=EXCLUDED.delivering_date, updated_from_ozon=EXCLUDED.updated_from_ozon RETURNING posting_number, offer_id;",
+        "options": {"queryBatching": "transaction", "queryReplacement": "={{ [$json.posting_number, $json.order_number, $json.status, $json.offer_id, $json.sku, $json.name, $json.quantity, $json.shipment_date, $json.delivering_date, $json.updated_from_ozon, $json.is_zero] }}"}
+      }
+    },
+    {
+      "id": "record-postings-success",
+      "name": "Record Postings Success",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [240, -160],
+      "executeOnce": true,
+      "credentials": {"postgres": {"id": "__POSTGRES_CREDENTIAL_ID__", "name": "Postgres account"}},
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO operational_collection_runs (source,business_date,collection_ref,status,started_at,completed_at,window_from,window_to,pages_count,records_count,error_message,metadata,updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,NOW()) ON CONFLICT (source,business_date) DO UPDATE SET collection_ref=EXCLUDED.collection_ref,status=EXCLUDED.status,started_at=EXCLUDED.started_at,completed_at=EXCLUDED.completed_at,window_from=EXCLUDED.window_from,window_to=EXCLUDED.window_to,pages_count=EXCLUDED.pages_count,records_count=EXCLUDED.records_count,error_message=EXCLUDED.error_message,metadata=EXCLUDED.metadata,updated_at=NOW() RETURNING source,business_date,status,records_count,collection_ref;",
+        "options": {"queryReplacement": "={{ [$('Normalize Postings').first().json.source, $('Normalize Postings').first().json.business_date, $('Normalize Postings').first().json.collection_ref, $('Normalize Postings').first().json.status, $('Normalize Postings').first().json.started_at, new Date().toISOString(), $('Normalize Postings').first().json.window_from, $('Normalize Postings').first().json.window_to, $('Normalize Postings').first().json.pages_count, $('Normalize Postings').first().json.records_count, null, {mode: $('Normalize Postings').first().json.mode}] }}"}
+      }
+    },
+    {
+      "id": "record-postings-failed",
+      "name": "Record Postings Failed",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [0, 80],
+      "credentials": {"postgres": {"id": "__POSTGRES_CREDENTIAL_ID__", "name": "Postgres account"}},
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO operational_collection_runs (source,business_date,collection_ref,status,started_at,completed_at,window_from,window_to,pages_count,records_count,error_message,metadata,updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,NOW()) ON CONFLICT (source,business_date) DO UPDATE SET collection_ref=EXCLUDED.collection_ref,status=EXCLUDED.status,started_at=EXCLUDED.started_at,completed_at=EXCLUDED.completed_at,window_from=EXCLUDED.window_from,window_to=EXCLUDED.window_to,pages_count=EXCLUDED.pages_count,records_count=EXCLUDED.records_count,error_message=EXCLUDED.error_message,metadata=EXCLUDED.metadata,updated_at=NOW() RETURNING source,business_date,status,records_count,collection_ref;",
+        "options": {"queryReplacement": "={{ [$json.source, $json.business_date, $json.collection_ref, $json.status, $json.started_at, new Date().toISOString(), $json.window_from, $json.window_to, $json.pages_count, $json.records_count, $json.error_message, {mode: $json.mode}] }}"}
+      }
+    },
+    {
+      "id": "wait-after-postings",
+      "name": "Wait After Postings",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [480, -40],
+      "webhookId": "opfin-wait-postings",
+      "parameters": {"amount": 1, "unit": "seconds"}
+    },
+    {
+      "id": "get-returns",
+      "name": "Get Returns",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [720, -40],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput",
+      "credentials": {"httpHeaderAuth": {"id": "__OZON_SELLER_CREDENTIAL_ID__", "name": "Header Auth account"}},
+      "parameters": {
+        "method": "POST",
+        "url": "https://api-seller.ozon.ru/v1/returns/list",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {"parameters": [{"name": "Client-Id", "value": "4767584"}]},
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ (() => { const ctx = $('Collection Context').first().json; const body = {filter: {}, limit: 100, last_id: 0}; body.filter['logistic_return_date'] = {time_from: ctx.returns_from, time_to: ctx.window_to}; return JSON.stringify(body); })() }}",
+        "options": {
+          "pagination": {"pagination": {"paginationMode": "updateAParameterInEachRequest", "parameters": {"parameters": [{"type": "body", "name": "last_id", "value": "={{ $pageCount === 0 ? 0 : $response.body.last_id }}"}]}, "paginationCompleteWhen": "other", "completeExpression": "={{ !$response.body.has_next }}", "limitPagesFetched": true, "maxRequests": 20, "requestInterval": 1000}},
+          "timeout": 60000
+        }
+      }
+    },
+    {
+      "id": "normalize-returns",
+      "name": "Normalize Returns",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [960, -40],
+      "parameters": {
+        "jsCode": "const ctx = $('Collection Context').first().json;\nconst pages = $input.all().map(i => i.json);\nconst failed = pages.find(x => x?.error);\nconst errorText = failed ? String(failed.error?.message ?? failed.error ?? 'Unknown HTTP error').slice(0, 2000) : null;\nif (failed || !pages.length || pages.some(x => !Array.isArray(x?.returns))) return [{json: {...ctx, source: 'RETURNS', ok: false, status: 'FAILED', pages_count: pages.length, records_count: 0, error_message: errorText ?? 'Unexpected returns response contract', window_from: ctx.returns_from, window_to: ctx.window_to, rows: []}}];\nconst unique = new Map();\nfor (const page of pages) for (const ret of page.returns) if (ret?.id != null) unique.set(String(ret.id), {return_id: ret.id, company_id: ret.company_id ?? null, type: ret.type ?? null, schema: ret.schema ?? null, order_id: ret.order_id ?? null, order_number: ret.order_number ?? null, posting_number: ret.posting_number ?? null, sku: ret.product?.sku ?? null, offer_id: ret.product?.offer_id ?? null, product_name: ret.product?.name ?? null, price: ret.product?.price?.price ?? null, quantity: ret.product?.quantity ?? null, return_reason: ret.return_reason_name ?? null, return_status: ret.visual?.status?.display_name ?? null, logistic_return_date: ret.logistic?.return_date ?? null, clearing_id: ret.clearing_id ?? null, source_id: ret.source_id ?? null, updated_from_ozon: new Date().toISOString()});\nconst rows = [...unique.values()];\nreturn [{json: {...ctx, source: 'RETURNS', ok: true, status: rows.length ? 'SUCCESS' : 'SUCCESS_ZERO', pages_count: pages.length, records_count: rows.length, error_message: null, window_from: ctx.returns_from, window_to: ctx.window_to, rows}}];"
+      }
+    },
+    {
+      "id": "check-returns",
+      "name": "Returns Succeeded",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1200, -40],
+      "parameters": {"conditions": {"options": {"caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2}, "conditions": [{"leftValue": "={{ $json.ok }}", "rightValue": true, "operator": {"type": "boolean", "operation": "true", "singleValue": true}}], "combinator": "and"}, "options": {}}
+    },
+    {
+      "id": "expand-returns",
+      "name": "Expand Returns Rows",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1440, -160],
+      "parameters": {"jsCode": "const data = $input.first().json;\nif (!data.rows.length) return [{json: {is_zero: true}}];\nreturn data.rows.map(row => ({json: {...row, is_zero: false}}));"}
+    },
+    {
+      "id": "persist-returns",
+      "name": "Persist Returns",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [1680, -160],
+      "alwaysOutputData": true,
+      "credentials": {"postgres": {"id": "__POSTGRES_CREDENTIAL_ID__", "name": "Postgres account"}},
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO returns (return_id,company_id,type,schema,order_id,order_number,posting_number,sku,offer_id,product_name,price,quantity,return_reason,return_status,logistic_return_date,clearing_id,source_id,updated_from_ozon) SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18 WHERE NOT $19::boolean ON CONFLICT (return_id) DO UPDATE SET company_id=EXCLUDED.company_id,type=EXCLUDED.type,schema=EXCLUDED.schema,order_id=EXCLUDED.order_id,order_number=EXCLUDED.order_number,posting_number=EXCLUDED.posting_number,sku=EXCLUDED.sku,offer_id=EXCLUDED.offer_id,product_name=EXCLUDED.product_name,price=EXCLUDED.price,quantity=EXCLUDED.quantity,return_reason=EXCLUDED.return_reason,return_status=EXCLUDED.return_status,logistic_return_date=EXCLUDED.logistic_return_date,clearing_id=EXCLUDED.clearing_id,source_id=EXCLUDED.source_id,updated_from_ozon=EXCLUDED.updated_from_ozon RETURNING return_id;",
+        "options": {"queryBatching": "transaction", "queryReplacement": "={{ [$json.return_id,$json.company_id,$json.type,$json.schema,$json.order_id,$json.order_number,$json.posting_number,$json.sku,$json.offer_id,$json.product_name,$json.price,$json.quantity,$json.return_reason,$json.return_status,$json.logistic_return_date,$json.clearing_id,$json.source_id,$json.updated_from_ozon,$json.is_zero] }}"}
+      }
+    },
+    {
+      "id": "record-returns-success",
+      "name": "Record Returns Success",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [1920, -160],
+      "executeOnce": true,
+      "credentials": {"postgres": {"id": "__POSTGRES_CREDENTIAL_ID__", "name": "Postgres account"}},
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO operational_collection_runs (source,business_date,collection_ref,status,started_at,completed_at,window_from,window_to,pages_count,records_count,error_message,metadata,updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,NOW()) ON CONFLICT (source,business_date) DO UPDATE SET collection_ref=EXCLUDED.collection_ref,status=EXCLUDED.status,started_at=EXCLUDED.started_at,completed_at=EXCLUDED.completed_at,window_from=EXCLUDED.window_from,window_to=EXCLUDED.window_to,pages_count=EXCLUDED.pages_count,records_count=EXCLUDED.records_count,error_message=EXCLUDED.error_message,metadata=EXCLUDED.metadata,updated_at=NOW() RETURNING source,business_date,status,records_count,collection_ref;",
+        "options": {"queryReplacement": "={{ [$('Normalize Returns').first().json.source, $('Normalize Returns').first().json.business_date, $('Normalize Returns').first().json.collection_ref, $('Normalize Returns').first().json.status, $('Normalize Returns').first().json.started_at, new Date().toISOString(), $('Normalize Returns').first().json.window_from, $('Normalize Returns').first().json.window_to, $('Normalize Returns').first().json.pages_count, $('Normalize Returns').first().json.records_count, null, {mode: $('Normalize Returns').first().json.mode}] }}"}
+      }
+    },
+    {
+      "id": "record-returns-failed",
+      "name": "Record Returns Failed",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [1680, 80],
+      "credentials": {"postgres": {"id": "__POSTGRES_CREDENTIAL_ID__", "name": "Postgres account"}},
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO operational_collection_runs (source,business_date,collection_ref,status,started_at,completed_at,window_from,window_to,pages_count,records_count,error_message,metadata,updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,NOW()) ON CONFLICT (source,business_date) DO UPDATE SET collection_ref=EXCLUDED.collection_ref,status=EXCLUDED.status,started_at=EXCLUDED.started_at,completed_at=EXCLUDED.completed_at,window_from=EXCLUDED.window_from,window_to=EXCLUDED.window_to,pages_count=EXCLUDED.pages_count,records_count=EXCLUDED.records_count,error_message=EXCLUDED.error_message,metadata=EXCLUDED.metadata,updated_at=NOW() RETURNING source,business_date,status,records_count,collection_ref;",
+        "options": {"queryReplacement": "={{ [$json.source, $json.business_date, $json.collection_ref, $json.status, $json.started_at, new Date().toISOString(), $json.window_from, $json.window_to, $json.pages_count, $json.records_count, $json.error_message, {mode: $json.mode}] }}"}
+      }
+    },
+    {
+      "id": "wait-after-returns",
+      "name": "Wait After Returns",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [2160, -40],
+      "webhookId": "opfin-wait-returns",
+      "parameters": {"amount": 1, "unit": "seconds"}
+    },
+    {
+      "id": "finance-windows",
+      "name": "Build Finance Month Windows",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2400, -40],
+      "parameters": {
+        "jsCode": "const ctx = $('Collection Context').first().json;\nlet cursor = new Date(ctx.finance_from);\nconst inclusiveEnd = new Date(ctx.window_to);\nconst exclusiveEnd = new Date(inclusiveEnd.getTime() + 1);\nconst rows = [];\nwhile (cursor < exclusiveEnd && rows.length < 24) {\n  const monthEnd = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 1));\n  const next = monthEnd < exclusiveEnd ? monthEnd : exclusiveEnd;\n  rows.push({json: {...ctx, finance_window_from: cursor.toISOString(), finance_window_to: new Date(next.getTime() - 1).toISOString()}});\n  cursor = next;\n}\nif (!rows.length || cursor < exclusiveEnd) throw new Error('Invalid or unbounded finance month windows');\nreturn rows;"
+      }
+    },
+    {
+      "id": "get-finance",
+      "name": "Get Finance Transactions",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [2640, -40],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput",
+      "credentials": {"httpHeaderAuth": {"id": "__OZON_SELLER_CREDENTIAL_ID__", "name": "Header Auth account"}},
+      "parameters": {
+        "method": "POST",
+        "url": "https://api-seller.ozon.ru/v3/finance/transaction/list",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {"parameters": [{"name": "Client-Id", "value": "4767584"}]},
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({filter: {date: {from: $json.finance_window_from, to: $json.finance_window_to}, operation_type: [], transaction_type: 'all'}, page: 1, page_size: 1000}) }}",
+        "options": {
+          "batching": {"batch": {"batchSize": 1, "batchInterval": 1000}},
+          "pagination": {"pagination": {"paginationMode": "updateAParameterInEachRequest", "parameters": {"parameters": [{"type": "body", "name": "page", "value": "={{ $pageCount + 1 }}"}]}, "paginationCompleteWhen": "other", "completeExpression": "={{ $pageCount >= Number(($response.body.result && $response.body.result.page_count) || 1) }}", "limitPagesFetched": true, "maxRequests": 20, "requestInterval": 1000}},
+          "timeout": 60000
+        }
+      }
+    },
+    {
+      "id": "normalize-finance",
+      "name": "Normalize Finance",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2880, -40],
+      "parameters": {
+        "jsCode": "const ctx = $('Collection Context').first().json;\nconst pages = $input.all().map(i => i.json);\nconst failed = pages.find(x => x?.error);\nconst errorText = failed ? String(failed.error?.message ?? failed.error ?? 'Unknown HTTP error').slice(0, 2000) : null;\nif (failed || !pages.length || pages.some(x => !Array.isArray(x?.result?.operations))) return [{json: {...ctx, source: 'FINANCE', ok: false, status: 'FAILED', pages_count: pages.length, records_count: 0, error_message: errorText ?? 'Unexpected finance response contract', window_from: ctx.finance_from, window_to: ctx.window_to, rows: []}}];\nconst unique = new Map();\nfor (const page of pages) for (const op of page.result.operations) {\n  const item = op.items?.[0] ?? {};\n  const services = op.services ?? [];\n  const row = {operation_id: op.operation_id, posting_number: op.posting?.posting_number || null, order_number: op.posting?.order_number || null, operation_type: op.operation_type ?? null, operation_type_name: op.operation_type_name ?? null, operation_date: op.operation_date ?? null, amount: op.amount ?? null, service_name: services.map(s => s.name).join('; '), service_amount: services.reduce((sum, s) => sum + Number(s.price ?? 0), 0), sku: item.sku ?? null, offer_id: null, name: null, updated_from_ozon: new Date().toISOString(), delivery_charge: op.delivery_charge ?? 0, return_delivery_charge: op.return_delivery_charge ?? 0, accruals_for_sale: op.accruals_for_sale ?? 0, sale_commission: op.sale_commission ?? 0};\n  if (row.operation_id != null) unique.set(String(row.operation_id), row);\n}\nconst rows = [...unique.values()];\nreturn [{json: {...ctx, source: 'FINANCE', ok: true, status: rows.length ? 'SUCCESS' : 'SUCCESS_ZERO', pages_count: pages.length, records_count: rows.length, error_message: null, window_from: ctx.finance_from, window_to: ctx.window_to, rows}}];"
+      }
+    },
+    {
+      "id": "check-finance",
+      "name": "Finance Succeeded",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [3120, -40],
+      "parameters": {"conditions": {"options": {"caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2}, "conditions": [{"leftValue": "={{ $json.ok }}", "rightValue": true, "operator": {"type": "boolean", "operation": "true", "singleValue": true}}], "combinator": "and"}, "options": {}}
+    },
+    {
+      "id": "expand-finance",
+      "name": "Expand Finance Rows",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3360, -160],
+      "parameters": {"jsCode": "const data = $input.first().json;\nif (!data.rows.length) return [{json: {is_zero: true}}];\nreturn data.rows.map(row => ({json: {...row, is_zero: false}}));"}
+    },
+    {
+      "id": "persist-finance",
+      "name": "Persist Finance",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [3600, -160],
+      "alwaysOutputData": true,
+      "credentials": {"postgres": {"id": "__POSTGRES_CREDENTIAL_ID__", "name": "Postgres account"}},
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO finance_operations (operation_id,posting_number,order_number,operation_type,operation_type_name,operation_date,amount,service_name,service_amount,sku,offer_id,name,updated_from_ozon,delivery_charge,return_delivery_charge,accruals_for_sale,sale_commission) SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17 WHERE NOT $18::boolean ON CONFLICT (operation_id) DO UPDATE SET posting_number=EXCLUDED.posting_number,order_number=EXCLUDED.order_number,operation_type=EXCLUDED.operation_type,operation_type_name=EXCLUDED.operation_type_name,operation_date=EXCLUDED.operation_date,amount=EXCLUDED.amount,service_name=EXCLUDED.service_name,service_amount=EXCLUDED.service_amount,sku=EXCLUDED.sku,offer_id=COALESCE(EXCLUDED.offer_id,finance_operations.offer_id),name=COALESCE(EXCLUDED.name,finance_operations.name),updated_from_ozon=EXCLUDED.updated_from_ozon,delivery_charge=EXCLUDED.delivery_charge,return_delivery_charge=EXCLUDED.return_delivery_charge,accruals_for_sale=EXCLUDED.accruals_for_sale,sale_commission=EXCLUDED.sale_commission RETURNING operation_id;",
+        "options": {"queryBatching": "transaction", "queryReplacement": "={{ [$json.operation_id,$json.posting_number,$json.order_number,$json.operation_type,$json.operation_type_name,$json.operation_date,$json.amount,$json.service_name,$json.service_amount,$json.sku,$json.offer_id,$json.name,$json.updated_from_ozon,$json.delivery_charge,$json.return_delivery_charge,$json.accruals_for_sale,$json.sale_commission,$json.is_zero] }}"}
+      }
+    },
+    {
+      "id": "record-finance-success",
+      "name": "Record Finance Success",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [3840, -160],
+      "executeOnce": true,
+      "credentials": {"postgres": {"id": "__POSTGRES_CREDENTIAL_ID__", "name": "Postgres account"}},
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO operational_collection_runs (source,business_date,collection_ref,status,started_at,completed_at,window_from,window_to,pages_count,records_count,error_message,metadata,updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,NOW()) ON CONFLICT (source,business_date) DO UPDATE SET collection_ref=EXCLUDED.collection_ref,status=EXCLUDED.status,started_at=EXCLUDED.started_at,completed_at=EXCLUDED.completed_at,window_from=EXCLUDED.window_from,window_to=EXCLUDED.window_to,pages_count=EXCLUDED.pages_count,records_count=EXCLUDED.records_count,error_message=EXCLUDED.error_message,metadata=EXCLUDED.metadata,updated_at=NOW() RETURNING source,business_date,status,records_count,collection_ref;",
+        "options": {"queryReplacement": "={{ [$('Normalize Finance').first().json.source, $('Normalize Finance').first().json.business_date, $('Normalize Finance').first().json.collection_ref, $('Normalize Finance').first().json.status, $('Normalize Finance').first().json.started_at, new Date().toISOString(), $('Normalize Finance').first().json.window_from, $('Normalize Finance').first().json.window_to, $('Normalize Finance').first().json.pages_count, $('Normalize Finance').first().json.records_count, null, {mode: $('Normalize Finance').first().json.mode}] }}"}
+      }
+    },
+    {
+      "id": "record-finance-failed",
+      "name": "Record Finance Failed",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [3600, 80],
+      "credentials": {"postgres": {"id": "__POSTGRES_CREDENTIAL_ID__", "name": "Postgres account"}},
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO operational_collection_runs (source,business_date,collection_ref,status,started_at,completed_at,window_from,window_to,pages_count,records_count,error_message,metadata,updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,NOW()) ON CONFLICT (source,business_date) DO UPDATE SET collection_ref=EXCLUDED.collection_ref,status=EXCLUDED.status,started_at=EXCLUDED.started_at,completed_at=EXCLUDED.completed_at,window_from=EXCLUDED.window_from,window_to=EXCLUDED.window_to,pages_count=EXCLUDED.pages_count,records_count=EXCLUDED.records_count,error_message=EXCLUDED.error_message,metadata=EXCLUDED.metadata,updated_at=NOW() RETURNING source,business_date,status,records_count,collection_ref;",
+        "options": {"queryReplacement": "={{ [$json.source, $json.business_date, $json.collection_ref, $json.status, $json.started_at, new Date().toISOString(), $json.window_from, $json.window_to, $json.pages_count, $json.records_count, $json.error_message, {mode: $json.mode}] }}"}
+      }
+    },
+    {
+      "id": "finish",
+      "name": "Collection Finished",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [4080, -40],
+      "parameters": {}
+    }
+  ],
+  "connections": {
+    "Daily 05:40 Moscow": {"main": [[{"node": "Build Daily Context", "type": "main", "index": 0}]]},
+    "Manual Controlled Recovery": {"main": [[{"node": "Build Controlled Recovery Context", "type": "main", "index": 0}]]},
+    "Build Daily Context": {"main": [[{"node": "Collection Context", "type": "main", "index": 0}]]},
+    "Build Controlled Recovery Context": {"main": [[{"node": "Collection Context", "type": "main", "index": 0}]]},
+    "Collection Context": {"main": [[{"node": "Get FBS Postings", "type": "main", "index": 0}]]},
+    "Get FBS Postings": {"main": [[{"node": "Normalize Postings", "type": "main", "index": 0}]]},
+    "Normalize Postings": {"main": [[{"node": "Postings Succeeded", "type": "main", "index": 0}]]},
+    "Postings Succeeded": {"main": [[{"node": "Expand Postings Rows", "type": "main", "index": 0}], [{"node": "Record Postings Failed", "type": "main", "index": 0}]]},
+    "Expand Postings Rows": {"main": [[{"node": "Persist Postings", "type": "main", "index": 0}]]},
+    "Persist Postings": {"main": [[{"node": "Record Postings Success", "type": "main", "index": 0}]]},
+    "Record Postings Success": {"main": [[{"node": "Wait After Postings", "type": "main", "index": 0}]]},
+    "Record Postings Failed": {"main": [[{"node": "Wait After Postings", "type": "main", "index": 0}]]},
+    "Wait After Postings": {"main": [[{"node": "Get Returns", "type": "main", "index": 0}]]},
+    "Get Returns": {"main": [[{"node": "Normalize Returns", "type": "main", "index": 0}]]},
+    "Normalize Returns": {"main": [[{"node": "Returns Succeeded", "type": "main", "index": 0}]]},
+    "Returns Succeeded": {"main": [[{"node": "Expand Returns Rows", "type": "main", "index": 0}], [{"node": "Record Returns Failed", "type": "main", "index": 0}]]},
+    "Expand Returns Rows": {"main": [[{"node": "Persist Returns", "type": "main", "index": 0}]]},
+    "Persist Returns": {"main": [[{"node": "Record Returns Success", "type": "main", "index": 0}]]},
+    "Record Returns Success": {"main": [[{"node": "Wait After Returns", "type": "main", "index": 0}]]},
+    "Record Returns Failed": {"main": [[{"node": "Wait After Returns", "type": "main", "index": 0}]]},
+    "Wait After Returns": {"main": [[{"node": "Build Finance Month Windows", "type": "main", "index": 0}]]},
+    "Build Finance Month Windows": {"main": [[{"node": "Get Finance Transactions", "type": "main", "index": 0}]]},
+    "Get Finance Transactions": {"main": [[{"node": "Normalize Finance", "type": "main", "index": 0}]]},
+    "Normalize Finance": {"main": [[{"node": "Finance Succeeded", "type": "main", "index": 0}]]},
+    "Finance Succeeded": {"main": [[{"node": "Expand Finance Rows", "type": "main", "index": 0}], [{"node": "Record Finance Failed", "type": "main", "index": 0}]]},
+    "Expand Finance Rows": {"main": [[{"node": "Persist Finance", "type": "main", "index": 0}]]},
+    "Persist Finance": {"main": [[{"node": "Record Finance Success", "type": "main", "index": 0}]]},
+    "Record Finance Success": {"main": [[{"node": "Collection Finished", "type": "main", "index": 0}]]},
+    "Record Finance Failed": {"main": [[{"node": "Collection Finished", "type": "main", "index": 0}]]}
+  },
+  "settings": {"executionOrder": "v1", "timezone": "Europe/Moscow", "binaryMode": "separate", "saveDataSuccessExecution": "all", "saveDataErrorExecution": "all", "saveManualExecutions": true}
+}

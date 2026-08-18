@@ -1,5 +1,28 @@
 # Changelog
 
+## 2026-08-18 — Operational collectors lifecycle v1
+
+- Activated `CPCREPORTPOLLERV1` on its existing ten-minute schedule. It checks
+  only durable `PENDING` reports, creates no report, and leaves the migrated
+  2026-08-17 UUID in its final `STUCK / NOT_STARTED` state.
+- Added migration 011 and active workflow `OPFINDAILYV1` at 05:40
+  Europe/Moscow for sequential Postings, Returns and Finance collection with
+  bounded pagination, bounded retry and per-source run freshness.
+- Performed exactly one controlled recovery (`1107`). Finance recovered 39
+  unique operations for 2026-08-14 through 2026-08-17. Postings and Returns
+  failed before their external requests because two JSON-body expressions did
+  not compile; the expressions were corrected and published without a second
+  run. The Finance upper boundary was also narrowed to the approved end of
+  2026-08-17 and the 13 overread 2026-08-18 rows were removed exactly.
+- Ran exactly one approved node-level runtime validation (`1111`) after the
+  expression correction. It executed Postings and Returns only and stopped
+  before Finance. Postings returned and persisted 256 normalized rows;
+  Returns returned and persisted 16 normalized rows. Both run records are
+  `SUCCESS`, each used one API page, and both business-table duplicate counts
+  are zero.
+- `OPFINDAILYV1` remains active at 05:40 Europe/Moscow. Daily Brief was not
+  resent.
+
 ## 2026-08-18 — CPC asynchronous report lifecycle v1
 
 - Replaced the in-execution CPC wait/poll loop with durable CREATE and POLL
@@ -15,8 +38,8 @@
   state remains `PENDING / NOT_STARTED`.
 - Added `CPC Report Poller v1` with one leased pending report per cycle, one
   status request per UUID, a ten-minute cadence and a two-hour `STUCK` policy.
-  It is deployed inactive pending owner approval for the first controlled
-  poll; no Performance status/download call was made by this implementation.
+  It was subsequently activated after owner approval; the migrated report is
+  final `STUCK / NOT_STARTED` and is not eligible for further polling.
 
 ## 2026-08-18 — Daily Brief delivery DNS resilience
 
