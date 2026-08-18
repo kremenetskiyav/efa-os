@@ -1,6 +1,7 @@
 """Pure validation and normalization for confirmed Seller/CPC contracts."""
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any
@@ -136,6 +137,71 @@ def normalize_cpc(payload: object) -> dict[str, Any]:
         "business_date": str(data["business_date"]), "report_uuid": str(data["report_uuid"]),
         "campaigns_count": len(campaigns),
     }
+
+
+def normalize_cpc_prepare(payload: object) -> dict[str, Any]:
+    data = _required(payload, {"business_date"})
+    business_date = _date(data["business_date"])
+    return {
+        "business_date": business_date,
+        "collection_ref": f"cpc-day-{business_date}",
+        "requested_at": str(data.get("requested_at") or datetime.utcnow().isoformat() + "Z"),
+    }
+
+
+def _campaign_snapshot(value: object) -> list[dict[str, Any]]:
+    if not isinstance(value, list) or not value:
+        raise PayloadError("campaigns must be a non-empty array")
+    campaigns: list[dict[str, Any]] = []
+    seen: set[int] = set()
+    for source in value:
+        if not isinstance(source, dict):
+            raise PayloadError("campaign must be an object")
+        campaign_id = _positive_int(source.get("id"), "campaign_id", allow_zero=False)
+        if campaign_id in seen:
+            raise PayloadError(f"duplicate campaign_id:{campaign_id}")
+        if source.get("advObjectType") != "SKU":
+            raise PayloadError(f"non-SKU campaign:{campaign_id}")
+        seen.add(campaign_id)
+        campaigns.append({
+            "id": str(campaign_id),
+            "title": str(source.get("title") or ""),
+            "state": source.get("state"),
+            "advObjectType": "SKU",
+        })
+    return campaigns
+
+
+def normalize_cpc_registration(payload: object) -> dict[str, Any]:
+    data = _required(payload, {"business_date", "report_uuid", "campaigns"})
+    report_uuid = str(data["report_uuid"]).strip()
+    try:
+        from uuid import UUID
+        UUID(report_uuid)
+    except (ValueError, TypeError) as error:
+        raise PayloadError("report_uuid must be UUID") from error
+    campaigns = _campaign_snapshot(data["campaigns"])
+    return {
+        "business_date": _date(data["business_date"]),
+        "report_uuid": report_uuid,
+        "campaigns": campaigns,
+        "campaigns_json": json.dumps(campaigns, ensure_ascii=False, separators=(",", ":")),
+    }
+
+
+def normalize_cpc_status(payload: object) -> dict[str, Any]:
+    data = _required(payload, {"run_id", "lease_token", "report_uuid", "report_state"})
+    normalized = {
+        "run_id": str(data["run_id"]),
+        "lease_token": str(data["lease_token"]),
+        "report_uuid": str(data["report_uuid"]),
+        "report_state": str(data["report_state"] or "").strip().upper(),
+        "error_code": str(data["error_code"]) if data.get("error_code") else None,
+        "error_message": str(data["error_message"]) if data.get("error_message") else None,
+    }
+    if not normalized["report_state"]:
+        raise PayloadError("report_state is required")
+    return normalized
 
 
 def normalize_prices(payload: object) -> dict[str, Any]:

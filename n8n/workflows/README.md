@@ -35,3 +35,16 @@ The current baseline was exported from the local n8n instance after the OZON API
 Canonical production workflow ID: `Kf241Y5kzETghygL`.
 
 The sanitised workflow is [`Ozon_Daily_Commercial_Brief_Delivery_v1.json`](Ozon_Daily_Commercial_Brief_Delivery_v1.json). It has one daily Schedule Trigger at 08:15 in `Europe/Moscow`, obtains deterministic representations only from the private `efa-daily-brief` bridge, and has no Ozon nodes. Recipient and chat destination are runtime placeholders; Gmail and Telegram credentials are bound only in local n8n credential storage. Per-channel production idempotency is stored in workflow static data under `daily-brief:v0.1:production:<channel>:<business_date>`. The separate TEST workflow remains inactive.
+
+## CPC Async Report Lifecycle v1
+
+`CPCDAILYV1` is the active 07:30 `Europe/Moscow` CREATE stage in
+[`CPC_Daily_Collection.json`](CPC_Daily_Collection.json). It reserves one
+durable lifecycle per business date, skips dates that already have any state,
+creates at most one Performance report and registers its UUID without waiting.
+
+[`CPC_Report_Poller_v1.json`](CPC_Report_Poller_v1.json) contains the separate
+ten-minute status/download poller (`CPCREPORTPOLLERV1`). It checks only leased
+`PENDING` UUIDs and has no report-creation node. The production poller is kept
+inactive until the owner approves the first controlled poll of the migrated
+17.08 report.

@@ -34,6 +34,15 @@ The canonical n8n workflow should remain the orchestration layer. Business calcu
 
 Credentials must remain in local n8n credential storage. They must not be committed to GitHub.
 
+## CPC asynchronous reports
+
+CPC Performance reports use a durable two-stage lifecycle. The 07:30 create
+workflow reserves one `business_date`, creates at most one report and stores
+its UUID; a separate bounded poller checks leased pending UUIDs and performs
+download/persistence only when the report is ready. `cpc_collection_runs` is
+the lifecycle source of truth. See
+[`CPC_ASYNC_REPORT_LIFECYCLE_V1.md`](architecture/CPC_ASYNC_REPORT_LIFECYCLE_V1.md).
+
 ## Repository principle
 
 One canonical production workflow JSON. SQL and documentation are versioned separately. Changes are made incrementally and recorded in Git history.

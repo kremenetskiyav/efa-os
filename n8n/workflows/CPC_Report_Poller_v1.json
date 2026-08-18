@@ -1,0 +1,34 @@
+[
+  {
+    "id":"CPCREPORTPOLLERV1",
+    "name":"CPC Report Poller v1",
+    "active":false,
+    "nodes":[
+      {"parameters":{"rule":{"interval":[{"field":"cronExpression","expression":"*/10 * * * *"}]}},"type":"n8n-nodes-base.scheduleTrigger","typeVersion":1.2,"position":[0,0],"id":"27d58011-c58f-4bce-a2a5-e9c6f66343e6","name":"Every 10 Minutes"},
+      {"parameters":{},"type":"n8n-nodes-base.manualTrigger","typeVersion":1,"position":[0,160],"id":"71a6fe2b-c9b1-43a7-a8bb-690c17f63fe8","name":"Manual Controlled Poll"},
+      {"parameters":{"method":"POST","url":"http://efa-commercial-baseline-collector:8080/v1/commercial/cpc/lifecycle/claim","sendBody":true,"specifyBody":"json","jsonBody":"={{ {} }}","options":{}},"type":"n8n-nodes-base.httpRequest","typeVersion":4.4,"position":[240,0],"id":"3a29092d-fce9-4be2-a0e0-366aaf5c7fd7","name":"Claim Pending CPC Report"},
+      {"parameters":{"conditions":{"options":{"caseSensitive":true,"leftValue":"","typeValidation":"strict","version":2},"conditions":[{"leftValue":"={{ $json.claimed }}","rightValue":true,"operator":{"type":"boolean","operation":"true","singleValue":true}}],"combinator":"and"},"options":{}},"type":"n8n-nodes-base.if","typeVersion":2.2,"position":[480,0],"id":"08ad70ca-6c9b-4dd9-860a-8686436428f0","name":"Pending Report Claimed"},
+      {"parameters":{"operation":"getCampaignStatisticsReport","reportUuid":"={{ $json.report_uuid }}"},"type":"CUSTOM.ozonPerformance","typeVersion":1,"position":[720,-80],"id":"6891ff2b-42e8-48ad-bc5e-66966b41ee28","name":"Get CPC Report Status","credentials":{"ozonPerformanceOAuth2Api":{"id":"AEeFEUH2M1R5b2HL","name":"Ozon Performance API - EFA OS"}}},
+      {"parameters":{"jsCode":"const claim = $items('Claim Pending CPC Report')[0].json;\nconst report_state = String($json.state ?? '').trim().toUpperCase();\nif (!report_state) throw new Error('Performance status response has no state');\nreturn [{json:{run_id:claim.run_id,lease_token:claim.lease_token,report_uuid:claim.report_uuid,report_state,error_code:null,error_message:null}}];"},"type":"n8n-nodes-base.code","typeVersion":2,"position":[960,-80],"id":"cd50856d-8490-4de2-a7c1-75c07579ffbb","name":"Build CPC Status Update"},
+      {"parameters":{"method":"POST","url":"http://efa-commercial-baseline-collector:8080/v1/commercial/cpc/lifecycle/status","sendBody":true,"specifyBody":"json","jsonBody":"={{ $json }}","options":{}},"type":"n8n-nodes-base.httpRequest","typeVersion":4.4,"position":[1200,-80],"id":"5708574d-1420-4f45-a2ab-df15cdef7696","name":"Record CPC Report Status"},
+      {"parameters":{"conditions":{"options":{"caseSensitive":true,"leftValue":"","typeValidation":"strict","version":2},"conditions":[{"leftValue":"={{ $json.action }}","rightValue":"READY","operator":{"type":"string","operation":"equals"}}],"combinator":"and"},"options":{}},"type":"n8n-nodes-base.if","typeVersion":2.2,"position":[1440,-80],"id":"96903e18-b29f-425c-8dc5-e0fc34b15268","name":"CPC Report Ready"},
+      {"parameters":{"operation":"getCampaignStatisticsData","reportUuid":"={{ $json.report_uuid }}"},"type":"CUSTOM.ozonPerformance","typeVersion":1,"position":[1680,-160],"id":"58658d82-1dbb-4f46-a070-33d61de9c3f1","name":"Get CPC Daily Data","credentials":{"ozonPerformanceOAuth2Api":{"id":"AEeFEUH2M1R5b2HL","name":"Ozon Performance API - EFA OS"}}},
+      {"parameters":{"jsCode":"const lifecycle = $items('Record CPC Report Status')[0].json;\nif (!lifecycle.report_uuid || !$json || typeof $json !== 'object') throw new Error('CPC report payload is incomplete');\nreturn [{json:{collection_ref:lifecycle.collection_ref,collected_at:new Date().toISOString(),business_date:lifecycle.business_date,report_uuid:lifecycle.report_uuid,campaigns:lifecycle.campaigns,report:$json,persist:true}}];"},"type":"n8n-nodes-base.code","typeVersion":2,"position":[1920,-160],"id":"1f794e11-97a0-4419-8fc4-67d4b60294d8","name":"Build CPC Persistence Payload"},
+      {"parameters":{"method":"POST","url":"http://efa-commercial-baseline-collector:8080/v1/commercial/cpc/collect","sendBody":true,"specifyBody":"json","jsonBody":"={{ $json }}","options":{}},"type":"n8n-nodes-base.httpRequest","typeVersion":4.4,"position":[2160,-160],"id":"edaff0c0-d5ed-4552-8e62-c5f5316b48bb","name":"Persist CPC Daily History"}
+    ],
+    "connections":{
+      "Every 10 Minutes":{"main":[[{"node":"Claim Pending CPC Report","type":"main","index":0}]]},
+      "Manual Controlled Poll":{"main":[[{"node":"Claim Pending CPC Report","type":"main","index":0}]]},
+      "Claim Pending CPC Report":{"main":[[{"node":"Pending Report Claimed","type":"main","index":0}]]},
+      "Pending Report Claimed":{"main":[[{"node":"Get CPC Report Status","type":"main","index":0}],[]]},
+      "Get CPC Report Status":{"main":[[{"node":"Build CPC Status Update","type":"main","index":0}]]},
+      "Build CPC Status Update":{"main":[[{"node":"Record CPC Report Status","type":"main","index":0}]]},
+      "Record CPC Report Status":{"main":[[{"node":"CPC Report Ready","type":"main","index":0}]]},
+      "CPC Report Ready":{"main":[[{"node":"Get CPC Daily Data","type":"main","index":0}],[]]},
+      "Get CPC Daily Data":{"main":[[{"node":"Build CPC Persistence Payload","type":"main","index":0}]]},
+      "Build CPC Persistence Payload":{"main":[[{"node":"Persist CPC Daily History","type":"main","index":0}]]}
+    },
+    "settings":{"executionOrder":"v1","timezone":"Europe/Moscow","binaryMode":"separate"},
+    "pinData":{}
+  }
+]

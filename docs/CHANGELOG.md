@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026-08-18 — CPC asynchronous report lifecycle v1
+
+- Replaced the in-execution CPC wait/poll loop with durable CREATE and POLL
+  stages. `CPCDAILYV1` remains active at 07:30 Europe/Moscow and creates at
+  most one report per business date; it no longer waits for report completion.
+- Applied migration 010 after a validated production backup. The existing
+  `cpc_collection_runs` table now records explicit lifecycle state, external
+  report state, status-check counts, timestamps, error metadata, campaign
+  snapshot and a bounded poll lease. Existing Daily Brief freshness remains
+  compatible through final `status='success'` rows.
+- Registered the existing 2026-08-17 report UUID
+  `191827e5-2c73-429a-9ce1-34b48f560a46` without creating a replacement. Its
+  state remains `PENDING / NOT_STARTED`.
+- Added `CPC Report Poller v1` with one leased pending report per cycle, one
+  status request per UUID, a ten-minute cadence and a two-hour `STUCK` policy.
+  It is deployed inactive pending owner approval for the first controlled
+  poll; no Performance status/download call was made by this implementation.
+
 ## 2026-08-18 — Daily Brief delivery DNS resilience
 
 - Added standard n8n retry semantics to `Get Daily Brief` in the active

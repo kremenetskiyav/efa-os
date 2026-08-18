@@ -13,8 +13,7 @@ class Cursor:
         self.calls.append(("executemany",sql,rows))
         if self.fail: raise RuntimeError("insert failed")
     def fetchone(self):
-        if "SELECT run_id" in self._last: return self.existing
-        if "RETURNING run_id" in self._last: return ("run-1",)
+        if "FROM cpc_collection_runs" in self._last: return self.existing
         return None
     def fetchall(self): return [(4601821825,"УФ 001Б")]
 
@@ -48,14 +47,30 @@ class RepositoryTests(unittest.TestCase):
         self.assertEqual(conn.events[-2:],["rollback","close"])
 
     def test_cpc_transaction_and_mapping_degradation(self):
-        cur=Cursor(); cur.fetchall=lambda:[]; conn=Connection(cur); result=persist_cpc(cpc(),lambda:conn)
+        cur=Cursor(existing=("run-1","pending","PENDING",cpc()["report_uuid"],"2026-08-10")); cur.fetchall=lambda:[]; conn=Connection(cur); result=persist_cpc(cpc(),lambda:conn)
         self.assertEqual((result["mapping_status"],result["unmapped_skus"]),("invalid",[4601821825]))
+        self.assertEqual(result["lifecycle_state"],"SUCCESS_NONZERO")
         self.assertEqual(conn.events[-2:],["commit","close"])
 
+    def test_cpc_ready_zero_finishes_without_synthetic_rows(self):
+        payload=cpc(); payload["rows"]=[]
+        cur=Cursor(existing=("run-1","pending","PENDING",payload["report_uuid"],"2026-08-10")); conn=Connection(cur)
+        result=persist_cpc(payload,lambda:conn)
+        self.assertEqual(result["lifecycle_state"],"SUCCESS_ZERO")
+        self.assertFalse(any(call[0] == "executemany" for call in cur.calls))
+
     def test_cpc_idempotent_replay_has_no_insert(self):
-        cur=Cursor(existing=("old-run","success")); conn=Connection(cur); result=persist_cpc(cpc(),lambda:conn)
+        cur=Cursor(existing=("old-run","success","SUCCESS_NONZERO",cpc()["report_uuid"],"2026-08-10")); conn=Connection(cur); result=persist_cpc(cpc(),lambda:conn)
         self.assertTrue(result["idempotent_replay"])
         self.assertFalse(any("INSERT" in call[1] for call in cur.calls))
+
+    def test_cpc_requires_registered_lifecycle(self):
+        cur=Cursor(existing=None); conn=Connection(cur)
+        with self.assertRaises(PersistenceError): persist_cpc(cpc(),lambda:conn)
+
+    def test_cpc_rejects_different_report_uuid(self):
+        cur=Cursor(existing=("run-1","pending","PENDING","aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","2026-08-10")); conn=Connection(cur)
+        with self.assertRaises(PersistenceError): persist_cpc(cpc(),lambda:conn)
 
     def test_failure_rolls_back(self):
         cur=Cursor(fail=True); conn=Connection(cur)

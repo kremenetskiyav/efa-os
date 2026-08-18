@@ -153,6 +153,24 @@ Next tax step: **official FNS tax-date / USN / 1% / VAT validation**.
 
 ## Commercial Baseline Collection v0.1 — active
 
+### CPC Async Report Lifecycle v1 — CREATE active / POLLER awaiting approval
+
+The asynchronous Performance report lifecycle is now durable in the existing
+`cpc_collection_runs` table. `CPCDAILYV1` remains active at 07:30
+Europe/Moscow but now ends after reserving a business date, creating at most
+one report and registering its UUID. It contains no wait or status loop.
+
+`CPC Report Poller v1` (`CPCREPORTPOLLERV1`) is deployed with a ten-minute
+schedule definition but remains inactive until the owner approves the first
+controlled poll. It leases at most one pending UUID, makes one status request,
+persists ready data transactionally and maps pending, terminal and two-hour
+stuck states deterministically. It has no report-creation path.
+
+Migration 010 is applied. The existing 2026-08-17 UUID
+`191827e5-2c73-429a-9ce1-34b48f560a46` is retained as
+`PENDING / NOT_STARTED`; no replacement report or recovery API call was made.
+Daily Brief code and delivery remain unchanged.
+
 Separate read-only daily automations now accumulate commercial flows without
 mixing their time semantics. `Seller Analytics Daily Collection v0.1`
 (`SELLERDAILYV1`, 07:10 Europe/Moscow) stores only confirmed ordered revenue

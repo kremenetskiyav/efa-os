@@ -71,26 +71,30 @@ def persist_cpc(collection: dict[str, Any], connection_factory: Callable[[], Any
     connection = connection_factory()
     try:
         cursor = connection.cursor()
-        cursor.execute("SELECT run_id, status FROM cpc_collection_runs WHERE collection_ref=%s", (collection["collection_ref"],))
+        cursor.execute(
+            """SELECT run_id,status,lifecycle_state,report_uuid,business_date
+                 FROM cpc_collection_runs
+                WHERE collection_ref=%s
+                FOR UPDATE""",
+            (collection["collection_ref"],),
+        )
         existing = cursor.fetchone()
-        if existing is not None:
-            if existing[1] != "success":
-                raise PersistenceError("CPC collection_ref belongs to incomplete run")
+        if existing is None:
+            raise PersistenceError("CPC lifecycle is not registered")
+        if existing[2] in {"SUCCESS_ZERO", "SUCCESS_NONZERO"}:
             connection.rollback()
             return {"run_id": existing[0], "idempotent_replay": True, "inserted_records": 0}
+        if existing[2] != "PENDING":
+            raise PersistenceError(f"CPC lifecycle cannot persist from {existing[2]}")
+        if str(existing[3]) != collection["report_uuid"]:
+            raise PersistenceError("CPC report UUID does not match its lifecycle")
+        if str(existing[4]) != collection["business_date"]:
+            raise PersistenceError("CPC business_date does not match its lifecycle")
+        if any(row["business_date"] != collection["business_date"] for row in collection["rows"]):
+            raise PersistenceError("CPC report contains a different business_date")
         rows, unmapped = _map_rows(cursor, collection["rows"])
         mapping_status = "valid" if not unmapped else ("partial" if len(unmapped) < len({r['sku'] for r in rows}) else "invalid")
-        cursor.execute(
-            """INSERT INTO cpc_collection_runs
-                   (collection_ref,collected_at,business_date,report_uuid,status,campaigns_count,
-                    records_count,mapped_offer_ids,unmapped_skus,mapping_status,source)
-                 VALUES (%s,%s,%s,%s,'running',%s,%s,%s,%s,%s,%s) RETURNING run_id""",
-            (collection["collection_ref"], collection["collected_at"], collection["business_date"],
-             collection["report_uuid"], collection["campaigns_count"], len(rows),
-             len({r["offer_id"] for r in rows if r["offer_id"]}), len(unmapped), mapping_status,
-             "ozon_performance_statistics_v1"),
-        )
-        run_id = cursor.fetchone()[0]
+        run_id = existing[0]
         detail_rows = [(
             run_id, row["business_date"], row["campaign_id"], row.get("campaign_state"),
             row.get("campaign_type"), row["sku"], row.get("offer_id"), row["views"], row["clicks"],
@@ -107,11 +111,25 @@ def persist_cpc(collection: dict[str, Any], connection_factory: Callable[[], Any
                      VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
                 detail_rows,
             )
-        cursor.execute("UPDATE cpc_collection_runs SET status='success' WHERE run_id=%s AND status='running'", (run_id,))
+        lifecycle_state = "SUCCESS_NONZERO" if rows else "SUCCESS_ZERO"
+        cursor.execute(
+            """UPDATE cpc_collection_runs
+                  SET status='success',lifecycle_state=%s,collected_at=%s,updated_at=now(),
+                      completed_at=now(),campaigns_count=%s,records_count=%s,
+                      mapped_offer_ids=%s,unmapped_skus=%s,mapping_status=%s,
+                      error_code=NULL,error_message=NULL,attention_reason=NULL,
+                      poll_lease_token=NULL,poll_lease_until=NULL
+                WHERE run_id=%s AND lifecycle_state='PENDING'""",
+            (lifecycle_state, collection["collected_at"], collection["campaigns_count"], len(rows),
+             len({r["offer_id"] for r in rows if r["offer_id"]}), len(unmapped), mapping_status, run_id),
+        )
         if cursor.rowcount != 1:
             raise PersistenceError("CPC run lifecycle update failed")
         connection.commit()
-        return {"run_id": run_id, "idempotent_replay": False, "inserted_records": len(rows), "mapped_offer_ids": len({r['offer_id'] for r in rows if r['offer_id']}), "unmapped_skus": sorted(unmapped), "mapping_status": mapping_status}
+        return {"run_id": run_id, "idempotent_replay": False, "inserted_records": len(rows),
+                "mapped_offer_ids": len({r['offer_id'] for r in rows if r['offer_id']}),
+                "unmapped_skus": sorted(unmapped), "mapping_status": mapping_status,
+                "lifecycle_state": lifecycle_state}
     except Exception:
         connection.rollback()
         raise
