@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-08-18 — Daily Brief delivery DNS resilience
+
+- Added standard n8n retry semantics to `Get Daily Brief` in the active
+  production workflow `Kf241Y5kzETghygL`: three total attempts with a
+  five-second wait between attempts. This narrowly tolerates transient Docker
+  DNS resolution failures while retaining the existing schedule, payload,
+  PDF and channel-delivery logic.
+- The approved one-time manual recovery execution `1097` then completed
+  successfully: deterministic brief retrieval, PDF generation, Gmail delivery
+  and Telegram delivery all returned `SUCCESS`. No second recovery run was
+  performed.
+
 ## 2026-08-17 — Automated Ozon Gmail polling
 
 - Activated the single hourly host scheduler for `OZON_GMAIL_NOTIFICATIONS`

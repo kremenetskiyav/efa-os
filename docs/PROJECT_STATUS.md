@@ -220,6 +220,11 @@ idempotency is persisted by n8n workflow static data with key
 is not resent, while a failed channel remains eligible on the next run.
 Manual test deliveries remain separate, inactive and non-production.
 
+Following the 2026-08-18 transient Docker DNS failure resolving
+`efa-daily-brief`, its `Get Daily Brief` node uses standard n8n retry semantics:
+three total attempts with a five-second wait. No schedule, payload, rendering,
+credential or channel behavior changed.
+
 Both production channel paths have completed one controlled manual E2E: Gmail
 OAuth2 delivered the verified HTML plus PDF after desktop/mobile review, and
 Telegram delivered the approved compact summary to the confirmed private
