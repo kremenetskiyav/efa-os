@@ -11,7 +11,8 @@
   },
   "n8n": {
     "credentials": [
-      "credentials/OzonPerformanceOAuth2Api.credentials.js"
+      "credentials/OzonPerformanceOAuth2Api.credentials.js",
+      "credentials/TelegramBotPathApi.credentials.js"
     ],
     "nodes": [
       "nodes/OzonPerformance/OzonPerformance.node.js"
@@ -19,6 +20,6 @@
   },
   "scripts": {
     "test": "node --test test/*.test.js",
-    "check": "node --check credentials/OzonPerformanceOAuth2Api.credentials.js && node --check lib/http-error.js && node --check lib/token-manager.js && node --check nodes/OzonPerformance/OzonPerformance.node.js"
+    "check": "node --check credentials/OzonPerformanceOAuth2Api.credentials.js && node --check credentials/TelegramBotPathApi.credentials.js && node --check lib/http-error.js && node --check lib/token-manager.js && node --check nodes/OzonPerformance/OzonPerformance.node.js"
   }
 }

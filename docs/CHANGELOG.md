@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-08-19 — Secure Telegram plain-text transport
+
+- Added the private `Telegram Bot Path API` credential type to the existing n8n
+  custom-extension package. It stores the bot token as an encrypted credential,
+  forces the single Telegram `sendMessage` endpoint and rejects `parse_mode`.
+- Bound the production Daily Brief Telegram HTTP Request node to the encrypted
+  predefined credential. The workflow now contains only the credential reference,
+  `chat_id` and plain text; `$env` is no longer used by the workflow.
+- Rebuilt and recreated only `efa-n8n`, passed focused credential/transport tests
+  and static workflow validation, and made no Telegram, email or workflow call.
+
 ## 2026-08-18 — Daily Brief v1.1
 
 - Separated `current_day_economics` from `latest_confirmed_economics` globally

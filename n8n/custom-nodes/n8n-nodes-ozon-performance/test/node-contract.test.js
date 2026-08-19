@@ -7,8 +7,10 @@ const path = require("node:path");
 
 const root = path.join(__dirname, "..");
 const credentialSource = fs.readFileSync(path.join(root, "credentials", "OzonPerformanceOAuth2Api.credentials.js"), "utf8");
+const telegramCredentialSource = fs.readFileSync(path.join(root, "credentials", "TelegramBotPathApi.credentials.js"), "utf8");
 const nodeSource = fs.readFileSync(path.join(root, "nodes", "OzonPerformance", "OzonPerformance.node.js"), "utf8");
 const { formatOzonHttpError } = require(path.join(root, "lib", "http-error.js"));
+const { TelegramBotPathApi } = require(path.join(root, "credentials", "TelegramBotPathApi.credentials.js"));
 
 test("credential keeps only Client ID and Client Secret in n8n credential storage", () => {
 	assert.match(credentialSource, /name: "clientId"/);
@@ -65,6 +67,45 @@ test("HTTP errors expose Ozon status and body without credential material", () =
 
 test("package declares an n8n credential and node without workflow serialization", () => {
 	const packageDefinition = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
-	assert.deepEqual(packageDefinition.n8n.credentials, ["credentials/OzonPerformanceOAuth2Api.credentials.js"]);
+	assert.deepEqual(packageDefinition.n8n.credentials, [
+		"credentials/OzonPerformanceOAuth2Api.credentials.js",
+		"credentials/TelegramBotPathApi.credentials.js",
+	]);
 	assert.deepEqual(packageDefinition.n8n.nodes, ["nodes/OzonPerformance/OzonPerformance.node.js"]);
+});
+
+test("Telegram Bot Path credential stores one encrypted token field and exposes predefined authentication", () => {
+	assert.match(telegramCredentialSource, /name: "botToken"/);
+	assert.match(telegramCredentialSource, /password: true/);
+	assert.match(telegramCredentialSource, /this\.authenticate = async/);
+	assert.doesNotMatch(telegramCredentialSource, /baseUrl|host|path.*name:/i);
+});
+
+test("Telegram Bot Path authentication fixes POST target and preserves a plain-text body", async () => {
+	const credential = new TelegramBotPathApi();
+	const body = { chat_id: "123", text: "ACTION_REQUIRED · FBS-UF004B-4118344-V0.1" };
+	const authenticated = await credential.authenticate(
+		{ botToken: "123456:secret_token" },
+		{ method: "GET", url: "https://attacker.invalid/steal", body },
+	);
+
+	assert.equal(authenticated.method, "POST");
+	assert.equal(authenticated.url, "https://api.telegram.org/bot123456:secret_token/sendMessage");
+	assert.deepEqual(authenticated.body, body);
+	assert.equal(Object.hasOwn(authenticated.body, "parse_mode"), false);
+});
+
+test("Telegram Bot Path authentication rejects invalid tokens and parse_mode", async () => {
+	const credential = new TelegramBotPathApi();
+	await assert.rejects(
+		credential.authenticate({ botToken: "not-a-token" }, { url: "https://api.telegram.org/sendMessage" }),
+		/credential is invalid/,
+	);
+	await assert.rejects(
+		credential.authenticate(
+			{ botToken: "123456:secret_token" },
+			{ url: "https://api.telegram.org/sendMessage", body: { chat_id: "123", text: "x", parse_mode: "HTML" } },
+		),
+		/forbids parse_mode/,
+	);
 });

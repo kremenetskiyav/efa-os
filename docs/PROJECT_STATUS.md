@@ -280,6 +280,15 @@ Following the 2026-08-18 transient Docker DNS failure resolving
 three total attempts with a five-second wait. No schedule, payload, rendering,
 credential or channel behavior changed.
 
+Telegram delivery now uses the private `Telegram Bot Path API` credential type
+from the existing custom-extension package. The credential stores the bot token
+only in encrypted n8n credential storage and constrains HTTP authentication to
+`POST https://api.telegram.org/bot<TOKEN>/sendMessage`; the workflow serializes
+only the credential reference and a body containing `chat_id` plus plain text.
+No `parse_mode` or `$env` expression is used, and instance-wide environment
+access remains blocked. The transport has passed static validation; no recovery
+message was sent during implementation.
+
 Both production channel paths have completed one controlled manual E2E: Gmail
 OAuth2 delivered the verified HTML plus PDF after desktop/mobile review, and
 Telegram delivered the approved compact summary to the confirmed private
