@@ -275,6 +275,14 @@ idempotency is persisted by n8n workflow static data with key
 is not resent, while a failed channel remains eligible on the next run.
 Manual test deliveries remain separate, inactive and non-production.
 
+Delivery business date is now an immutable workflow-start context. Scheduled
+runs derive the previous Moscow calendar day once from the Schedule Trigger
+timestamp; manual or recovery runs fail closed unless an explicit valid
+`business_date` is supplied. The base brief, Telegram, email HTML and PDF
+requests all reference that same locked value, and response validation rejects
+any date mismatch. No production rendering node has an implicit current-date
+fallback.
+
 Following the 2026-08-18 transient Docker DNS failure resolving
 `efa-daily-brief`, its `Get Daily Brief` node uses standard n8n retry semantics:
 three total attempts with a five-second wait. No schedule, payload, rendering,
@@ -286,8 +294,13 @@ only in encrypted n8n credential storage and constrains HTTP authentication to
 `POST https://api.telegram.org/bot<TOKEN>/sendMessage`; the workflow serializes
 only the credential reference and a body containing `chat_id` plus plain text.
 No `parse_mode` or `$env` expression is used, and instance-wide environment
-access remains blocked. The transport has passed static validation; no recovery
-message was sent during implementation.
+access remains blocked.
+
+Controlled execution 1193 confirmed Telegram Bot API plain-text transport
+(`ok=true`) but also exposed the former implicit-date defect: the intended
+2026-08-17 recovery recomputed and sent 2026-08-18. No retry was made. The date
+context contract above is the corrective control; the 2026-08-17 Telegram
+recovery remains intentionally pending owner review.
 
 Both production channel paths have completed one controlled manual E2E: Gmail
 OAuth2 delivered the verified HTML plus PDF after desktop/mobile review, and

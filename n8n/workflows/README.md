@@ -34,7 +34,7 @@ The current baseline was exported from the local n8n instance after the OZON API
 
 Canonical production workflow ID: `Kf241Y5kzETghygL`.
 
-The sanitised workflow is [`Ozon_Daily_Commercial_Brief_Delivery_v1.json`](Ozon_Daily_Commercial_Brief_Delivery_v1.json). It has one daily Schedule Trigger at 08:15 in `Europe/Moscow`, obtains deterministic representations only from the private `efa-daily-brief` bridge, and has no Ozon nodes. Recipient and chat destination are runtime placeholders; Gmail and Telegram credentials are bound only in local n8n credential storage. Per-channel production idempotency is stored in workflow static data under `daily-brief:v0.1:production:<channel>:<business_date>`. The separate TEST workflow remains inactive.
+The sanitised workflow is [`Ozon_Daily_Commercial_Brief_Delivery_v1.json`](Ozon_Daily_Commercial_Brief_Delivery_v1.json). It has one daily Schedule Trigger at 08:15 in `Europe/Moscow`, locks the previous Moscow calendar day once from the trigger timestamp, obtains deterministic representations only from the private `efa-daily-brief` bridge, and has no Ozon nodes. Manual/partial recovery requires an explicit valid `business_date` and otherwise fails before any render or delivery node. The base brief, Telegram, email HTML and PDF endpoints all receive the same locked date. Recipient and chat destination are runtime placeholders; Gmail and Telegram credentials are bound only in local n8n credential storage. Per-channel production idempotency is stored in workflow static data under `daily-brief:v0.1:production:<channel>:<business_date>`. The separate TEST workflow remains inactive.
 
 ## CPC Async Report Lifecycle v1
 

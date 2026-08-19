@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-08-19 — Explicit Daily Brief delivery date context
+
+- Fixed the implicit-date defect exposed by Telegram recovery execution 1193:
+  the base Daily Brief request had no `date` parameter, so a partial run could
+  recompute the current business date before entering the channel branch.
+- Added a fail-closed workflow-start date lock. Scheduled runs compute the
+  previous Moscow day once; manual/recovery runs require explicit `YYYY-MM-DD`.
+- Bound the base brief, Telegram, email HTML and PDF endpoints to the same
+  immutable date and added response-date mismatch validation. Static tests only;
+  no Telegram, email, PDF or workflow execution was performed for this fix.
+
 ## 2026-08-19 — Secure Telegram plain-text transport
 
 - Added the private `Telegram Bot Path API` credential type to the existing n8n
