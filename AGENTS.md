@@ -1,62 +1,84 @@
 # AGENTS.md
 
-## Project purpose
+## Repository identity
 
-`efa-os` is the source-controlled project for the EFA automotive cabin air filter brand and its OZON AI automation system. The canonical runtime is local: Docker Desktop + n8n + PostgreSQL, with OZON Seller API as the external source and an AI analyst/decision-support layer on top of PostgreSQL.
+- Work only in the Git worktree that contains this file.
+- Before any write, verify the Git root. On the primary workstation, expect `D:\efa-os-github`.
+- Do not use sibling backup, export, or older directories as the working repository.
 
-## Source of truth and architecture
+## Sources of truth
 
-- The canonical n8n workflow is `n8n/workflows/OZON_workflow_Phase_A.json`.
-- GitHub is the source-control and documentation layer; it is not the production runtime.
-- `products.offer_id` is the canonical product identifier for analytical and monitoring work.
-- Extend existing workflow branches and PostgreSQL tables/views when they already provide the required capability; do not duplicate them.
-- Keep persistent business calculations and SQL aggregation in PostgreSQL queries/views rather than duplicating them in n8n JavaScript nodes.
+- Use Git/GitHub for tracked code, documentation, migrations, configuration templates, and sanitised workflow definitions.
+- Use `EFA Products/` for local primary product materials; it is intentionally excluded from Git.
+- Use an approved SKU passport as the authoritative structured product record when an explicit approval state exists.
+- Use PostgreSQL for operational and historical data architecturally stored in the database.
+- Use the Ozon API for the current observable Ozon state returned by supported endpoints at request time.
+- Do not treat any source as universally authoritative. Match the source to the data type.
+- Preserve material provenance: source, observation or verification time, and confirmation level.
+- If authoritative sources conflict, preserve both observations, report the conflict, and stop before publication or external write.
 
 ## Product-data integrity
 
-- Facts take priority over assumptions. Do not invent technical specifications, OEM numbers, dimensions, compatibility, or service life.
-- State vehicle compatibility only when it is supported by verified data; otherwise state that confirmation is unavailable.
-- Do not claim that a product is OEM or superior to OEM without verified evidence.
-- Treat SKU material in `EFA Products/` as a primary source until it is transferred into an approved product passport.
-- Ozon documents and materials must follow the applicable product and marketplace standards.
+- Put facts before assumptions. Never invent specifications, OEM numbers, dimensions, fitment, or service life.
+- State vehicle compatibility only when verified; otherwise state that confirmation is unavailable.
+- Never claim OEM status or superiority over OEM without verified evidence.
+- Keep facts, detected events, inference, and recommendations explicitly separate.
+- Follow `docs/products/product-standard.md` and `docs/marketplace/ozon-standard.md` for product and listing work.
 
-## Security and configuration
+## Operating modes and scope
 
-- Never commit real OZON API keys, passwords, access tokens, cookies, session data, connection strings, or n8n credentials.
-- Keep credentials in local n8n credential storage or local environment configuration.
-- Configuration for scripts must use environment variables. Maintain permitted variable names in `.env.example` without real values; keep `.env` local and ignored.
-- Do not commit local exports, database dumps, backups, financial workbooks, logs, Docker volumes, or temporary files.
-- Repository copies of workflows must contain placeholders instead of secrets.
+- `READ`: inspect, analyse, and validate without changing state.
+- `PROPOSE`: produce a plan, recommendation, diff, or change design without applying it.
+- `WRITE`: change only the scope explicitly authorised by the user.
+- READ permission does not imply WRITE permission.
+- An explicit request to create, change, or fix file X authorises local WRITE only for that stated scope.
+- Local code WRITE does not authorise production or external writes.
+- Never expand scope or move to a higher-impact mode implicitly.
 
-## Change discipline
+## Production and external writes
 
-Before changing a workflow, analytical query, migration, or monitoring logic:
+- Require separate explicit approval before changing prices, product listings, advertising or CPC, promotions, inventory, production PostgreSQL, applying production migrations, production n8n workflows or schedules, Ozon, or any other external system.
+- Confirm the exact target, environment, operation, and rollback or recovery path before an approved production write.
 
-1. Read `docs/PROJECT_STATUS.md` and `docs/ARCHITECTURE.md`.
-2. Inspect the existing workflow branch, table, view, or tool before creating anything new.
-3. Preserve table/view compatibility unless a migration is explicitly planned and reviewed.
-4. Keep changes small, testable, and documented when architecture or behaviour changes.
-5. Before a commit, review `git status` and the exact diff.
-6. Do not delete or overwrite source product data without explicit approval.
+## Security and sensitive data
+
+- Never commit API keys, passwords, tokens, cookies, connection strings, credentials, session data, or encryption keys.
+- Use approved local credential storage or environment configuration; keep `.env` local and ignored.
+- Do not read or display secret values from `.env`, credentials, dumps, runtime databases, or encryption keys without necessity and permission.
+- You may safely check file existence, variable presence, variable names, and other metadata without revealing values.
+- When a potential secret is found, report only its path and category, never its value.
+- Never place secrets in workflow exports, source code, logs, diffs, reports, or chat output.
+- Keep repository workflow definitions sanitised and configuration examples secret-free.
+- Do not commit local exports, database dumps, backups, financial workbooks, logs, Docker volumes, runtime data, or temporary files.
+
+## Change and Git discipline
+
+- Inspect the existing implementation before changing it; do not create parallel implementations without need.
+- Preserve unrelated and unfinished user changes in the worktree.
+- Keep changes small, reviewable, testable, and traceable.
+- Before a commit, review `git status`, the exact diff, and relevant test results.
+- Commit or push only when it is explicitly included in the task.
+- Do not run destructive Git commands without separate explicit approval.
+- Do not delete, overwrite, or move source product data without explicit approval.
+- Do not modify generated, runtime, or backup artifacts unless the task explicitly targets them.
 
 ## PostgreSQL and migrations
 
-- Inspect the actual PostgreSQL schema before rewriting views, migrations, or analytical SQL; do not infer it from documentation alone.
-- Do not modify existing Phase A tables or views unless the change is explicitly planned.
-- Version new schema changes as reviewed migrations when the repository migration mechanism is present. Never apply a migration to a working database without explicit approval.
+- Inspect the actual PostgreSQL schema when the task depends on it; do not infer it from documentation alone.
+- Make schema changes only through reviewed, versioned migrations.
+- Apply a production migration only with explicit approval.
+- Never rewrite an applied migration; correct it with a new migration.
+- Follow `database/README.md` for migration procedure and safety rules.
 
-## Snapshot Layer and autonomous monitoring
+## Documentation routing
 
-- Snapshot Layer v1 is a monitoring foundation, not an automated control system.
-- Its initial scope is immutable product snapshots and the deterministic `PRICE_CHANGED` event.
-- Use UTC timestamps for technical event time and Europe/Moscow business dates for operations.
-- Repeated runs must be idempotent; corrections are represented by new runs and snapshots, not updates to historical facts.
-- Do not automatically change products, prices, promotions, inventory, or OZON settings.
+- Read `docs/ARCHITECTURE.md` for system boundaries and data flow.
+- Read `docs/PROJECT_STATUS.md` only when the task depends on current production state.
+- Read `n8n/workflows/README.md` for canonical workflow and credential rules.
+- Read `docs/TRANSFER_RECOVERY.md` for backup, transfer, and recovery work.
+- Prefer the relevant profile document over duplicating subsystem rules here.
 
-## AI-agent rules
+## Stop conditions
 
-- AI agents may analyse verified facts and generate explanations or recommendations; they must not present inference as fact.
-- Keep facts, detected events, interpretations, and recommended actions separate.
-- Read existing tools and documentation before proposing a new tool or workflow branch.
-- Do not bypass security controls, reveal credentials, execute production-changing actions, or claim the system is production-safe without evidence.
-- Prefer improving the existing Phase A architecture over rebuilding it; preserve verified regional logistics, price history, returns, stock, and financial analytics.
+- Stop and report when authoritative sources conflict, production scope is ambiguous, required evidence is unavailable, an action may cause irreversible data loss, or the requested action exceeds the authorised scope.
+- Data preservation, traceability, and reversibility take priority over speed or automation.
