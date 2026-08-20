@@ -34,7 +34,7 @@ async def main() -> None:
 
     async with Client(mcp) as client:
         tools = await client.list_tools()
-        tool_names = {tool.name for tool in tools}
+        tool_names = {tool.name for tool in tools.tools}
         if tool_names != EXPECTED_TOOLS:
             raise RuntimeError("Unexpected MCP tool registration")
 
@@ -116,19 +116,35 @@ async def main() -> None:
             if identity["transaction_read_only"] != "on":
                 raise RuntimeError("Integration transaction is not read-only")
 
-            raw_denied = False
+        raw_denied = False
+        async with connection.transaction(readonly=True):
             try:
                 await connection.fetchval("SELECT 1 FROM public.products LIMIT 1")
             except asyncpg.InsufficientPrivilegeError:
                 raw_denied = True
-            if not raw_denied:
-                raise RuntimeError("Raw public access was not denied")
-            summary["acl"] = {
-                "role": "expected_readonly_role",
-                "database": "expected_database",
-                "transaction_read_only": True,
-                "raw_public_select_denied": True,
-            }
+        if not raw_denied:
+            raise RuntimeError("Raw public access was not denied")
+
+        write_denied = False
+        async with connection.transaction(readonly=True):
+            try:
+                await connection.execute(
+                    "UPDATE public.products SET offer_id = offer_id WHERE false"
+                )
+            except (
+                asyncpg.InsufficientPrivilegeError,
+                asyncpg.ReadOnlySQLTransactionError,
+            ):
+                write_denied = True
+        if not write_denied:
+            raise RuntimeError("Database write was not denied")
+        summary["acl"] = {
+            "role": "expected_readonly_role",
+            "database": "expected_database",
+            "transaction_read_only": True,
+            "raw_public_select_denied": True,
+            "write_denied": True,
+        }
     finally:
         await connection.close()
 
