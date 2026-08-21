@@ -21,3 +21,5 @@ python services/control-center/app.py --host 127.0.0.1 --port 8090
 
 Production uses one systemd service and listens only on `127.0.0.1:8090`.
 Caddy provides HTTPS and Basic Auth at `panel.efa-os.ru`.
+The protected Control Center environment file retains the existing read-only
+DSN and uses `127.0.0.1` for the host-side PostgreSQL connection.

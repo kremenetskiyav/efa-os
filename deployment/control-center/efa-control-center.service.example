@@ -8,7 +8,7 @@ Type=simple
 User=efa-control-center
 Group=efa-control-center
 WorkingDirectory=/opt/efa-os
-EnvironmentFile=/etc/efa-os/ai-analyst.env
+EnvironmentFile=/etc/efa-os/control-center/database.env
 Environment=EFA_CONTROL_CENTER_HOST=127.0.0.1
 Environment=EFA_CONTROL_CENTER_PORT=8090
 Environment=EFA_N8N_URL=http://127.0.0.1:5678
