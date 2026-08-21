@@ -35,13 +35,15 @@ DAILY_DROP_PERCENT = Decimal("-50")
 VIEW_QUERIES = {
     "overview": """
         SELECT offer_id, sku, product_name, is_archived, current_price,
-               price_observed_at, price_checked_at, stock_snapshot_at, total_present,
+               price_observed_at, price_checked_at, cost_price, cost_basis,
+               current_price_economics_status, stock_snapshot_at, total_present,
                stock_data_quality_status, regional_data_quality
         FROM mcp_read.product_overview
         ORDER BY offer_id
     """,
     "price": """
-        SELECT offer_id, observed_at, price, previous_price, change_percent
+        SELECT offer_id, observed_at, price, previous_price, absolute_change,
+               change_percent, min_price, marketing_price, marketing_seller_price
         FROM mcp_read.product_price_history
         ORDER BY offer_id, observed_at DESC
     """,
@@ -53,7 +55,11 @@ VIEW_QUERIES = {
     """,
     "performance": """
         SELECT offer_id, business_date, ordered_units, ordered_revenue,
-               demand_quality_status
+               demand_quality_status, delivered_units,
+               finance_matched_delivered_units, multi_line_excluded_units,
+               unmatched_finance_units, confirmed_revenue, commission_expense,
+               logistics_expense, other_expenses, cost_of_goods, payout,
+               profit_before_tax, economics_quality_status
         FROM mcp_read.product_daily_performance
         WHERE business_date BETWEEN $1 AND $2
         ORDER BY offer_id, business_date
@@ -66,8 +72,10 @@ VIEW_QUERIES = {
         ORDER BY offer_id, cluster_from, cluster_to
     """,
     "promotions": """
-        SELECT offer_id, promotion_title, participation_state, starts_at,
-               ends_at, observed_at, data_quality_status
+        SELECT offer_id, promotion_title, promotion_type, participation_state,
+               add_mode, starts_at, ends_at, observed_price, promotion_price,
+               max_promotion_price, current_boost, min_boost, max_boost,
+               observed_at, data_quality_status
         FROM mcp_read.product_promotion_state
         ORDER BY offer_id, promotion_title
     """,
@@ -160,7 +168,14 @@ def _clean(value: Any) -> str:
 
 
 def _empty_period() -> dict[str, Any]:
-    return {"days": set(), "units": Decimal("0"), "revenue": Decimal("0"), "statuses": set()}
+    return {
+        "days": set(), "units": Decimal("0"), "revenue": Decimal("0"), "statuses": set(),
+        "delivered": Decimal("0"), "matched": Decimal("0"), "excluded": Decimal("0"),
+        "unmatched": Decimal("0"), "confirmed_revenue": Decimal("0"),
+        "commission": Decimal("0"), "logistics": Decimal("0"),
+        "other_expenses": Decimal("0"), "cost": Decimal("0"), "payout": Decimal("0"),
+        "profit": Decimal("0"), "bad_economics_units": Decimal("0"), "economics_statuses": set(),
+    }
 
 
 def _latest_two(rows: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
@@ -227,6 +242,21 @@ def _aggregate_performance(
             target["revenue"] += _num(row["ordered_revenue"])
         if row["demand_quality_status"]:
             target["statuses"].add(row["demand_quality_status"])
+        target["delivered"] += _num(row.get("delivered_units"))
+        target["matched"] += _num(row.get("finance_matched_delivered_units"))
+        target["excluded"] += _num(row.get("multi_line_excluded_units"))
+        target["unmatched"] += _num(row.get("unmatched_finance_units"))
+        target["confirmed_revenue"] += _num(row.get("confirmed_revenue"))
+        target["commission"] += _num(row.get("commission_expense"))
+        target["logistics"] += _num(row.get("logistics_expense"))
+        target["other_expenses"] += _num(row.get("other_expenses"))
+        target["cost"] += _num(row.get("cost_of_goods"))
+        target["payout"] += _num(row.get("payout"))
+        target["profit"] += _num(row.get("profit_before_tax"))
+        if _num(row.get("delivered_units")) > 0 and row.get("economics_quality_status") != "CONFIRMED_CURRENT_COST":
+            target["bad_economics_units"] += _num(row.get("delivered_units"))
+        if row.get("economics_quality_status"):
+            target["economics_statuses"].add(row["economics_quality_status"])
     return result
 
 
@@ -261,19 +291,110 @@ def _aggregate_cpc(rows: list[dict[str, Any]], current_start: date) -> dict[str,
 
 def _aggregate_promotions(rows: list[dict[str, Any]], as_of: date) -> dict[str, dict[str, Any]]:
     result: dict[str, dict[str, Any]] = defaultdict(
-        lambda: {"active": [], "candidates": 0, "observed_at": None}
+        lambda: {"active": [], "candidates": [], "observed_at": None}
     )
     for row in rows:
         target = result[row["offer_id"]]
         starts, ends = _observed_date(row["starts_at"]), _observed_date(row["ends_at"])
         in_window = (starts is None or starts <= as_of) and (ends is None or ends >= as_of)
         if row["participation_state"] == "PARTICIPATING" and in_window:
-            target["active"].append(_clean(row["promotion_title"]) or "без названия")
+            target["active"].append(row)
         elif row["participation_state"] == "CANDIDATE" and in_window:
-            target["candidates"] += 1
+            target["candidates"].append(row)
         if row["observed_at"] and (target["observed_at"] is None or row["observed_at"] > target["observed_at"]):
             target["observed_at"] = row["observed_at"]
     return result
+
+
+def _economics(period: dict[str, Any]) -> dict[str, Any]:
+    complete = (
+        period["delivered"] >= MIN_BASELINE_UNITS
+        and period["matched"] == period["delivered"]
+        and period["excluded"] == 0
+        and period["unmatched"] == 0
+        and period["bad_economics_units"] == 0
+    )
+    revenue = period["confirmed_revenue"] if complete else None
+    profit = period["profit"] if complete else None
+    margin = _percent(profit, revenue) if complete else None
+    per_unit_revenue = None if not complete else revenue / period["matched"]
+    return {"complete": complete, "profit": profit, "margin": margin, "per_unit_revenue": per_unit_revenue}
+
+
+def _promotion_text(rows: list[dict[str, Any]], candidate: bool = False) -> str:
+    if not rows:
+        return "нет"
+    items = []
+    for row in rows:
+        price = row.get("max_promotion_price") if candidate else row.get("promotion_price")
+        price_text = _fmt_money(price) if price is not None and _num(price) > 0 else "н/д"
+        price_label = "лимит цены" if candidate else "цена"
+        mode = _clean(row.get("add_mode")) or "н/д"
+        items.append(f"{_clean(row.get('promotion_title')) or 'без названия'} ({price_label} {price_text}, режим {mode})")
+    return "; ".join(items)
+
+
+def _commercial_recommendation(product: dict[str, Any], current_end: date) -> dict[str, str]:
+    period = product["performance"]["current"]
+    economics = _economics(period)
+    promo = product["promotions"]
+    price_fresh = _age_days(product.get("price_checked_at"), current_end) is not None and _age_days(product.get("price_checked_at"), current_end) <= FRESHNESS_DAYS
+    stock_fresh = _age_days(product.get("stock_snapshot_at"), current_end) is not None and _age_days(product.get("stock_snapshot_at"), current_end) <= FRESHNESS_DAYS
+    demand_complete = len(period["days"]) == 7 and (not period["statuses"] or period["statuses"] == {"VALID"})
+    blockers = []
+    if not price_fresh:
+        blockers.append("цена не подтверждена свежим снимком")
+    if not stock_fresh or product.get("stock_data_quality_status") != "VALID":
+        blockers.append("остаток не подтверждён")
+    if not demand_complete:
+        blockers.append("окно спроса неполное")
+
+    active_prices = [
+        _num(row.get("promotion_price")) for row in promo["active"]
+        if row.get("promotion_price") is not None and _num(row.get("promotion_price")) > 0
+    ]
+    confirmed_active = (
+        economics["complete"] and economics["per_unit_revenue"] is not None
+        and any(abs(economics["per_unit_revenue"] - price) <= Decimal("2") for price in active_prices)
+    )
+
+    if blockers:
+        price_action = "НЕДОСТАТОЧНО ДАННЫХ"
+        price_reason = ", ".join(blockers)
+    elif economics["complete"] and economics["profit"] < 0:
+        price_action = "ПОДНЯТЬ ЦЕНУ"
+        price_reason = f"подтверждённая прибыль до налога за окно {_fmt_money(economics['profit'])}"
+    else:
+        latest_change = (product.get("price_history") or {}).get("change_percent")
+        logistics_risk = (product.get("logistics") or {}).get("risk")
+        logistics_worse = logistics_risk is not None and _num(logistics_risk.get("logistics_rate_delta_pp")) >= HIGH_LOGISTICS_DELTA_PP
+        sales_falling = product.get("sales_change") is not None and product["sales_change"] <= SALES_DROP_PERCENT
+        if sales_falling and _num(product.get("total_present")) > 0 and not logistics_worse and latest_change is not None and _num(latest_change) > 0:
+            price_action = "ПРОВЕРИТЬ СНИЖЕНИЕ ЦЕНЫ"
+            price_reason = "продажи снизились после повышения цены; остаток есть, ухудшение логистики не подтверждено"
+        elif economics["complete"]:
+            price_action = "НЕ ТРОГАТЬ"
+            price_reason = "подтверждённая экономика не отрицательная; ценовой триггер не найден"
+        else:
+            price_action = "НЕДОСТАТОЧНО ДАННЫХ"
+            price_reason = "экономика текущего 7-дневного окна подтверждена не полностью"
+
+    if promo["active"] and confirmed_active and economics["profit"] < 0:
+        promo_action = "ВЫЙТИ ИЗ АКЦИИ"
+        promo_reason = "акционная цена совпадает с подтверждённой выручкой на единицу, прибыль окна отрицательная"
+    elif promo["active"] and confirmed_active and economics["profit"] >= 0:
+        promo_action = "НЕ ТРОГАТЬ"
+        promo_reason = "акционная цена совпадает с подтверждённой выручкой на единицу, экономика не отрицательная"
+    elif promo["candidates"]:
+        promo_action = "НЕДОСТАТОЧНО ДАННЫХ"
+        promo_reason = "есть цены-кандидаты, но нет подтверждённой маржинальной модели для расчёта экономики после скидки"
+    elif promo["active"]:
+        promo_action = "НЕДОСТАТОЧНО ДАННЫХ"
+        promo_reason = "текущая акция видна, но её цена не связана однозначно с подтверждённой экономикой окна"
+    else:
+        promo_action = "НЕ ТРОГАТЬ"
+        promo_reason = "активных и кандидатных акций нет"
+    return {"price": price_action, "promotion": promo_action, "reason": f"Цена: {price_reason}. Акции: {promo_reason}."}
 
 
 def _aggregate_logistics(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
@@ -401,7 +522,7 @@ def _render(products: list[dict[str, Any]], current_start: date, current_end: da
         key=lambda p: (-daily_priority[p["daily"]["signal"]], p["offer_id"]),
     )[:limit]
     lines = [
-        "# AI Analyst v1.1 — ежедневный отчёт EFA",
+        "# AI Analyst v1.2 — ежедневный отчёт EFA",
         "",
         f"## Сегодня: {current_end.isoformat()} против {(current_end - timedelta(days=1)).isoformat()}",
         "",
@@ -441,7 +562,7 @@ def _render(products: list[dict[str, Any]], current_start: date, current_end: da
             f"- Цена: **{_fmt_money(latest_price['price'] if latest_price else None)}** ({_observed_date(latest_price['observed_at']) if latest_price else 'н/д'}); предыдущий снимок **{_fmt_money(previous_price['price'] if previous_price else None)}** ({_observed_date(previous_price['observed_at']) if previous_price else 'н/д'}); изменение **{_fmt_money(price_delta)}**.",
             f"- Остаток: **{_fmt_number(latest_stock['total_present'] if latest_stock else None)} шт.** ({_observed_date(latest_stock['snapshot_at']) if latest_stock else 'н/д'}); предыдущий снимок **{_fmt_number(previous_stock['total_present'] if previous_stock else None)} шт.** ({_observed_date(previous_stock['snapshot_at']) if previous_stock else 'н/д'}); изменение **{_fmt_number(stock_delta)} шт.**.",
             f"- Логистика: ставка **{_fmt_percent(logistics.get('rate'))}** по {_observed_date(logistics.get('data_through')) or 'н/д'}; изменение: **н/д**, представление содержит только последнее агрегированное окно.",
-            f"- Акции/CPC: активных акций {len(promo['active'])}, кандидатов {promo['candidates']} (наблюдение {_observed_date(promo['observed_at']) or 'н/д'}); CPC {cpc_text}.",
+            f"- Акции/CPC: активных акций {len(promo['active'])}, кандидатов {len(promo['candidates'])} (наблюдение {_observed_date(promo['observed_at']) or 'н/д'}); CPC {cpc_text}.",
             f"- Почему: {daily['reason']}.",
         ])
 
@@ -462,6 +583,8 @@ def _render(products: list[dict[str, Any]], current_start: date, current_end: da
     for product in ranked:
         perf, cpc = product["performance"]["current"], product["cpc"]["current"]
         promo, logistics = product["promotions"], product["logistics"]
+        economics = _economics(perf)
+        commercial = product["commercial"]
         price_change = (product.get("price_history") or {}).get("change_percent")
         stock_change = (product.get("stock_history") or {}).get("total_present_change")
         offer = _clean(product["offer_id"])
@@ -479,8 +602,25 @@ def _render(products: list[dict[str, Any]], current_start: date, current_end: da
             f"- Цена: **{_fmt_money(product.get('current_price'))}**; последнее изменение: {_fmt_percent(price_change, True)}; наблюдение/проверка: {_observed_date(product.get('price_observed_at')) or 'н/д'} / {_observed_date(product.get('price_checked_at')) or 'н/д'}.",
             f"- Остаток: **{_fmt_number(product.get('total_present'))} шт.**; изменение снимка: {_fmt_number(stock_change, 0)}; снимок: {_observed_date(product.get('stock_snapshot_at')) or 'н/д'} ({product.get('stock_data_quality_status') or 'н/д'}).",
             f"- CPC: {cpc_text}.",
-            f"- Продвижение: активных акций {len(promo['active'])}, кандидатов {promo['candidates']}; наблюдение: {_observed_date(promo['observed_at']) or 'н/д'}.",
+            f"- Продвижение: активных акций {len(promo['active'])}, кандидатов {len(promo['candidates'])}; наблюдение: {_observed_date(promo['observed_at']) or 'н/д'}.",
             f"- Региональная логистика: маршрутов {logistics.get('routes', 0)}, заказов {logistics.get('orders', 0)}, взвешенная ставка {_fmt_percent(logistics.get('rate'))}; данные по {_observed_date(logistics.get('data_through')) or 'н/д'}.",
+            "",
+            "#### ЦЕНА",
+            "",
+            f"- Текущая цена: **{_fmt_money(product.get('current_price'))}**; последнее изменение: **{_fmt_percent(price_change, True)}** ({_fmt_money((product.get('price_history') or {}).get('absolute_change'))}).",
+            f"- Себестоимость единицы: **{_fmt_money(product.get('cost_price'))}** ({product.get('cost_basis') or 'н/д'}).",
+            f"- Расходы Ozon за текущее 7-дневное окно: комиссия **{_fmt_money(perf['commission'] if perf['matched'] else None)}**, логистика **{_fmt_money(perf['logistics'] if perf['matched'] else None)}**, прочие **{_fmt_money(perf['other_expenses'] if perf['matched'] else None)}**; подтверждено {int(perf['matched'])}/{int(perf['delivered'])} доставленных единиц.",
+            f"- CPC: **{_fmt_money(cpc['spend'] if cpc['days'] else None)}** за {len(cpc['days'])}/7 дней; в подтверждённую прибыль доставки не включён, потому что view не распределяет CPC по единице.",
+            f"- Подтверждённая прибыль до налога/маржа: **{_fmt_money(economics['profit'])} / {_fmt_percent(economics['margin'])}**; минимум 3 полностью подтверждённые доставки, CPC не включён, иначе `н/д`.",
+            "- Минимально допустимая цена: **н/д** — доступные views не содержат утверждённый минимум маржи и подтверждённую маржинальную модель комиссии/логистики.",
+            f"- Рекомендация по цене: **{commercial['price']}**.",
+            "",
+            "#### АКЦИИ",
+            "",
+            f"- Активные: {_promotion_text(promo['active'])}.",
+            f"- Кандидатные: {_promotion_text(promo['candidates'], candidate=True)}.",
+            f"- Рекомендация по акции: **{commercial['promotion']}**.",
+            f"- Причина: {commercial['reason']}",
         ])
 
     problems = [p for p in ranked if p["issues"]]
@@ -522,13 +662,17 @@ def _render(products: list[dict[str, Any]], current_start: date, current_end: da
 
     lines.extend([
         "",
-        "## Правила v1.1",
+        "## Правила v1.2",
         "",
         "Падение: ≥30% при базе ≥3 шт.; свежесть цены/остатка: ≤2 дней; низкий запас: <7 дней покрытия; "
         "CPC: минимум 3 дня и 100 ₽ расхода, ДРР >25%; логистика: +3 п.п. при ≥5 заказах и confidence не ниже MEDIUM. "
         "Дневной сигнал: ПРОВЕРИТЬ СЕЙЧАС при падении минимум на 2 шт. и 50% либо подтверждённом нулевом остатке; "
         "НАБЛЮДАТЬ при меньшем снижении или неполных данных; иначе НЕ ТРОГАТЬ. "
-        "Сигналы являются диагностикой, а не доказательством причинности; скрипт ничего не изменяет.",
+        "Цена/акция: отрицательная подтверждённая прибыль даёт сигнал поднять цену; выход из акции — только когда "
+        "акционная цена совпадает с подтверждённой выручкой на единицу. Кандидатная акция без маржинальной модели "
+        "получает НЕДОСТАТОЧНО ДАННЫХ. Снижение цены предлагается к проверке только при падении продаж после повышения "
+        "цены, наличии остатка и без подтверждённого ухудшения логистики. Минимальная цена не выдумывается. "
+        "Сигналы являются диагностикой, а не доказательством причинности; скрипт работает только READ + PROPOSE и ничего не изменяет.",
     ])
     return "\n".join(lines)
 
@@ -599,6 +743,7 @@ async def _run(limit: int) -> str:
                 product["stock_history"] = product["stock_snapshots"][0] if product["stock_snapshots"] else None
                 product["daily"] = _daily_comparison(product, current_end, current_end - timedelta(days=1))
                 _diagnose(product, current_end)
+                product["commercial"] = _commercial_recommendation(product, current_end)
                 products.append(product)
             if not products:
                 raise SafeReportError("No active products are available")
@@ -608,16 +753,16 @@ async def _run(limit: int) -> str:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="EFA deterministic AI Analyst v1.1")
+    parser = argparse.ArgumentParser(description="EFA deterministic AI Analyst v1.2")
     parser.add_argument("--limit", type=int, default=5, choices=range(1, 51), metavar="1..50")
     args = parser.parse_args()
     try:
         print(asyncio.run(_run(args.limit)))
         return 0
     except SafeReportError as exc:
-        print(f"AI Analyst v1.1: {exc}", file=sys.stderr)
+        print(f"AI Analyst v1.2: {exc}", file=sys.stderr)
     except Exception:
-        print("AI Analyst v1.1: read-only report failed", file=sys.stderr)
+        print("AI Analyst v1.2: read-only report failed", file=sys.stderr)
     return 1
 
 
