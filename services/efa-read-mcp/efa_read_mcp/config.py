@@ -27,6 +27,9 @@ class Settings(BaseModel):
     pool_max_size: int = Field(default=4, ge=1, le=8)
     statement_timeout_ms: int = Field(default=10_000, ge=1_000, le=30_000)
     lock_timeout_ms: int = Field(default=3_000, ge=100, le=5_000)
+    http_host: str = Field(default="0.0.0.0", min_length=1)
+    http_port: int = Field(default=8000, ge=1, le=65_535)
+    http_path: str = Field(default="/mcp", pattern=r"^/[A-Za-z0-9._~!$&'()*+,;=:@%/-]*$")
 
     @model_validator(mode="after")
     def validate_database_target(self) -> "Settings":
@@ -60,6 +63,9 @@ class Settings(BaseModel):
                 pool_max_size=_read_int(source, "EFA_MCP_POOL_MAX_SIZE", 4),
                 statement_timeout_ms=_read_int(source, "EFA_MCP_STATEMENT_TIMEOUT_MS", 10_000),
                 lock_timeout_ms=_read_int(source, "EFA_MCP_LOCK_TIMEOUT_MS", 3_000),
+                http_host=source.get("EFA_MCP_HTTP_HOST", "0.0.0.0").strip(),
+                http_port=_read_int(source, "EFA_MCP_HTTP_PORT", 8_000),
+                http_path=source.get("EFA_MCP_HTTP_PATH", "/mcp").strip(),
             )
         except (ValueError, ValidationError) as exc:
             raise ConfigurationError("EFA Read MCP configuration is invalid") from None

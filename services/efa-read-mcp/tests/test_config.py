@@ -24,6 +24,22 @@ class SettingsTests(unittest.TestCase):
         settings = Settings.from_environment({"DATABASE_URL": safe_test_url()})
         self.assertTrue(settings.asyncpg_dsn().startswith("postgresql://"))
         self.assertNotIn("not-a-real-secret", repr(settings))
+        self.assertEqual("0.0.0.0", settings.http_host)
+        self.assertEqual(8000, settings.http_port)
+        self.assertEqual("/mcp", settings.http_path)
+
+    def test_http_endpoint_can_be_configured(self) -> None:
+        settings = Settings.from_environment(
+            {
+                "DATABASE_URL": safe_test_url(),
+                "EFA_MCP_HTTP_HOST": "127.0.0.1",
+                "EFA_MCP_HTTP_PORT": "9000",
+                "EFA_MCP_HTTP_PATH": "/efa/mcp",
+            }
+        )
+        self.assertEqual("127.0.0.1", settings.http_host)
+        self.assertEqual(9000, settings.http_port)
+        self.assertEqual("/efa/mcp", settings.http_path)
 
     def test_database_url_is_required(self) -> None:
         with self.assertRaises(ConfigurationError):
@@ -54,6 +70,17 @@ class SettingsTests(unittest.TestCase):
                     "EFA_MCP_STATEMENT_TIMEOUT_MS": "not-an-integer",
                 }
             )
+
+    def test_http_endpoint_validation(self) -> None:
+        for name, value in (
+            ("EFA_MCP_HTTP_HOST", ""),
+            ("EFA_MCP_HTTP_PORT", "0"),
+            ("EFA_MCP_HTTP_PORT", "65536"),
+            ("EFA_MCP_HTTP_PATH", "mcp"),
+            ("EFA_MCP_HTTP_PATH", "/mcp?token=unsafe"),
+        ):
+            with self.subTest(name=name, value=value), self.assertRaises(ConfigurationError):
+                Settings.from_environment({"DATABASE_URL": safe_test_url(), name: value})
 
 
 if __name__ == "__main__":

@@ -17,6 +17,8 @@ COPY --chown=efa-mcp:efa-mcp efa_read_mcp /app/efa_read_mcp
 
 USER efa-mcp:efa-mcp
 
+EXPOSE 8000
+
 
 FROM base AS test
 COPY --chown=efa-mcp:efa-mcp tests /app/tests

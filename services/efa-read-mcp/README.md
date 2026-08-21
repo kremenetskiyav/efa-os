@@ -8,7 +8,7 @@
 - Official Python MCP SDK `mcp==2.0.0` (stable v2 release).
 - `asyncpg==0.31.0` and `pydantic==2.13.4`.
 - PostgreSQL AST parsing through `pglast==8.4`; analytics validation is not regex-based.
-- stdio transport only in v1; stdout is reserved for MCP protocol frames.
+- Stateless Streamable HTTP with JSON responses at `/mcp` by default; the bind host, port, and path are environment-configurable.
 - `DATABASE_URL` is accepted only from the process environment and must target database `efa` as role `efa_mcp_readonly`.
 - The SQLAlchemy-style `postgresql+asyncpg://` prefix is normalized in memory for asyncpg. The URL is never logged.
 
@@ -44,19 +44,17 @@ C:\Users\Andrey\.efa-os\secrets\efa-read-mcp.env
 
 The file is not created by this repository. It must contain exactly one non-comment setting, `DATABASE_URL`, for `efa_mcp_readonly` only. It must not contain EFA OS admin credentials or optional runtime settings. Provision it later using an approved secret-handling procedure and restrict its Windows ACL to the intended user and system administrators.
 
-Prepare an isolated interpreter later at `services/efa-read-mcp/.venv` and install the pinned requirements into it. The launcher deliberately has no fallback to a global interpreter or another credential source. It resolves every runtime path from its own location, never prints `DATABASE_URL`, runs stdio, restores the parent environment, and returns the MCP process exit code.
+Prepare an isolated interpreter later at `services/efa-read-mcp/.venv` and install the pinned requirements into it. The launcher deliberately has no fallback to a global interpreter or another credential source. It resolves every runtime path from its own location, never prints `DATABASE_URL`, starts the Streamable HTTP server, restores the parent environment, and returns the MCP process exit code.
 
-Manual registration parameters for a local command-based ChatGPT MCP entry:
+The HTTP endpoint accepts these optional settings:
 
 ```text
-Name: EFA_READ_MCP
-Command: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe
-Arguments: -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File D:\efa-os-github\services\efa-read-mcp\run-local.ps1
-Working directory: not required
-Environment: none
+EFA_MCP_HTTP_HOST=0.0.0.0
+EFA_MCP_HTTP_PORT=8000
+EFA_MCP_HTTP_PATH=/mcp
 ```
 
-Do not place `DATABASE_URL` in the registration Environment field. `run-local.ps1` reads it only from the protected file and starts `python -m efa_read_mcp` over stdio. The process does not open an HTTP port.
+`run-local.ps1` reads `DATABASE_URL` only from the protected file and starts `python -m efa_read_mcp`. For local-only testing, set `EFA_MCP_HTTP_HOST=127.0.0.1` in the process environment. Production credentials must be injected by the deployment secret mechanism, never placed in a tracked file or Remote MCP URL.
 
 ## Docker build and tests
 
@@ -68,11 +66,10 @@ docker run --rm efa-read-mcp:test
 docker build --file services/efa-read-mcp/Dockerfile --target runtime --tag efa-read-mcp:local services/efa-read-mcp
 ```
 
-The runtime image has a non-root user, no package manager additions, no credentials, no host mount, no Docker socket, and no published port. A launcher should limit memory/CPU and attach only the database network when Docker deployment is explicitly approved.
+The runtime image has a non-root user, no package manager additions, no credentials, no host mount, and no Docker socket. It documents container port `8000` with `EXPOSE`; publishing that port remains a deployment decision. A launcher should limit memory/CPU and attach only the database network when Docker deployment is explicitly approved.
 
 ## Deployment options (not applied here)
 
-1. The prepared local stdio launcher reads the dedicated MCP URL from the fixed protected file, places it only in the child environment, and connects through the host route encoded in that URL. Credential provisioning and MCP registration remain separate approved steps.
-2. A Docker MCP Gateway custom catalog entry could launch the image on `efa-tools` and inject the keychain secret into `DATABASE_URL`. This is acceptable only if the Gateway manifest supports both secret binding and joining the existing `efa-tools` network without exposing Docker control or broad outbound access.
+The intended remote deployment is a private PostgreSQL connection behind the service and a public HTTPS reverse proxy to the Streamable HTTP endpoint. Keep the application port private to the VPS/container network; expose only HTTPS. Credential provisioning, database restore, service deployment, TLS, and Remote MCP registration are separate approved steps.
 
 Do not add a plaintext fallback. Do not deploy a long-running container or edit an MCP profile without separate approval.
