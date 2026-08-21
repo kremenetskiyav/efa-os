@@ -1,0 +1,25 @@
+[Unit]
+Description=EFA OS Control Center v1
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=efa-control-center
+Group=efa-control-center
+WorkingDirectory=/opt/efa-os
+EnvironmentFile=/etc/efa-os/ai-analyst.env
+Environment=EFA_CONTROL_CENTER_HOST=127.0.0.1
+Environment=EFA_CONTROL_CENTER_PORT=8090
+Environment=EFA_N8N_URL=http://127.0.0.1:5678
+ExecStart=/opt/efa-control-center/.venv/bin/python /opt/efa-os/services/control-center/app.py
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadOnlyPaths=/opt/efa-os /var/log/efa-os /etc/cron.d/efa-os-analytics /etc/efa-os/ai-analyst.env
+
+[Install]
+WantedBy=multi-user.target

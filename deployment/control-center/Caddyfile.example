@@ -1,0 +1,6 @@
+panel.efa-os.ru {
+    basic_auth {
+        efa __CADDY_PASSWORD_HASH__
+    }
+    reverse_proxy 127.0.0.1:8090
+}

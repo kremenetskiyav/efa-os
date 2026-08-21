@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>EFA OS — Control Center</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">EFA OPERATIONS</p>
+      <h1>EFA OS — Control Center</h1>
+      <p class="subtitle">Состояние системы и текущие сигналы в одном экране</p>
+    </div>
+    <div class="updated"><span class="pulse"></span><span id="generated-at">Обновление…</span></div>
+  </header>
+
+  <main>
+    <section>
+      <div class="section-title"><span>01</span><h2>Система</h2></div>
+      <div class="system-grid">
+        <article class="status-card"><div class="status-icon">DB</div><div><small>PostgreSQL</small><strong id="postgresql">Проверка…</strong></div></article>
+        <article class="status-card"><div class="status-icon">N8</div><div><small>n8n</small><strong id="n8n">Проверка…</strong></div></article>
+        <article class="status-card"><div class="status-icon">MCP</div><div><small>EFA Read MCP</small><strong id="mcp">Проверка…</strong></div></article>
+        <article class="status-card"><div class="status-icon">CL</div><div><small>Collectors</small><strong id="collectors">Проверка…</strong></div></article>
+      </div>
+      <div class="timeline-grid">
+        <div><span>Данные обновлены</span><b id="last-data">—</b></div>
+        <div><span>Последний Analyst</span><b id="analyst-last">—</b></div>
+        <div><span>Следующий Analyst</span><b id="analyst-next">—</b><small id="analyst-schedule"></small></div>
+        <div><span>Последний email-report</span><b id="email-last">—</b></div>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-title"><span>02</span><h2>Требует внимания</h2></div>
+      <div class="attention-layout">
+        <div class="counters">
+          <div class="counter critical"><b id="count-attention">0</b><span>Проверить сейчас</span></div>
+          <div class="counter watch"><b id="count-watch">0</b><span>Наблюдать</span></div>
+          <div class="counter calm"><b id="count-leave">0</b><span>Не трогать</span></div>
+        </div>
+        <div class="signals" id="signals"><p class="muted">Загрузка текущих сигналов…</p></div>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-title"><span>03</span><h2>AI-модули</h2></div>
+      <div class="modules-grid">
+        <article class="module active-module wide">
+          <div class="module-head"><div><p class="module-kicker">Аналитика и решения</p><h3>AI Analyst</h3></div><span class="badge active">Active</span></div>
+          <div class="capabilities"><span>Продажи</span><span>Цены</span><span>Остатки</span><span>Акции</span><span>CPC</span><span>Логистика</span><span>Рекомендации</span></div>
+          <div class="actions"><a href="/report">Последний отчёт</a><a href="/prices">Цены и акции</a><a href="/stocks">Остатки</a><a href="/cpc">CPC</a></div>
+        </article>
+        <article class="module planned"><div class="module-head"><h3>EFA Coordinator</h3><span class="badge">Planned</span></div><p>Единая точка входа и маршрутизация задач между модулями.</p></article>
+        <article class="module planned"><div class="module-head"><h3>AI Content</h3><span class="badge">Planned</span></div><p>Карточки Ozon, SEO, характеристики, контент.</p></article>
+        <article class="module planned"><div class="module-head"><h3>AI Operator</h3><span class="badge">Planned</span></div><p>Ответы на отзывы и вопросы покупателей.</p></article>
+        <article class="module planned"><div class="module-head"><h3>AI Fitment</h3><span class="badge">Planned</span></div><p>VIN/OEM/применяемость.</p></article>
+        <article class="module planned"><div class="module-head"><h3>Executive Assistant</h3><span class="badge">Planned</span></div><p>Документы, письма, таблицы, задачи.</p></article>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-title"><span>04</span><h2>Командное меню</h2></div>
+      <nav class="command-menu">
+        <a href="/report"><b>01</b><span>Последний отчёт Analyst</span><i>→</i></a>
+        <a href="/prices"><b>02</b><span>Цены и акции</span><i>→</i></a>
+        <a href="/stocks"><b>03</b><span>Остатки</span><i>→</i></a>
+        <a href="/cpc"><b>04</b><span>CPC</span><i>→</i></a>
+        <a href="/collectors"><b>05</b><span>Статус collectors</span><i>→</i></a>
+        <a href="/n8n" target="_blank" rel="noreferrer"><b>06</b><span>n8n</span><i>↗</i></a>
+      </nav>
+      <p class="readonly-note">Только чтение и безопасные переходы. Production write-действий в панели нет.</p>
+    </section>
+  </main>
+  <script src="/static/app.js"></script>
+</body>
+</html>
