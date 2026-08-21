@@ -29,6 +29,8 @@ MIN_CPC_SPEND = Decimal("100")
 HIGH_CPC_DRR_PERCENT = Decimal("25")
 MIN_LOGISTICS_ORDERS = 5
 HIGH_LOGISTICS_DELTA_PP = Decimal("3")
+DAILY_DROP_UNITS = Decimal("2")
+DAILY_DROP_PERCENT = Decimal("-50")
 
 VIEW_QUERIES = {
     "overview": """
@@ -41,13 +43,13 @@ VIEW_QUERIES = {
     "price": """
         SELECT offer_id, observed_at, price, previous_price, change_percent
         FROM mcp_read.product_price_history
-        WHERE is_latest
+        ORDER BY offer_id, observed_at DESC
     """,
     "stock": """
         SELECT offer_id, snapshot_at, total_present, total_present_change,
                data_quality_status
         FROM mcp_read.product_stock_history
-        WHERE is_latest
+        ORDER BY offer_id, snapshot_at DESC
     """,
     "performance": """
         SELECT offer_id, business_date, ordered_units, ordered_revenue,
@@ -159,6 +161,52 @@ def _clean(value: Any) -> str:
 
 def _empty_period() -> dict[str, Any]:
     return {"days": set(), "units": Decimal("0"), "revenue": Decimal("0"), "statuses": set()}
+
+
+def _latest_two(rows: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+    result: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in rows:
+        if len(result[row["offer_id"]]) < 2:
+            result[row["offer_id"]].append(row)
+    return result
+
+
+def _daily_signal(yesterday: dict[str, Any] | None, day_before: dict[str, Any] | None) -> tuple[str, str]:
+    if yesterday is None or day_before is None:
+        missing = []
+        if yesterday is None:
+            missing.append("вчера")
+        if day_before is None:
+            missing.append("позавчера")
+        return "НАБЛЮДАТЬ", f"продажи за {' и '.join(missing)}: н/д; изменение не рассчитано"
+
+    units_change = _num(yesterday["ordered_units"]) - _num(day_before["ordered_units"])
+    units_percent = _percent(units_change, day_before["ordered_units"])
+    if units_change <= -DAILY_DROP_UNITS and units_percent is not None and units_percent <= DAILY_DROP_PERCENT:
+        return (
+            "ПРОВЕРИТЬ СЕЙЧАС",
+            f"заказанные единицы снизились с {_fmt_number(day_before['ordered_units'])} до {_fmt_number(yesterday['ordered_units'])} ({_fmt_percent(units_percent, True)})",
+        )
+    if units_change < 0:
+        return "НАБЛЮДАТЬ", f"заказанные единицы снизились с {_fmt_number(day_before['ordered_units'])} до {_fmt_number(yesterday['ordered_units'])}"
+    if units_change > 0:
+        return "НЕ ТРОГАТЬ", f"заказанные единицы выросли с {_fmt_number(day_before['ordered_units'])} до {_fmt_number(yesterday['ordered_units'])}"
+    return "НЕ ТРОГАТЬ", f"заказанные единицы без изменения: {_fmt_number(yesterday['ordered_units'])}"
+
+
+def _daily_comparison(product: dict[str, Any], yesterday: date, day_before: date) -> dict[str, Any]:
+    rows = product["performance_rows"]
+    by_date = {
+        row["business_date"]: row
+        for row in rows
+        if row["ordered_units"] is not None and row["ordered_revenue"] is not None
+    }
+    y_row, d_row = by_date.get(yesterday), by_date.get(day_before)
+    signal, reason = _daily_signal(y_row, d_row)
+    stock = product.get("stock_snapshots") or []
+    if stock and stock[0].get("data_quality_status") == "VALID" and _num(stock[0].get("total_present")) == 0:
+        signal, reason = "ПРОВЕРИТЬ СЕЙЧАС", "последний подтверждённый остаток равен 0"
+    return {"yesterday": y_row, "day_before": d_row, "signal": signal, "reason": reason}
 
 
 def _aggregate_performance(
@@ -347,8 +395,57 @@ def _render(products: list[dict[str, Any]], current_start: date, current_end: da
         products,
         key=lambda p: (-max((i["priority"] for i in p["issues"]), default=0), -p["performance"]["current"]["units"], p["offer_id"]),
     )[:limit]
+    daily_priority = {"ПРОВЕРИТЬ СЕЙЧАС": 3, "НАБЛЮДАТЬ": 2, "НЕ ТРОГАТЬ": 1}
+    daily_ranked = sorted(
+        products,
+        key=lambda p: (-daily_priority[p["daily"]["signal"]], p["offer_id"]),
+    )[:limit]
     lines = [
-        "# AI Analyst v1 — ежедневный отчёт EFA",
+        "# AI Analyst v1.1 — ежедневный отчёт EFA",
+        "",
+        f"## Сегодня: {current_end.isoformat()} против {(current_end - timedelta(days=1)).isoformat()}",
+        "",
+        "Первым показан SKU, который требует больше внимания. `н/д` означает отсутствие факта; оно не считается нулём.",
+    ]
+
+    for product in daily_ranked:
+        daily = product["daily"]
+        y_row, d_row = daily["yesterday"], daily["day_before"]
+        prices = product.get("price_snapshots") or []
+        stocks = product.get("stock_snapshots") or []
+        latest_price = prices[0] if prices else None
+        previous_price = prices[1] if len(prices) > 1 else None
+        latest_stock = stocks[0] if stocks else None
+        previous_stock = stocks[1] if len(stocks) > 1 else None
+        price_delta = None if latest_price is None or previous_price is None else _num(latest_price["price"]) - _num(previous_price["price"])
+        stock_delta = None if latest_stock is None or previous_stock is None else _num(latest_stock["total_present"]) - _num(previous_stock["total_present"])
+        cpc_rows = product.get("cpc_rows") or []
+        latest_cpc = max(cpc_rows, key=lambda row: row["business_date"], default=None)
+        promo, logistics = product["promotions"], product["logistics"]
+        y_units = y_row["ordered_units"] if y_row else None
+        d_units = d_row["ordered_units"] if d_row else None
+        y_revenue = y_row["ordered_revenue"] if y_row else None
+        d_revenue = d_row["ordered_revenue"] if d_row else None
+        units_delta = None if y_row is None or d_row is None else _num(y_units) - _num(d_units)
+        revenue_delta = None if y_row is None or d_row is None else _num(y_revenue) - _num(d_revenue)
+        cpc_text = (
+            "н/д"
+            if latest_cpc is None
+            else f"по {latest_cpc['business_date']}: кампаний {int(latest_cpc['active_campaigns_count'] or 0)}, расход {_fmt_money(latest_cpc['spend'])}, атриб. заказов {int(latest_cpc['attributed_orders'] or 0)}"
+        )
+        lines.extend([
+            "",
+            f"### {daily['signal']} · {_clean(product['offer_id'])}",
+            "",
+            f"- Продажи: вчера **{_fmt_number(y_units)} шт. / {_fmt_money(y_revenue)}**, позавчера **{_fmt_number(d_units)} шт. / {_fmt_money(d_revenue)}**; изменение **{_fmt_number(units_delta)} шт. / {_fmt_money(revenue_delta)}**.",
+            f"- Цена: **{_fmt_money(latest_price['price'] if latest_price else None)}** ({_observed_date(latest_price['observed_at']) if latest_price else 'н/д'}); предыдущий снимок **{_fmt_money(previous_price['price'] if previous_price else None)}** ({_observed_date(previous_price['observed_at']) if previous_price else 'н/д'}); изменение **{_fmt_money(price_delta)}**.",
+            f"- Остаток: **{_fmt_number(latest_stock['total_present'] if latest_stock else None)} шт.** ({_observed_date(latest_stock['snapshot_at']) if latest_stock else 'н/д'}); предыдущий снимок **{_fmt_number(previous_stock['total_present'] if previous_stock else None)} шт.** ({_observed_date(previous_stock['snapshot_at']) if previous_stock else 'н/д'}); изменение **{_fmt_number(stock_delta)} шт.**.",
+            f"- Логистика: ставка **{_fmt_percent(logistics.get('rate'))}** по {_observed_date(logistics.get('data_through')) or 'н/д'}; изменение: **н/д**, представление содержит только последнее агрегированное окно.",
+            f"- Акции/CPC: активных акций {len(promo['active'])}, кандидатов {promo['candidates']} (наблюдение {_observed_date(promo['observed_at']) or 'н/д'}); CPC {cpc_text}.",
+            f"- Почему: {daily['reason']}.",
+        ])
+
+    lines.extend([
         "",
         f"Данные продаж: **{current_start.isoformat()} — {current_end.isoformat()}**; сравнение: **{previous_start.isoformat()} — {previous_end.isoformat()}**. "
         "Окна привязаны к последней доступной `business_date` (Europe/Moscow). Продажи = ordered demand, выручка = ordered revenue.",
@@ -360,7 +457,7 @@ def _render(products: list[dict[str, Any]], current_start: date, current_end: da
         f"- Покрытие спроса: текущее окно **{current_coverage}/{expected}**, предыдущее **{previous_coverage}/{expected} SKU-дней**; сравнение рассчитывается только для двух полных окон.",
         "",
         f"## SKU: {len(ranked)}",
-    ]
+    ])
 
     for product in ranked:
         perf, cpc = product["performance"]["current"], product["cpc"]["current"]
@@ -425,10 +522,12 @@ def _render(products: list[dict[str, Any]], current_start: date, current_end: da
 
     lines.extend([
         "",
-        "## Правила v1",
+        "## Правила v1.1",
         "",
         "Падение: ≥30% при базе ≥3 шт.; свежесть цены/остатка: ≤2 дней; низкий запас: <7 дней покрытия; "
         "CPC: минимум 3 дня и 100 ₽ расхода, ДРР >25%; логистика: +3 п.п. при ≥5 заказах и confidence не ниже MEDIUM. "
+        "Дневной сигнал: ПРОВЕРИТЬ СЕЙЧАС при падении минимум на 2 шт. и 50% либо подтверждённом нулевом остатке; "
+        "НАБЛЮДАТЬ при меньшем снижении или неполных данных; иначе НЕ ТРОГАТЬ. "
         "Сигналы являются диагностикой, а не доказательством причинности; скрипт ничего не изменяет.",
     ])
     return "\n".join(lines)
@@ -474,8 +573,14 @@ async def _run(limit: int) -> str:
             cpc_by_offer = _aggregate_cpc(cpc_rows, current_start)
             promotions_by_offer = _aggregate_promotions(promotion_rows, datetime.now(MOSCOW).date())
             logistics_by_offer = _aggregate_logistics(logistics_rows)
-            price_by_offer = {row["offer_id"]: row for row in price}
-            stock_by_offer = {row["offer_id"]: row for row in stock}
+            price_snapshots = _latest_two(price)
+            stock_snapshots = _latest_two(stock)
+            performance_rows: dict[str, list[dict[str, Any]]] = defaultdict(list)
+            cpc_product_rows: dict[str, list[dict[str, Any]]] = defaultdict(list)
+            for item in performance:
+                performance_rows[item["offer_id"]].append(item)
+            for item in cpc_rows:
+                cpc_product_rows[item["offer_id"]].append(item)
 
             products = []
             for row in overview:
@@ -486,8 +591,13 @@ async def _run(limit: int) -> str:
                 product["cpc"] = cpc_by_offer[row["offer_id"]]
                 product["promotions"] = promotions_by_offer[row["offer_id"]]
                 product["logistics"] = logistics_by_offer.get(row["offer_id"], {})
-                product["price_history"] = price_by_offer.get(row["offer_id"])
-                product["stock_history"] = stock_by_offer.get(row["offer_id"])
+                product["price_snapshots"] = price_snapshots.get(row["offer_id"], [])
+                product["stock_snapshots"] = stock_snapshots.get(row["offer_id"], [])
+                product["performance_rows"] = performance_rows[row["offer_id"]]
+                product["cpc_rows"] = cpc_product_rows[row["offer_id"]]
+                product["price_history"] = product["price_snapshots"][0] if product["price_snapshots"] else None
+                product["stock_history"] = product["stock_snapshots"][0] if product["stock_snapshots"] else None
+                product["daily"] = _daily_comparison(product, current_end, current_end - timedelta(days=1))
                 _diagnose(product, current_end)
                 products.append(product)
             if not products:
@@ -498,16 +608,16 @@ async def _run(limit: int) -> str:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="EFA deterministic AI Analyst v1")
+    parser = argparse.ArgumentParser(description="EFA deterministic AI Analyst v1.1")
     parser.add_argument("--limit", type=int, default=5, choices=range(1, 51), metavar="1..50")
     args = parser.parse_args()
     try:
         print(asyncio.run(_run(args.limit)))
         return 0
     except SafeReportError as exc:
-        print(f"AI Analyst v1: {exc}", file=sys.stderr)
+        print(f"AI Analyst v1.1: {exc}", file=sys.stderr)
     except Exception:
-        print("AI Analyst v1: read-only report failed", file=sys.stderr)
+        print("AI Analyst v1.1: read-only report failed", file=sys.stderr)
     return 1
 
 
