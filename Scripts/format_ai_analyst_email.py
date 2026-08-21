@@ -12,24 +12,37 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
-MISSING = "НЕДОСТАТОЧНО ДАННЫХ"
-
-
 @dataclass
 class Sku:
     name: str
     signal: str
-    sales: int
-    revenue: int
-    price: int
-    stock: int
+    sales: int | None
+    revenue: int | None
+    price: int | None
+    stock: int | None
+    recommended_price: int | None = None
+    factual_price: int | None = None
     price_action: str = "ОСТАВИТЬ"
-    promo_action: str = "НЕДОСТАТОЧНО ДАННЫХ"
+    promo_action: str = "ОСТАВИТЬ"
+    margin: str = "н/д"
+    confidence: str = "Н/Д"
     reason: str = "Недостаточно данных для изменения."
 
 
 def _number(value: str) -> int:
     return int(re.sub(r"\D", "", value))
+
+
+def _optional_number(value: str) -> int | None:
+    return None if "н/д" in value.lower() else _number(value)
+
+
+def _fmt_number(value: int | None) -> str:
+    return "н/д" if value is None else f"{value:,}".replace(",", " ")
+
+
+def _fmt_money(value: int | None) -> str:
+    return "н/д" if value is None else f"{_fmt_number(value)} ₽"
 
 
 def _blocks(report: str, heading: str) -> list[tuple[str, str]]:
@@ -59,13 +72,13 @@ def _price_action(raw: str) -> str:
 
 def _promo_action(raw: str) -> str:
     upper = raw.upper()
-    if "НЕ ТРОГАТЬ" in upper or "ОСТАВ" in upper:
-        return "ОСТАВИТЬ"
     if "НЕ ВХОД" in upper:
         return "НЕ ВХОДИТЬ"
     if "ВЫЙ" in upper:
         return "ВЫЙТИ"
-    return "НЕДОСТАТОЧНО ДАННЫХ"
+    if "ВОЙТИ" in upper:
+        return "ВОЙТИ"
+    return "ОСТАВИТЬ"
 
 
 def parse_report(report: str) -> tuple[str, list[Sku], str]:
@@ -75,22 +88,24 @@ def parse_report(report: str) -> tuple[str, list[Sku], str]:
     daily: list[Sku] = []
     daily_pattern = re.compile(
         r"^### (?P<signal>[^·\n]+) · (?P<name>.+?)\n"
-        r".*?Продажи: вчера \*\*(?P<sales>[\d ]+) шт\. / (?P<revenue>[\d ]+) ₽\*\*"
-        r".*?Цена: \*\*(?P<price>[\d ]+) ₽\*\*"
-        r".*?Остаток: \*\*(?P<stock>[\d ]+) шт\.\*\*"
+        r".*?Продажи: вчера \*\*(?P<sales>[\d ]+|н/д) шт\. / (?P<revenue>[\d ]+ ₽|н/д)\*\*"
+        r".*?Цена: \*\*(?P<price>[\d ]+ ₽|н/д)\*\*"
+        r".*?Остаток: \*\*(?P<stock>[\d ]+|н/д) шт\.\*\*"
         r".*?Почему: (?P<reason>.+?)$",
         re.M | re.S,
     )
     intro = report.split("Данные продаж:", 1)[0]
     for match in daily_pattern.finditer(intro):
+        current_price = _optional_number(match.group("price"))
         daily.append(
             Sku(
                 name=match.group("name").strip(),
                 signal=match.group("signal").strip(),
-                sales=_number(match.group("sales")),
-                revenue=_number(match.group("revenue")),
-                price=_number(match.group("price")),
-                stock=_number(match.group("stock")),
+                sales=_optional_number(match.group("sales")),
+                revenue=_optional_number(match.group("revenue")),
+                price=current_price,
+                stock=_optional_number(match.group("stock")),
+                recommended_price=current_price,
                 reason=_short_reason(match.group("reason")),
             )
         )
@@ -99,12 +114,24 @@ def parse_report(report: str) -> tuple[str, list[Sku], str]:
     for sku in daily:
         body = details.get(sku.name, "")
         price = re.search(r"Рекомендация по цене: \*\*(.+?)\*\*", body)
+        recommended = re.search(r"Рекомендуемая тестовая цена: \*\*([\d ]+ ₽|н/д)\*\*", body)
+        factual = re.search(r"Фактическая цена продажи / цена активной акции: \*\*([\d ]+ ₽|н/д) /", body)
         promo = re.search(r"Рекомендация по акции: \*\*(.+?)\*\*", body)
+        margin = re.search(r"Расчётная текущая маржа: \*\*(.+?)\*\*", body)
+        confidence = re.search(r"Уверенность: \*\*(.+?)\*\*", body)
         reason = re.search(r"- Причина: (.+)", body)
         if price:
             sku.price_action = _price_action(price.group(1))
+        if recommended:
+            sku.recommended_price = _optional_number(recommended.group(1))
+        if factual:
+            sku.factual_price = _optional_number(factual.group(1))
         if promo:
             sku.promo_action = _promo_action(promo.group(1))
+        if margin:
+            sku.margin = margin.group(1).strip()
+        if confidence:
+            sku.confidence = confidence.group(1).strip()
         if reason:
             sku.reason = _short_reason(reason.group(1))
 
@@ -120,27 +147,23 @@ def parse_report(report: str) -> tuple[str, list[Sku], str]:
 
 def render(report: str) -> dict[str, str]:
     report_date, skus, freshness = parse_report(report)
-    total_sales = sum(s.sales for s in skus)
-    total_revenue = sum(s.revenue for s in skus)
+    total_sales = sum(s.sales for s in skus if s.sales is not None) if skus and all(s.sales is not None for s in skus) else None
+    total_revenue = sum(s.revenue for s in skus if s.revenue is not None) if skus and all(s.revenue is not None for s in skus) else None
     attention = sum("ПРОВЕРИТЬ СЕЙЧАС" in s.signal for s in skus)
     watch = sum("НАБЛЮДАТЬ" in s.signal for s in skus)
     leave = sum("НЕ ТРОГАТЬ" in s.signal for s in skus)
 
-    actions = [
-        s for s in skus
-        if "ПРОВЕРИТЬ СЕЙЧАС" in s.signal
-        or s.price_action != "ОСТАВИТЬ"
-        or s.promo_action != MISSING
-    ]
+    actions = skus
     action_html = "".join(
-        f"<div class='action'><b>{html.escape(s.name)} — {html.escape(s.signal)}</b>"
-        f"<div>{s.price} ₽ → {s.price_action.lower()} · акция: {s.promo_action.lower()}</div>"
+        f"<div class='action'><b>{html.escape(s.name)}</b>"
+        f"<div><strong>{_fmt_money(s.price)} → {_fmt_money(s.recommended_price)}</strong> · {html.escape(s.price_action)}</div>"
+        f"<div>Акция: {html.escape(s.promo_action.lower())} · уверенность: {html.escape(s.confidence.lower())} · маржа: {html.escape(s.margin)}</div>"
         f"<small>{html.escape(s.reason)}</small></div>"
         for s in actions
     ) or "<p>Сегодня подтверждённых действий нет.</p>"
     rows = "".join(
-        f"<tr><td><b>{html.escape(s.name)}</b></td><td>{s.sales}</td><td>{s.price} ₽</td>"
-        f"<td>{s.stock}</td><td>{html.escape(s.signal)} / {s.promo_action}</td></tr>"
+        f"<tr><td><b>{html.escape(s.name)}</b></td><td>{_fmt_number(s.sales)}</td><td>{_fmt_money(s.price)} → {_fmt_money(s.recommended_price)}</td>"
+        f"<td>{html.escape(s.price_action)}</td><td>{html.escape(s.promo_action)} / {html.escape(s.confidence)}</td></tr>"
         for s in skus
     )
     css = """
@@ -153,22 +176,27 @@ table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;p
 """
     html_body = f"""<!doctype html><html><head><meta charset='utf-8'><style>{css}</style></head><body><div class='wrap'>
 <h1>EFA — отчёт на {report_date}</h1><h2>ИТОГ ДНЯ</h2><div class='metrics'>
-<div class='metric'><b>{total_sales} шт.</b>{total_revenue:,} ₽</div><div class='metric'><b>{attention}</b>требуют внимания</div>
+<div class='metric'><b>{_fmt_number(total_sales)} шт.</b>{_fmt_money(total_revenue)}</div><div class='metric'><b>{attention}</b>требуют внимания</div>
 <div class='metric'><b>{watch}</b>наблюдать</div><div class='metric'><b>{leave}</b>не трогать</div></div>
-<div class='fresh'>{html.escape(freshness)}</div><h2>ЧТО ДЕЛАТЬ СЕГОДНЯ</h2>{action_html}
-<h2>ВСЕ SKU</h2><table><thead><tr><th>SKU</th><th>Продажи</th><th>Цена</th><th>Остаток</th><th>Цена / акция</th></tr></thead><tbody>{rows}</tbody></table>
-</div></body></html>""".replace(f"{total_revenue:,}", f"{total_revenue:,}".replace(",", " "))
+<div class='fresh'>{html.escape(freshness)}</div><h2>ЦЕНОВЫЕ РЕШЕНИЯ</h2>{action_html}
+<h2>ВСЕ SKU</h2><table><thead><tr><th>SKU</th><th>Продажи</th><th>Текущая → тест</th><th>Решение</th><th>Акция / уверенность</th></tr></thead><tbody>{rows}</tbody></table>
+</div></body></html>"""
 
     text_lines = [
         f"EFA — отчёт на {report_date}", "", "ИТОГ ДНЯ",
-        f"Продажи вчера: {total_sales} шт. / {total_revenue:,} ₽".replace(",", " "),
+        f"Продажи вчера: {_fmt_number(total_sales)} шт. / {_fmt_money(total_revenue)}",
         f"Требуют внимания: {attention} · Наблюдать: {watch} · Не трогать: {leave}", freshness,
-        "", "ЧТО ДЕЛАТЬ СЕГОДНЯ",
+        "", "ЦЕНОВЫЕ РЕШЕНИЯ",
     ]
     for sku in actions:
-        text_lines += [f"{sku.name} — {sku.signal}", f"Цена: {sku.price} ₽ → {sku.price_action.lower()}; акция: {sku.promo_action.lower()}", f"Причина: {sku.reason}"]
-    text_lines += ["", "ВСЕ SKU", "SKU | продажи | цена | остаток | цена/акция"]
-    text_lines += [f"{s.name} | {s.sales} | {s.price} ₽ | {s.stock} | {s.signal}/{s.promo_action}" for s in skus]
+        text_lines += [
+            sku.name,
+            f"{_fmt_money(sku.price)} → {_fmt_money(sku.recommended_price)} · {sku.price_action}",
+            f"Акция: {sku.promo_action.lower()} · уверенность: {sku.confidence.lower()} · маржа: {sku.margin}",
+            f"Причина: {sku.reason}",
+        ]
+    text_lines += ["", "ВСЕ SKU", "SKU | продажи | текущая → тест | решение | акция/уверенность"]
+    text_lines += [f"{s.name} | {_fmt_number(s.sales)} | {_fmt_money(s.price)} → {_fmt_money(s.recommended_price)} | {s.price_action} | {s.promo_action}/{s.confidence}" for s in skus]
     return {"date": report_date, "subject": f"EFA — что делать сегодня · {report_date}", "html": html_body, "text": "\n".join(text_lines)}
 
 

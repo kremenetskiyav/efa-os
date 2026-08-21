@@ -270,6 +270,10 @@ def _daily_report_lines(report: str) -> list[dict[str, str]]:
     return rows
 
 
+def _compact_money(value: int | None) -> str:
+    return "н/д" if value is None else f"{value:,} ₽".replace(",", " ")
+
+
 def render_detail(kind: str, report: str) -> str:
     titles = {
         "prices": "Цены и акции",
@@ -288,11 +292,30 @@ def render_detail(kind: str, report: str) -> str:
             f"<td>{html.escape(item['updated'])}</td><td>{html.escape(item['details'])}</td></tr>" for item in items
         )
         content = f"<table><thead><tr><th>Источник</th><th>Статус</th><th>Обновлён</th><th>Подтверждение</th></tr></thead><tbody>{rows}</tbody></table>"
+    elif kind == "prices":
+        try:
+            _, skus, _ = parse_report(report)
+        except (ValueError, TypeError):
+            skus = []
+        body = "".join(
+            "<tr><td><b>" + html.escape(sku.name) + "</b><br><small>" + html.escape(sku.signal) + "</small></td>"
+            f"<td><b>{_compact_money(sku.price)} → {_compact_money(sku.recommended_price)}</b>"
+            f"<br><small>фактическая продажа: {_compact_money(sku.factual_price)}</small></td>"
+            f"<td><b>{html.escape(sku.price_action)}</b></td>"
+            f"<td>{html.escape(sku.confidence)}</td>"
+            f"<td>{html.escape(sku.promo_action)}</td>"
+            f"<td>{html.escape(sku.margin)}</td>"
+            f"<td><small>{html.escape(sku.reason)}</small></td></tr>"
+            for sku in skus
+        )
+        content = (
+            "<table><thead><tr><th>SKU</th><th>Текущая → тестовая</th><th>Решение</th>"
+            "<th>Уверенность</th><th>Акция</th><th>Маржа</th><th>Почему</th></tr></thead>"
+            f"<tbody>{body}</tbody></table>"
+        )
     else:
         rows = _daily_report_lines(report)
-        if kind == "prices":
-            columns = (("Цена", "Цена"), ("Акции/CPC", "Акции"))
-        elif kind == "stocks":
+        if kind == "stocks":
             columns = (("Остаток", "Остаток"),)
         else:
             columns = (("Акции/CPC", "CPC"),)
