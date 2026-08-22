@@ -34,7 +34,13 @@ The current baseline was exported from the local n8n instance after the OZON API
 
 Canonical production workflow ID: `Kf241Y5kzETghygL`.
 
-The sanitised workflow is [`Ozon_Daily_Commercial_Brief_Delivery_v1.json`](Ozon_Daily_Commercial_Brief_Delivery_v1.json). It has one daily Schedule Trigger at 08:15 in `Europe/Moscow`, locks the previous Moscow calendar day once from the trigger timestamp, obtains deterministic representations only from the private `efa-daily-brief` bridge, and has no Ozon nodes. Manual/partial recovery requires an explicit valid `business_date` and otherwise fails before any render or delivery node. The base brief, Telegram, email HTML and PDF endpoints all receive the same locked date. Recipient and chat destination are runtime placeholders; Gmail and Telegram credentials are bound only in local n8n credential storage. Per-channel production idempotency is stored in workflow static data under `daily-brief:v0.1:production:<channel>:<business_date>`. The separate TEST workflow remains inactive.
+The sanitised workflow is [`Ozon_Daily_Commercial_Brief_Delivery_v1.json`](Ozon_Daily_Commercial_Brief_Delivery_v1.json). It is retained for history and recovery but is **inactive** in production. Its former 08:15 `Europe/Moscow` Email and Telegram delivery must not be reactivated while the AI Analyst delivery below is active. The separate TEST workflow also remains inactive.
+
+## EFA AI Analyst Delivery
+
+Canonical production workflow ID: `EFAANALYSTEMAIL`.
+
+[`EFA_AI_Analyst_Delivery_v1.json`](EFA_AI_Analyst_Delivery_v1.json) is the active delivery workflow behind the existing `efa-ai-analyst-email` webhook. The existing cron generates AI Analyst at 16:00 `Europe/Moscow` and posts one compact formatter payload at 16:30. The workflow sends that same payload through the existing Gmail credential and through one Telegram branch using the existing Telegram credential and chat destination. Runtime destinations and credentials remain only in n8n; the repository export uses placeholders. The workflow has no schedule trigger and does not calculate analytics.
 
 ## CPC Async Report Lifecycle v1
 

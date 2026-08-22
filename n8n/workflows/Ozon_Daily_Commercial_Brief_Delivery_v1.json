@@ -1,7 +1,7 @@
 {
   "id": "Kf241Y5kzETghygL",
   "name": "Ozon Daily Commercial Brief Delivery v1",
-  "active": true,
+  "active": false,
   "settings": {"executionOrder": "v1", "timezone": "Europe/Moscow", "saveDataErrorExecution": "all", "saveDataSuccessExecution": "all"},
   "notes": "Sanitised canonical export. Bind existing Gmail/Telegram credentials and configure destinations only in local n8n.",
   "nodes": [

@@ -1,0 +1,11 @@
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# 06:00 Europe/Moscow (server clock is UTC): refresh products, stocks and operational baseline.
+0 3 * * * root /usr/bin/flock -n /run/lock/efa-baseline-refresh.lock /bin/bash -lc 'trap "docker start efa-n8n >/dev/null 2>&1 || true" EXIT; docker stop efa-n8n >/dev/null; cd /opt/efa-os; docker compose --env-file /etc/efa-os/n8n.env -f docker-compose.n8n-performance.yml run --rm --no-deps -T efa-n8n execute --id=B2DiIq630Yb2fXR8 >/dev/null 2>&1'
+
+# 16:00 Europe/Moscow: replace the latest report only after a successful read-only run.
+0 13 * * * root /usr/bin/flock -n /run/lock/efa-ai-analyst.lock /bin/bash -lc 'docker run --rm --network efa-tools --env-file /etc/efa-os/ai-analyst.env -v /opt/efa-os:/repo:ro --entrypoint python efa-read-mcp:41d5487 /repo/Scripts/ai_analyst_v1.py --limit 5 > /var/log/efa-os/ai-analyst-latest.txt.new && chmod 640 /var/log/efa-os/ai-analyst-latest.txt.new && mv -f /var/log/efa-os/ai-analyst-latest.txt.new /var/log/efa-os/ai-analyst-latest.txt'
+
+# 16:30 Europe/Moscow: deliver one compact Analyst payload to Email and Telegram.
+30 13 * * * root /usr/bin/flock -n /run/lock/efa-ai-analyst-email.lock /bin/bash -lc 'test -s /var/log/efa-os/ai-analyst-latest.txt && /usr/bin/python3 /opt/efa-os/Scripts/format_ai_analyst_email.py /var/log/efa-os/ai-analyst-latest.txt | /usr/bin/curl --fail --silent --show-error --max-time 60 -H "Content-Type: application/json" --data-binary @- http://127.0.0.1:5678/webhook/efa-ai-analyst-email >> /var/log/efa-os/ai-analyst-email.log 2>&1'
