@@ -1,5 +1,121 @@
 # Project Status
 
+## EFA OS production checkpoint — 2026-08-22
+
+This section is the current production checkpoint. Older sections below are
+retained as historical implementation records and must not override this
+state.
+
+### Infrastructure
+
+- Timeweb VPS — **ACTIVE**.
+- PostgreSQL 16 — **ACTIVE**.
+- n8n — **ACTIVE**.
+- EFA Read MCP — **ACTIVE**, exactly nine read-only tools.
+- Existing collectors — **ACTIVE / OK**.
+- Control Center — **ACTIVE** at
+  [panel.efa-os.ru](https://panel.efa-os.ru).
+
+### AI Analyst
+
+AI Analyst is **ACTIVE** and generated daily at 16:00 Europe/Moscow. It covers
+sales, demand, prices, stocks, promotions, CPC, logistics, period financial
+economics and Price Decision. It remains a `READ + PROPOSE` component and has
+no automatic Ozon write action.
+
+### Period financial economics
+
+The current financial read layer is
+`mcp_read.product_period_economics(from_date, to_date)`. It uses the proven
+period cohort rather than summing daily economics. The layer accounts for:
+
+- acquiring;
+- complete service items from `services_json`;
+- real `ClientReturn` operations;
+- sale and commission returns;
+- return services and restored COGS;
+- `Cancellation` as a cancellation, not a product return;
+- financial inclusion by the confirmed period rules.
+
+Official Ozon golden reconciliation for 2026-08-14 through 2026-08-20:
+
+| SKU | PBT |
+| --- | ---: |
+| УФ 001Б | 193.54 ₽ |
+| УФ 002Б | -6.43 ₽ |
+| УФ 003Б | 24.92 ₽ |
+| УФ 004Б | -212.51 ₽ |
+| УФ 005Б | 79.40 ₽ |
+
+Result: **5/5 PASS**, tolerance `<= 0.01 ₽`.
+
+The former margins `13.6%`, `15.4%`, `14.5%`, `22.5%` and `16.9%` are obsolete
+delivery-cohort values. They are not current financial data and must not be
+used.
+
+### Report delivery
+
+- `Ozon Daily Commercial Brief Delivery v1`
+  (`Kf241Y5kzETghygL`) — **INACTIVE**. Its former 08:15 Europe/Moscow delivery
+  sends nothing.
+- AI Analyst generation — 16:00 Europe/Moscow.
+- Compact AI Analyst delivery — 16:30 Europe/Moscow.
+- `EFA AI Analyst Email` (`EFAANALYSTEMAIL`) — **ACTIVE**.
+- Email — **ON**.
+- Telegram — **ON**.
+- Both channels consume the same compact Analyst payload.
+- `TEST - Daily Commercial Brief Delivery` — **INACTIVE**.
+
+No test Email or Telegram message is sent as part of checkpoint validation.
+
+### Control Center
+
+The Control Center home page shows PostgreSQL, n8n, MCP and collector health;
+data freshness; last and next Analyst; next delivery; conservative last
+delivery confirmation; Email/Telegram state; old Daily Brief state; current
+Analyst signals; and clearly separated `ACTIVE` / `PLANNED` modules. When no
+existing source proves completion of both delivery channels, the last delivery
+is shown as `Нет подтверждения`.
+
+`/prices` displays the current Analyst financial values and Price Decision. It
+does not recalculate period economics.
+
+### Modules and write policy
+
+Active operational components:
+
+- AI Analyst;
+- Price Decision;
+- Compact Report;
+- EFA Read MCP;
+- Control Center.
+
+Planned, not active:
+
+- EFA Coordinator;
+- AI Content;
+- AI Operator;
+- AI Fitment;
+- Executive Assistant.
+
+The system remains `READ + PROPOSE`. Price changes, promotion joins/exits and
+other Ozon production writes require a human decision and manual action.
+
+### Existing production backups
+
+The following current-stage backups were verified on Timeweb and remain
+outside Git:
+
+- `/var/backups/efa-os/timeweb-efa-pre-step4-20260822-052239.dump`;
+- `/var/backups/efa-os/pre-step5-20260822-054002`;
+- `/var/backups/efa-os/report-delivery-20260822-061301`;
+- `/var/backups/efa-os/control-center-20260822-063400`;
+- `/var/backups/efa-os/timeweb-efa-pre-step3-20260822-004933.dump`;
+- `/var/backups/efa-os/timeweb-n8n-OPFINDAILYV1-pre-step3-20260822-004933.json`;
+- `/var/backups/efa-os/ai_analyst_v1.py-pre-step4-20260822-052239`.
+
+No backup artifact is stored in Git.
+
 ## Transfer/recovery checkpoint — 2026-08-17
 
 - GitHub `main` is canonical for code, migrations, sanitised workflow

@@ -10,19 +10,31 @@ The long-term goal is to build a scalable filtration brand supported by AI, auto
 
 ## Technical architecture
 
-The production runtime is local:
+The production runtime is the Timeweb VPS:
 
-- Docker Desktop hosts n8n and PostgreSQL.
+- Docker hosts PostgreSQL 16, n8n, the existing collectors and EFA Read MCP.
+- EFA Read MCP exposes exactly nine read-only tools over curated `mcp_read`
+  sources.
+- The host cron generates AI Analyst at 16:00 Europe/Moscow and delivers one
+  compact payload through Email and Telegram at 16:30.
+- Control Center runs as one local-only systemd service behind Caddy and Basic
+  Auth at [panel.efa-os.ru](https://panel.efa-os.ru).
 - OZON Seller API is the external data source.
-- PostgreSQL is the persistence and analytical layer.
+- PostgreSQL is the persistence and analytical layer; period financial
+  economics are read through `mcp_read.product_period_economics(from_date,
+  to_date)`.
 - `n8n/workflows/OZON_workflow_Phase_A.json` is the canonical Phase A workflow.
-- OZON AI Analyst and its specialised tools provide read-oriented analytical and decision-support capabilities.
+- AI Analyst and Price Decision provide read-oriented analysis and proposals;
+  they perform no automatic Ozon write actions.
 
 Data flow:
 
-`OZON API -> n8n ingestion -> PostgreSQL tables and views -> analytical tools -> OZON AI Analyst`
+`OZON API -> existing collectors/n8n -> PostgreSQL -> mcp_read -> AI Analyst -> Price Decision / Compact Report / Control Center`
 
-GitHub stores version-controlled code and documentation; it is not the production runtime.
+GitHub stores version-controlled code, migrations, sanitised workflow exports
+and documentation; it is not the production runtime. The current stable
+production checkpoint is recorded in
+[docs/PROJECT_STATUS.md](docs/PROJECT_STATUS.md).
 
 ## OZON automation — Phase A baseline
 

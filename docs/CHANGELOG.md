@@ -1,5 +1,25 @@
 # Changelog
 
+## 2026-08-22 — Stable EFA OS production checkpoint
+
+- Recorded the active Timeweb production runtime: PostgreSQL 16, n8n,
+  collectors, nine-tool read-only EFA Read MCP and Control Center.
+- Recorded the period-aware financial read layer
+  `mcp_read.product_period_economics(from_date, to_date)`. Its official Ozon
+  reconciliation for 2026-08-14 through 2026-08-20 is 5/5 PASS within 0.01 ₽;
+  the former delivery-cohort margins are obsolete.
+- Recorded AI Analyst generation at 16:00 Europe/Moscow and one compact
+  delivery at 16:30 through the active `EFAANALYSTEMAIL` Email and Telegram
+  branches. The former 08:15 Daily Commercial Brief and its TEST workflow are
+  inactive.
+- Recorded the current Control Center at `https://panel.efa-os.ru`, including
+  schedule and delivery-channel state. `/prices` displays Analyst output and
+  does not recalculate financial economics.
+- Reconfirmed the `READ + PROPOSE` policy: no automatic prices, promotions or
+  other Ozon production writes.
+- Removed the runtime credential reference from the sanitised inactive Daily
+  Brief workflow export. Production workflows and schedules were not changed.
+
 ## 2026-08-19 — Explicit Daily Brief delivery date context
 
 - Fixed the implicit-date defect exposed by Telegram recovery execution 1193:
