@@ -1,5 +1,33 @@
 # Project Status
 
+## EFA Ozon Price Calculator V1 checkpoint — 2026-08-23
+
+Business logic and Golden SKU validation are **COMPLETED** and **VALIDATED**
+against EcomUnit. The project is **READY FOR PHASE 1** and **NOT READY FOR
+PHASE 2**.
+
+**PHASE 1 NOT STARTED.** No calculator code, database change, collector,
+workflow, MCP, AI Analyst, Control Center or production change is part of this
+checkpoint.
+
+The approved Price Calculator V1 margin policy is:
+
+- hard floor: 10%;
+- working minimum: 12%;
+- target: 15%.
+
+The former 15% mandatory minimum is superseded for Price Calculator V1 and
+must not override this policy. The forecast input is `seller_price`; observed
+`marketing_seller_price`, `buyer_price`, `card_price` and confirmed revenue are
+not forecast inputs.
+
+The full frozen checkpoint, Golden SKU values, validated formula, architecture
+decision and phase boundaries are documented in
+[`OZON_PRICE_CALCULATOR_V1.md`](architecture/OZON_PRICE_CALCULATOR_V1.md).
+
+Next development action after resuming: **START PHASE 1 — pure calculator core
++ unit tests**. Do not start Phase 2 as part of Phase 1.
+
 ## EFA OS production checkpoint — 2026-08-22
 
 This section is the current production checkpoint. Older sections below are
@@ -836,14 +864,17 @@ Target architecture:
 - Do not automatically change prices, promotions, advertising or inventory parameters.
 - Build deterministic monitoring before adding more autonomous AI behavior.
 
-## Commercial Profit Policy — mandatory guardrail
+## Commercial Profit Policy — superseded for Price Calculator V1
 
 - A commercial sale must first recover COGS for inventory replenishment and
   cover attributable Ozon, advertising/promotion and applicable management-tax
   reserve costs before it is treated as distributable or reinvestable profit.
-- The hard floor for any commercial recommendation or controlled experiment is
-  `contribution_margin_after_tax_reserve >= 15%`; the target operating range is
-  15–20%, with more than 20% preferred where market conditions allow.
+- The former mandatory minimum of 15% is historical and is superseded for the
+  new Price Calculator V1 by the approved 10% / 12% / 15% policy.
+- Price Calculator V1 classifies contribution margin as follows:
+  `< 10%` is `HARD_FLOOR_VIOLATION`; `>= 10%` and `< 12%` is
+  `BELOW_WORKING_MINIMUM`; `>= 12%` and `< 15%` is `BELOW_TARGET`; `>= 15%` is
+  `TARGET_OR_ABOVE`.
 - `contribution_after_tax_reserve` is recognised/effective revenue less COGS,
   attributable Ozon variable expenses, advertising/promotion spend and the
   applicable management tax reserve. Positive profit, orders or revenue alone
@@ -851,7 +882,8 @@ Target architecture:
 - The fixed annual insurance obligation (57,390 RUB) remains business-level and
   is not arbitrarily allocated to an offer or order; aggregate contribution
   must nevertheless cover it.
-- CPC, promotion, price and boosting evaluation must retain these guardrails.
+- Future Calculator-based CPC, promotion, price and boosting evaluation must
+  retain the approved 10% / 12% / 15% policy.
   Expected uplift is never assumed without historical evidence.
 
 ## Price Refresh Automation v0.1 — ACTIVE
