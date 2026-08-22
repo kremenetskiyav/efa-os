@@ -578,7 +578,7 @@ def _commercial_recommendation(product: dict[str, Any], current_end: date) -> di
             promo_reason = "активная цена акции не подтверждена фактической доставкой"
         else:
             promo_action = "ПРОВЕРИТЬ"
-            promo_reason = "маржа периода н/д; изменение участия в акции без подтверждённой экономики не рекомендовано"
+            promo_reason = "маржа н/д; акцию не меняем без подтверждённой экономики"
     elif candidate_estimate is not None:
         if candidate_estimate["margin"] >= MIN_MARGIN_PERCENT:
             promo_action = "ВОЙТИ"
@@ -603,8 +603,8 @@ def _commercial_recommendation(product: dict[str, Any], current_end: date) -> di
             price_reason = "нет подтверждённой финансовой экономики периода"
         else:
             price_reason = (
-                f"PBT периода {_fmt_precise_money(economics['profit'], 2)}, но прибыль/шт. и маржа н/д; "
-                "ценовой вывод ограничен"
+                f"PBT периода {_fmt_precise_money(economics['profit'], 2)}; "
+                "прибыль на единицу и маржа н/д, цену не меняем"
             )
     elif active_match is not None:
         mode = "ручной" if str(active_match.get("add_mode") or "").upper() == "MANUAL" else "активной"

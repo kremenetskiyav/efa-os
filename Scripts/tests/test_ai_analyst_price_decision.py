@@ -193,7 +193,7 @@ class PriceDecisionTests(unittest.TestCase):
         self.assertEqual(decision["price"], "ОСТАВИТЬ")
         self.assertEqual(decision["promotion"], "ПРОВЕРИТЬ")
         self.assertEqual(decision["confidence"], "Н/Д")
-        self.assertIn("ценовой вывод ограничен", decision["reason"])
+        self.assertIn("прибыль на единицу и маржа н/д, цену не меняем", decision["reason"])
 
     def test_candidate_promo_uses_ten_percent_estimated_margin_floor(self):
         item = product(
