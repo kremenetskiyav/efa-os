@@ -1,8 +1,9 @@
 import sys
 import types
 import unittest
+from collections import defaultdict
 from datetime import date
-from decimal import Decimal
+from decimal import ROUND_DOWN, Decimal
 from pathlib import Path
 
 try:
@@ -29,22 +30,34 @@ def product(
     sales_change: Decimal | None = None,
 ) -> dict:
     period = analyst._empty_period()
+    revenue = Decimal(actual_price) * confirmed_units
+    period_profit = Decimal(profit)
     period.update(
         {
             "days": {date(2026, 8, day) for day in range(15, 21)},
             "units": Decimal("12") if rank == 1 else Decimal("5"),
             "delivered": Decimal(confirmed_units),
             "matched": Decimal(confirmed_units),
-            "confirmed_revenue": Decimal(actual_price) * confirmed_units,
+            "net_sold": Decimal(confirmed_units),
+            "confirmed_revenue": revenue,
             "commission": Decimal(actual_price) * Decimal("0.20") * confirmed_units,
             "logistics": Decimal("100") * confirmed_units,
             "cost": (
-                Decimal(actual_price) * confirmed_units
+                revenue
                 - Decimal(actual_price) * Decimal("0.20") * confirmed_units
                 - Decimal("100") * confirmed_units
-                - Decimal(profit)
+                - period_profit
             ),
-            "profit": Decimal(profit),
+            "profit": period_profit,
+            "profit_per_unit": period_profit / confirmed_units if confirmed_units else None,
+            "profit_margin_percent": (
+                (period_profit / revenue * Decimal("100")).quantize(
+                    Decimal("0.01"), rounding=ROUND_DOWN
+                )
+                if revenue
+                else None
+            ),
+            "economics_loaded": True,
         }
     )
     active = [] if active_price is None else [{"promotion_price": Decimal(active_price), "add_mode": active_mode}]
@@ -65,11 +78,42 @@ def product(
 
 
 class PriceDecisionTests(unittest.TestCase):
-    def test_uf001_fixed_promo_uses_factual_economics(self):
+    def test_period_economics_mapping_uses_range_function_fields(self):
+        periods = defaultdict(
+            lambda: {"current": analyst._empty_period(), "previous": analyst._empty_period()}
+        )
+        analyst._apply_period_economics(
+            periods,
+            [{
+                "offer_id": "УФ 003Б",
+                "delivered_units": 1,
+                "returned_units": 0,
+                "net_sold_units": 1,
+                "gross_sales": Decimal("599"),
+                "commission": Decimal("251.58"),
+                "acquiring": Decimal("37.14"),
+                "services": Decimal("127.36"),
+                "return_operations": Decimal("0"),
+                "cogs": Decimal("158"),
+                "profit_before_tax": Decimal("24.92"),
+                "profit_per_unit": Decimal("24.9200"),
+                "margin_before_tax": Decimal("4.16"),
+            }],
+            "current",
+        )
+
+        economics = analyst._economics(periods["УФ 003Б"]["current"])
+
+        self.assertEqual(economics["profit"], Decimal("24.92"))
+        self.assertEqual(economics["profit_per_unit"], Decimal("24.9200"))
+        self.assertEqual(economics["margin"], Decimal("4.16"))
+        self.assertEqual(periods["УФ 003Б"]["current"]["other_expenses"], Decimal("37.14"))
+
+    def test_uf001_fixed_promo_uses_reconciled_economics(self):
         item = product(
             current_price="757",
             actual_price="624",
-            profit="254.05",
+            profit="193.54",
             confirmed_units=3,
             rank=2,
             active_price="624",
@@ -81,7 +125,7 @@ class PriceDecisionTests(unittest.TestCase):
         self.assertEqual(decision["test_price"], Decimal("757"))
         self.assertEqual(decision["promotion"], "ОСТАВИТЬ")
         self.assertEqual(decision["actual_price"], Decimal("624"))
-        self.assertEqual(decision["margin"], Decimal("13.6"))
+        self.assertEqual(decision["margin"], Decimal("10.33"))
         self.assertEqual(decision["confidence"], "ВЫСОКАЯ")
 
     def test_incomplete_previous_window_does_not_block_strong_sku_test(self):

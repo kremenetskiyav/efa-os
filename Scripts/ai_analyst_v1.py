@@ -1,4 +1,4 @@
-"""Deterministic daily analyst report over the seven curated mcp_read views."""
+"""Deterministic daily analyst report over curated mcp_read sources."""
 
 from __future__ import annotations
 
@@ -64,14 +64,18 @@ VIEW_QUERIES = {
     """,
     "performance": """
         SELECT offer_id, business_date, ordered_units, ordered_revenue,
-               demand_quality_status, delivered_units,
-               finance_matched_delivered_units, multi_line_excluded_units,
-               unmatched_finance_units, confirmed_revenue, commission_expense,
-               logistics_expense, other_expenses, cost_of_goods, payout,
-               profit_before_tax, economics_quality_status
+               demand_quality_status
         FROM mcp_read.product_daily_performance
         WHERE business_date BETWEEN $1 AND $2
         ORDER BY offer_id, business_date
+    """,
+    "economics": """
+        SELECT sku AS offer_id, from_date, to_date, delivered_units,
+               returned_units, net_sold_units, gross_sales, commission,
+               acquiring, services, return_operations, cogs,
+               profit_before_tax, profit_per_unit, margin_before_tax
+        FROM mcp_read.product_period_economics($1, $2)
+        ORDER BY sku
     """,
     "logistics": """
         SELECT offer_id, cluster_from, cluster_to, orders_count,
@@ -187,10 +191,13 @@ def _empty_period() -> dict[str, Any]:
     return {
         "days": set(), "units": Decimal("0"), "revenue": Decimal("0"), "statuses": set(),
         "delivered": Decimal("0"), "matched": Decimal("0"), "excluded": Decimal("0"),
-        "unmatched": Decimal("0"), "confirmed_revenue": Decimal("0"),
-        "commission": Decimal("0"), "logistics": Decimal("0"),
-        "other_expenses": Decimal("0"), "cost": Decimal("0"), "payout": Decimal("0"),
-        "profit": Decimal("0"), "missing_profit_units": Decimal("0"),
+        "unmatched": Decimal("0"), "returned": Decimal("0"), "net_sold": Decimal("0"),
+        "confirmed_revenue": Decimal("0"), "commission": Decimal("0"),
+        "acquiring": Decimal("0"), "logistics": Decimal("0"),
+        "return_operations": Decimal("0"), "other_expenses": Decimal("0"),
+        "cost": Decimal("0"), "payout": Decimal("0"), "profit": None,
+        "profit_per_unit": None, "profit_margin_percent": None,
+        "economics_loaded": False, "missing_profit_units": Decimal("0"),
         "bad_economics_units": Decimal("0"), "economics_statuses": set(),
     }
 
@@ -259,29 +266,44 @@ def _aggregate_performance(
             target["revenue"] += _num(row["ordered_revenue"])
         if row["demand_quality_status"]:
             target["statuses"].add(row["demand_quality_status"])
-        target["delivered"] += _num(row.get("delivered_units"))
-        matched_units = _num(row.get("finance_matched_delivered_units"))
-        target["matched"] += matched_units
-        target["excluded"] += _num(row.get("multi_line_excluded_units"))
-        target["unmatched"] += _num(row.get("unmatched_finance_units"))
-        target["confirmed_revenue"] += _num(row.get("confirmed_revenue"))
-        target["commission"] += _num(row.get("commission_expense"))
-        target["logistics"] += _num(row.get("logistics_expense"))
-        target["other_expenses"] += _num(row.get("other_expenses"))
-        target["cost"] += _num(row.get("cost_of_goods"))
-        target["payout"] += _num(row.get("payout"))
-        target["profit"] += _num(row.get("profit_before_tax"))
-        if matched_units > 0 and (
-            row.get("confirmed_revenue") is None
-            or row.get("cost_of_goods") is None
-            or row.get("profit_before_tax") is None
-        ):
-            target["missing_profit_units"] += matched_units
-        if _num(row.get("delivered_units")) > 0 and row.get("economics_quality_status") != "CONFIRMED_CURRENT_COST":
-            target["bad_economics_units"] += _num(row.get("delivered_units"))
-        if row.get("economics_quality_status"):
-            target["economics_statuses"].add(row["economics_quality_status"])
     return result
+
+
+def _apply_period_economics(
+    periods: dict[str, dict[str, Any]], rows: list[dict[str, Any]], period_name: str
+) -> None:
+    for row in rows:
+        target = periods[row["offer_id"]][period_name]
+        delivered = _num(row.get("delivered_units"))
+        acquiring = _num(row.get("acquiring"))
+        return_operations = _num(row.get("return_operations"))
+        gross_sales = _num(row.get("gross_sales"))
+        commission = _num(row.get("commission"))
+        services = _num(row.get("services"))
+        target.update({
+            "delivered": delivered,
+            "matched": delivered,
+            "returned": _num(row.get("returned_units")),
+            "net_sold": _num(row.get("net_sold_units")),
+            "confirmed_revenue": gross_sales,
+            "commission": commission,
+            "acquiring": acquiring,
+            "logistics": services,
+            "return_operations": return_operations,
+            "other_expenses": acquiring + return_operations,
+            "cost": _num(row.get("cogs")),
+            "payout": gross_sales - commission - acquiring - services - return_operations,
+            "profit": None if row.get("profit_before_tax") is None else _num(row["profit_before_tax"]),
+            "profit_per_unit": None if row.get("profit_per_unit") is None else _num(row["profit_per_unit"]),
+            "profit_margin_percent": None if row.get("margin_before_tax") is None else _num(row["margin_before_tax"]),
+            "economics_loaded": True,
+        })
+        if row.get("profit_before_tax") is None:
+            target["missing_profit_units"] = delivered
+            target["bad_economics_units"] = delivered
+            target["economics_statuses"].add("MISSING_PERIOD_INPUTS")
+        else:
+            target["economics_statuses"].add("CONFIRMED_PERIOD_ECONOMICS")
 
 
 def _aggregate_cpc(rows: list[dict[str, Any]], current_start: date) -> dict[str, dict[str, Any]]:
@@ -344,13 +366,18 @@ def _confidence(confirmed_units: Any) -> str:
 def _economics(period: dict[str, Any]) -> dict[str, Any]:
     confirmed_units = period["matched"]
     available = (
-        confirmed_units >= 1
+        period["economics_loaded"]
+        and confirmed_units >= 1
+        and period["net_sold"] > 0
         and period["missing_profit_units"] == 0
         and period["confirmed_revenue"] > 0
+        and period["profit"] is not None
+        and period["profit_per_unit"] is not None
+        and period["profit_margin_percent"] is not None
     )
     revenue = period["confirmed_revenue"] if available else None
     profit = period["profit"] if available else None
-    margin = _percent(profit, revenue) if available else None
+    margin = period["profit_margin_percent"] if available else None
     per_unit_revenue = None if not available else revenue / confirmed_units
     return {
         "available": available,
@@ -363,6 +390,7 @@ def _economics(period: dict[str, Any]) -> dict[str, Any]:
         "confidence": _confidence(confirmed_units if available else 0),
         "revenue": revenue,
         "profit": profit,
+        "profit_per_unit": period["profit_per_unit"] if available else None,
         "margin": margin,
         "per_unit_revenue": per_unit_revenue,
     }
@@ -974,11 +1002,21 @@ async def _run(limit: int) -> str:
             price = [dict(row) for row in await connection.fetch(VIEW_QUERIES["price"])]
             stock = [dict(row) for row in await connection.fetch(VIEW_QUERIES["stock"])]
             performance = [dict(row) for row in await connection.fetch(VIEW_QUERIES["performance"], previous_start, current_end)]
+            current_economics = [
+                dict(row)
+                for row in await connection.fetch(VIEW_QUERIES["economics"], current_start, current_end)
+            ]
+            previous_economics = [
+                dict(row)
+                for row in await connection.fetch(VIEW_QUERIES["economics"], previous_start, previous_end)
+            ]
             logistics_rows = [dict(row) for row in await connection.fetch(VIEW_QUERIES["logistics"])]
             promotion_rows = [dict(row) for row in await connection.fetch(VIEW_QUERIES["promotions"])]
             cpc_rows = [dict(row) for row in await connection.fetch(VIEW_QUERIES["cpc"], previous_start, current_end)]
 
             performance_by_offer = _aggregate_performance(performance, current_start, previous_start, previous_end)
+            _apply_period_economics(performance_by_offer, current_economics, "current")
+            _apply_period_economics(performance_by_offer, previous_economics, "previous")
             cpc_by_offer = _aggregate_cpc(cpc_rows, current_start)
             promotions_by_offer = _aggregate_promotions(promotion_rows, datetime.now(MOSCOW).date())
             logistics_by_offer = _aggregate_logistics(logistics_rows)
