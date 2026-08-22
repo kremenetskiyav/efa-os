@@ -1,5 +1,6 @@
 const stateText=(online,ok='Online',bad='Offline')=>({text:online?ok:bad,cls:online?'state-online':'state-offline'});
 function setState(id,value,ok,bad){const el=document.getElementById(id);const state=stateText(value,ok,bad);el.textContent=state.text;el.className=state.cls;}
+function setToggle(id,value){const el=document.getElementById(id);if(value===null){el.textContent='Нет данных';el.className='';return;}setState(id,value,'ON','OFF');}
 function render(data){
   document.getElementById('generated-at').textContent=`Обновлено: ${data.generated_at}`;
   setState('postgresql',data.system.postgresql);setState('n8n',data.system.n8n);setState('mcp',data.system.mcp);setState('collectors',data.system.collectors_ok,'OK','Проблема');
@@ -7,7 +8,12 @@ function render(data){
   document.getElementById('analyst-last').textContent=data.analyst.last;
   document.getElementById('analyst-next').textContent=data.analyst.next;
   document.getElementById('analyst-schedule').textContent=data.analyst.schedule;
-  document.getElementById('email-last').textContent=data.email.label;
+  document.getElementById('delivery-next').textContent=data.delivery.next;
+  document.getElementById('delivery-schedule').textContent=data.delivery.schedule;
+  document.getElementById('delivery-last').textContent=data.delivery.last.label;
+  setToggle('delivery-email',data.delivery.email_on);
+  setToggle('delivery-telegram',data.delivery.telegram_on);
+  setToggle('old-brief',data.delivery.old_brief_on);
   const a=data.attention;
   document.getElementById('count-attention').textContent=a.counts.attention;
   document.getElementById('count-watch').textContent=a.counts.watch;

@@ -1,4 +1,5 @@
 import importlib.util
+import json
 import sys
 import tempfile
 import unittest
@@ -7,6 +8,7 @@ from pathlib import Path
 
 
 MODULE_PATH = Path(__file__).resolve().parents[1] / "app.py"
+STATIC_PATH = MODULE_PATH.parent / "static"
 SPEC = importlib.util.spec_from_file_location("control_center_app", MODULE_PATH)
 app = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = app
@@ -50,13 +52,47 @@ class ControlCenterTests(unittest.TestCase):
         self.assertEqual(raw, REPORT)
 
     def test_reads_daily_schedule_from_cron(self):
-        cron = "0 13 * * * root flock -n /run/lock/efa-ai-analyst.lock command"
-        next_run, label = app.parse_cron_schedule(cron, datetime(2026, 8, 21, 12, 0, tzinfo=timezone.utc))
-        self.assertEqual(next_run.hour, 13)
-        self.assertIn("16:00 МСК", label)
+        cron = """0 13 * * * root flock -n /run/lock/efa-ai-analyst.lock command
+30 13 * * * root flock -n /run/lock/efa-ai-analyst-email.lock command"""
+        now = datetime(2026, 8, 21, 12, 0, tzinfo=timezone.utc)
+        next_analyst, analyst_label = app.parse_cron_schedule(cron, now)
+        next_delivery, delivery_label = app.parse_cron_schedule(cron, now, "efa-ai-analyst-email.lock")
+        self.assertEqual((next_analyst.hour, next_analyst.minute), (13, 0))
+        self.assertEqual((next_delivery.hour, next_delivery.minute), (13, 30))
+        self.assertIn("16:00 МСК", analyst_label)
+        self.assertIn("16:30 МСК", delivery_label)
 
-    def test_missing_email_log_is_not_confirmed(self):
-        self.assertEqual(app.email_confirmation(Path("missing-email-log"))["label"], "Нет подтверждения")
+    def test_webhook_log_is_not_treated_as_delivery_confirmation(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "delivery.log"
+            path.write_text('{"message":"Workflow was started"}', encoding="utf-8")
+            confirmation = app.delivery_confirmation(path)
+        self.assertFalse(confirmation["confirmed"])
+        self.assertEqual(confirmation["label"], "Нет подтверждения")
+
+    def test_reads_delivery_switches_from_existing_workflow_files(self):
+        with tempfile.TemporaryDirectory() as folder:
+            delivery_path = Path(folder) / "delivery.json"
+            old_brief_path = Path(folder) / "old.json"
+            delivery_path.write_text(json.dumps({
+                "active": True,
+                "nodes": [
+                    {"name": "Send Email", "type": "n8n-nodes-base.gmail"},
+                    {"name": "Send Telegram", "type": "n8n-nodes-base.httpRequest"},
+                ],
+            }), encoding="utf-8")
+            old_brief_path.write_text(json.dumps({"active": False}), encoding="utf-8")
+            status = app.delivery_configuration(delivery_path, old_brief_path)
+        self.assertEqual(status, {"email_on": True, "telegram_on": True, "old_brief_on": False})
+
+    def test_system_timeline_contains_current_delivery_fields(self):
+        page = (STATIC_PATH / "index.html").read_text(encoding="utf-8")
+        for element_id in (
+            "analyst-last", "analyst-next", "delivery-next", "delivery-last",
+            "delivery-email", "delivery-telegram", "old-brief",
+        ):
+            self.assertIn(f'id="{element_id}"', page)
+        self.assertNotIn("Последний email-report", page)
 
     def test_detail_views_only_present_existing_report_data(self):
         prices = app.render_detail("prices", REPORT)

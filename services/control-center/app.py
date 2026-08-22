@@ -29,8 +29,16 @@ MOSCOW = timezone(timedelta(hours=3), name="Europe/Moscow")
 UTC = timezone.utc
 STATIC_DIR = Path(__file__).with_name("static")
 REPORT_PATH = Path(os.environ.get("EFA_ANALYST_REPORT", "/var/log/efa-os/ai-analyst-latest.txt"))
-EMAIL_LOG_PATH = Path(os.environ.get("EFA_ANALYST_EMAIL_LOG", "/var/log/efa-os/ai-analyst-email.log"))
+DELIVERY_LOG_PATH = Path(os.environ.get("EFA_ANALYST_EMAIL_LOG", "/var/log/efa-os/ai-analyst-email.log"))
 CRON_PATH = Path(os.environ.get("EFA_ANALYTICS_CRON", "/etc/cron.d/efa-os-analytics"))
+DELIVERY_WORKFLOW_PATH = Path(os.environ.get(
+    "EFA_ANALYST_DELIVERY_WORKFLOW",
+    REPO_ROOT / "n8n/workflows/EFA_AI_Analyst_Delivery_v1.json",
+))
+OLD_BRIEF_WORKFLOW_PATH = Path(os.environ.get(
+    "EFA_OLD_BRIEF_WORKFLOW",
+    REPO_ROOT / "n8n/workflows/Ozon_Daily_Commercial_Brief_Delivery_v1.json",
+))
 N8N_HOST = os.environ.get("EFA_N8N_HEALTH_HOST", "127.0.0.1")
 N8N_PORT = int(os.environ.get("EFA_N8N_HEALTH_PORT", "5678"))
 MCP_HOST = os.environ.get("EFA_MCP_HEALTH_HOST", "127.0.0.1")
@@ -96,11 +104,11 @@ def _statuses_ok(values: list[str] | None) -> bool:
     return not any(any(word in str(value).upper() for word in bad) for value in values)
 
 
-def parse_cron_schedule(text: str, now: datetime) -> tuple[datetime | None, str]:
-    """Read the existing daily Analyst schedule; do not duplicate 16:00 in code."""
+def parse_cron_schedule(text: str, now: datetime, lock_name: str = "efa-ai-analyst.lock") -> tuple[datetime | None, str]:
+    """Read an existing daily schedule from cron; do not duplicate its time in code."""
     for raw in text.splitlines():
         line = raw.strip()
-        if not line or line.startswith("#") or "efa-ai-analyst.lock" not in line:
+        if not line or line.startswith("#") or lock_name not in line:
             continue
         fields = line.split(None, 5)
         if len(fields) < 6 or not fields[0].isdigit() or not fields[1].isdigit():
@@ -113,19 +121,50 @@ def parse_cron_schedule(text: str, now: datetime) -> tuple[datetime | None, str]
     return None, "Расписание не найдено"
 
 
-def email_confirmation(path: Path) -> dict[str, Any]:
-    if not path.is_file():
-        return {"confirmed": False, "label": "Нет подтверждения", "at": None}
+def delivery_confirmation(path: Path) -> dict[str, Any]:
+    """The current log confirms webhook acceptance, not completion of both channels."""
+    source = "webhook_acknowledgement" if path.is_file() else "unavailable"
+    return {"confirmed": False, "label": "Нет подтверждения", "at": None, "source": source}
+
+
+def delivery_configuration(delivery_path: Path, old_brief_path: Path) -> dict[str, bool | None]:
+    """Read channel switches from the existing deployed, sanitised workflow definitions."""
     try:
-        tail = path.read_text(encoding="utf-8", errors="replace")[-6000:]
-    except OSError:
-        return {"confirmed": False, "label": "Нет подтверждения", "at": None}
-    success = bool(re.search(r"\b(success|sent|ok|delivered)\b|отправ", tail, re.I))
-    failed = bool(re.search(r"\b(error|failed|failure)\b|ошиб", tail, re.I))
-    if not success or failed:
-        return {"confirmed": False, "label": "Нет подтверждения", "at": None}
-    at = datetime.fromtimestamp(path.stat().st_mtime, UTC)
-    return {"confirmed": True, "label": _fmt_dt(at), "at": _iso(at)}
+        delivery = json.loads(delivery_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        delivery = None
+    try:
+        old_brief = json.loads(old_brief_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        old_brief = None
+
+    email_on: bool | None = None
+    telegram_on: bool | None = None
+    if isinstance(delivery, dict):
+        active = delivery.get("active") is True
+        nodes = delivery.get("nodes") if isinstance(delivery.get("nodes"), list) else []
+        email_on = active and any(
+            isinstance(node, dict)
+            and node.get("disabled") is not True
+            and node.get("type") == "n8n-nodes-base.gmail"
+            for node in nodes
+        )
+        telegram_on = active and any(
+            isinstance(node, dict)
+            and node.get("disabled") is not True
+            and "telegram" in str(node.get("name", "")).lower()
+            for node in nodes
+        )
+
+    old_brief_on: bool | None = None
+    if isinstance(old_brief, dict):
+        old_brief_on = old_brief.get("active") is True
+
+    return {
+        "email_on": email_on,
+        "telegram_on": telegram_on,
+        "old_brief_on": old_brief_on,
+    }
 
 
 def _tcp_online(host: str, port: int) -> bool:
@@ -234,6 +273,8 @@ def build_status() -> dict[str, Any]:
     except OSError:
         cron_text = ""
     next_run, schedule_label = parse_cron_schedule(cron_text, now)
+    next_delivery, delivery_schedule_label = parse_cron_schedule(cron_text, now, "efa-ai-analyst-email.lock")
+    delivery_config = delivery_configuration(DELIVERY_WORKFLOW_PATH, OLD_BRIEF_WORKFLOW_PATH)
     postgres_online, db_row = asyncio.run(read_database())
     collectors, latest_data = collector_snapshot(db_row, now) if postgres_online else ([], None)
     return {
@@ -251,7 +292,12 @@ def build_status() -> dict[str, Any]:
             "next": _fmt_dt(next_run),
             "schedule": schedule_label,
         },
-        "email": email_confirmation(EMAIL_LOG_PATH),
+        "delivery": {
+            "last": delivery_confirmation(DELIVERY_LOG_PATH),
+            "next": _fmt_dt(next_delivery),
+            "schedule": delivery_schedule_label,
+            **delivery_config,
+        },
         "attention": report,
     }
 
