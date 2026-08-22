@@ -24,6 +24,8 @@ class Sku:
     factual_price: int | None = None
     price_action: str = "ОСТАВИТЬ"
     promo_action: str = "ОСТАВИТЬ"
+    pbt: str = "н/д"
+    profit_per_unit: str = "н/д"
     margin: str = "н/д"
     confidence: str = "Н/Д"
     reason: str = "Недостаточно данных для изменения."
@@ -78,6 +80,8 @@ def _promo_action(raw: str) -> str:
         return "ВЫЙТИ"
     if "ВОЙТИ" in upper:
         return "ВОЙТИ"
+    if "ПРОВЕР" in upper:
+        return "ПРОВЕРИТЬ"
     return "ОСТАВИТЬ"
 
 
@@ -117,7 +121,11 @@ def parse_report(report: str) -> tuple[str, list[Sku], str]:
         recommended = re.search(r"Рекомендуемая тестовая цена: \*\*([\d ]+ ₽|н/д)\*\*", body)
         factual = re.search(r"Фактическая цена продажи / цена активной акции: \*\*([\d ]+ ₽|н/д) /", body)
         promo = re.search(r"Рекомендация по акции: \*\*(.+?)\*\*", body)
-        margin = re.search(r"Расчётная текущая маржа: \*\*(.+?)\*\*", body)
+        finances = re.search(
+            r"Финансы периода: PBT \*\*(.+?)\*\*; прибыль/шт\. \*\*(.+?)\*\*; маржа \*\*(.+?)\*\*",
+            body,
+        )
+        legacy_margin = re.search(r"Расчётная текущая маржа: \*\*(.+?)\*\*", body)
         confidence = re.search(r"Уверенность: \*\*(.+?)\*\*", body)
         reason = re.search(r"- Причина: (.+)", body)
         if price:
@@ -128,8 +136,12 @@ def parse_report(report: str) -> tuple[str, list[Sku], str]:
             sku.factual_price = _optional_number(factual.group(1))
         if promo:
             sku.promo_action = _promo_action(promo.group(1))
-        if margin:
-            sku.margin = margin.group(1).strip()
+        if finances:
+            sku.pbt = finances.group(1).strip()
+            sku.profit_per_unit = finances.group(2).strip()
+            sku.margin = finances.group(3).strip()
+        elif legacy_margin:
+            sku.margin = legacy_margin.group(1).strip()
         if confidence:
             sku.confidence = confidence.group(1).strip()
         if reason:
@@ -157,7 +169,8 @@ def render(report: str) -> dict[str, str]:
     action_html = "".join(
         f"<div class='action'><b>{html.escape(s.name)}</b>"
         f"<div><strong>{_fmt_money(s.price)} → {_fmt_money(s.recommended_price)}</strong> · {html.escape(s.price_action)}</div>"
-        f"<div>Акция: {html.escape(s.promo_action.lower())} · уверенность: {html.escape(s.confidence.lower())} · маржа: {html.escape(s.margin)}</div>"
+        f"<div>PBT: {html.escape(s.pbt)} · прибыль/шт.: {html.escape(s.profit_per_unit)} · маржа: {html.escape(s.margin)}</div>"
+        f"<div>Акция: {html.escape(s.promo_action.lower())} · уверенность: {html.escape(s.confidence.lower())}</div>"
         f"<small>{html.escape(s.reason)}</small></div>"
         for s in actions
     ) or "<p>Сегодня подтверждённых действий нет.</p>"
@@ -192,7 +205,8 @@ table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;p
         text_lines += [
             sku.name,
             f"{_fmt_money(sku.price)} → {_fmt_money(sku.recommended_price)} · {sku.price_action}",
-            f"Акция: {sku.promo_action.lower()} · уверенность: {sku.confidence.lower()} · маржа: {sku.margin}",
+            f"PBT: {sku.pbt} · прибыль/шт.: {sku.profit_per_unit} · маржа: {sku.margin}",
+            f"Акция: {sku.promo_action.lower()} · уверенность: {sku.confidence.lower()}",
             f"Причина: {sku.reason}",
         ]
     text_lines += ["", "ВСЕ SKU", "SKU | продажи | текущая → тест | решение | акция/уверенность"]

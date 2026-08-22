@@ -302,15 +302,15 @@ def render_detail(kind: str, report: str) -> str:
             f"<td><b>{_compact_money(sku.price)} → {_compact_money(sku.recommended_price)}</b>"
             f"<br><small>фактическая продажа: {_compact_money(sku.factual_price)}</small></td>"
             f"<td><b>{html.escape(sku.price_action)}</b></td>"
+            f"<td><b>{html.escape(sku.pbt)}</b><br><small>{html.escape(sku.profit_per_unit)} / {html.escape(sku.margin)}</small></td>"
             f"<td>{html.escape(sku.confidence)}</td>"
             f"<td>{html.escape(sku.promo_action)}</td>"
-            f"<td>{html.escape(sku.margin)}</td>"
             f"<td><small>{html.escape(sku.reason)}</small></td></tr>"
             for sku in skus
         )
         content = (
             "<table><thead><tr><th>SKU</th><th>Текущая → тестовая</th><th>Решение</th>"
-            "<th>Уверенность</th><th>Акция</th><th>Маржа</th><th>Почему</th></tr></thead>"
+            "<th>PBT / прибыль/шт. / маржа</th><th>Уверенность</th><th>Акция</th><th>Почему</th></tr></thead>"
             f"<tbody>{body}</tbody></table>"
         )
     else:

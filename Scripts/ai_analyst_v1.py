@@ -169,6 +169,14 @@ def _fmt_money(value: Any) -> str:
     return "н/д" if value is None else f"{_fmt_number(value)} ₽"
 
 
+def _fmt_precise_money(value: Any, digits: int) -> str:
+    return "н/д" if value is None else f"{_fmt_number(value, digits)} ₽"
+
+
+def _fmt_precise_percent(value: Any) -> str:
+    return "н/д" if value is None else f"{_fmt_number(value, 2)}%"
+
+
 def _fmt_signed_money(value: Any) -> str:
     if value is None:
         return "н/д"
@@ -376,8 +384,8 @@ def _economics(period: dict[str, Any]) -> dict[str, Any]:
         and period["profit_margin_percent"] is not None
     )
     revenue = period["confirmed_revenue"] if available else None
-    profit = period["profit"] if available else None
-    margin = period["profit_margin_percent"] if available else None
+    profit = period["profit"]
+    margin = period["profit_margin_percent"]
     per_unit_revenue = None if not available else revenue / confirmed_units
     return {
         "available": available,
@@ -390,7 +398,7 @@ def _economics(period: dict[str, Any]) -> dict[str, Any]:
         "confidence": _confidence(confirmed_units if available else 0),
         "revenue": revenue,
         "profit": profit,
-        "profit_per_unit": period["profit_per_unit"] if available else None,
+        "profit_per_unit": period["profit_per_unit"],
         "margin": margin,
         "per_unit_revenue": per_unit_revenue,
     }
@@ -565,8 +573,12 @@ def _commercial_recommendation(product: dict[str, Any], current_end: date) -> di
             promo_action = "ОСТАВИТЬ"
             promo_reason = "фактическая акционная маржа не ниже 10%"
     elif promo["active"]:
-        promo_action = "ОСТАВИТЬ"
-        promo_reason = "активная цена акции не подтверждена фактической доставкой"
+        if economics["available"]:
+            promo_action = "ОСТАВИТЬ"
+            promo_reason = "активная цена акции не подтверждена фактической доставкой"
+        else:
+            promo_action = "ПРОВЕРИТЬ"
+            promo_reason = "маржа периода н/д; изменение участия в акции без подтверждённой экономики не рекомендовано"
     elif candidate_estimate is not None:
         if candidate_estimate["margin"] >= MIN_MARGIN_PERCENT:
             promo_action = "ВОЙТИ"
@@ -587,7 +599,13 @@ def _commercial_recommendation(product: dict[str, Any], current_end: date) -> di
     if not price_fresh:
         price_reason = "текущая цена не подтверждена свежим снимком"
     elif not economics["available"]:
-        price_reason = "нет подтверждённых доставок для фактической экономики"
+        if economics["profit"] is None:
+            price_reason = "нет подтверждённой финансовой экономики периода"
+        else:
+            price_reason = (
+                f"PBT периода {_fmt_precise_money(economics['profit'], 2)}, но прибыль/шт. и маржа н/д; "
+                "ценовой вывод ограничен"
+            )
     elif active_match is not None:
         mode = "ручной" if str(active_match.get("add_mode") or "").upper() == "MANUAL" else "активной"
         test_estimate = None
@@ -607,7 +625,7 @@ def _commercial_recommendation(product: dict[str, Any], current_end: date) -> di
             price_action = "ПОДНЯТЬ"
             test_price = candidate_price
             test_estimate = _estimate_margin_at_price(period, economics, test_price)
-            price_reason = f"фактическая маржа {_fmt_percent(economics['margin'])} ниже минимума 10%; тест ограничен +5%"
+            price_reason = f"фактическая маржа {_fmt_precise_percent(economics['margin'])} ниже минимума 10%; тест ограничен +5%"
         else:
             price_reason = "повышение не подтверждено условиями активной акции"
     elif demand_falling and stock_sufficient and not logistics_worse:
@@ -652,7 +670,7 @@ def _commercial_recommendation(product: dict[str, Any], current_end: date) -> di
         partial = "; остальные доставки без полной экономики не включены" if economics["partial"] else ""
         reason = (
             f"Фактическая цена {_fmt_money(actual_price)} совпадает с активной акцией; "
-            f"маржа {_fmt_percent(economics['margin'])} при {deliveries}{partial}."
+            f"маржа {_fmt_precise_percent(economics['margin'])} при {deliveries}{partial}."
         )
     elif price_action == "ПОДНЯТЬ":
         reason = f"{price_reason}; тестовая цена, экономика после изменения требует проверки."
@@ -672,6 +690,8 @@ def _commercial_recommendation(product: dict[str, Any], current_end: date) -> di
         "test_margin": None if test_estimate is None else test_estimate["margin"],
         "promotion": promo_action,
         "promotion_reason": promo_reason,
+        "profit": economics["profit"],
+        "profit_per_unit": economics["profit_per_unit"],
         "margin": economics["margin"],
         "confidence": economics["confidence"],
         "confirmed_units": economics["confirmed_units"],
@@ -897,7 +917,7 @@ def _render(products: list[dict[str, Any]], current_start: date, current_end: da
             f"- Рекомендуемая тестовая цена: **{_fmt_money(commercial['test_price'])}**.",
             f"- Изменение: **{_fmt_signed_money(commercial['delta'])} / {_fmt_percent(commercial['delta_percent'], True)}**.",
             f"- Рекомендация по акции: **{commercial['promotion']}**.",
-            f"- Расчётная текущая маржа: **{_fmt_percent(commercial['margin'])}** до налога; подтверждено доставок: **{int(commercial['confirmed_units'])}**.",
+            f"- Финансы периода: PBT **{_fmt_precise_money(commercial['profit'], 2)}**; прибыль/шт. **{_fmt_precise_money(commercial['profit_per_unit'], 3)}**; маржа **{_fmt_precise_percent(commercial['margin'])}**.",
             f"- Уверенность: **{commercial['confidence']}**.",
             f"- Причина: {commercial['reason']}",
             "",
@@ -909,7 +929,7 @@ def _render(products: list[dict[str, Any]], current_start: date, current_end: da
             f"- Расходы Ozon за текущее 7-дневное окно: комиссия **{_fmt_money(perf['commission'] if perf['matched'] else None)}**, логистика **{_fmt_money(perf['logistics'] if perf['matched'] else None)}**, прочие **{_fmt_money(perf['other_expenses'] if perf['matched'] else None)}**; подтверждено {int(perf['matched'])}/{int(perf['delivered'])} доставленных единиц.",
             f"- Фактическая выплата Ozon: **{_fmt_money(perf['payout'] if perf['matched'] else None)}**; прибыль до налога берётся из существующего `profit_before_tax`, а не пересчитывается панелью.",
             f"- CPC: **{_fmt_money(cpc['spend'] if cpc['days'] else None)}** за {len(cpc['days'])}/7 дней; в подтверждённую прибыль доставки не включён, потому что view не распределяет CPC по единице.",
-            f"- Подтверждённая прибыль до налога/маржа: **{_fmt_money(economics['profit'])} / {_fmt_percent(economics['margin'])}**; уверенность определяется по {int(economics['confirmed_units'])} подтверждённым доставкам.",
+            f"- Финансовая рекомендация использует period economics без CPC; ценовые проекции доступны только при ненулевых net sales и подтверждённой марже.",
             f"- Оценка маржи тестовой цены: **{_fmt_percent(commercial['test_margin'])}** — при текущей фактической доле комиссии и фактических расходах на единицу; после изменения требует проверки.",
             f"- Активные: {_promotion_text(promo['active'])}.",
             f"- Кандидатные: {_promotion_text(promo['candidates'], candidate=True)}.",

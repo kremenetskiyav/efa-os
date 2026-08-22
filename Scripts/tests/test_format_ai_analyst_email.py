@@ -22,10 +22,10 @@ REPORT = """# AI Analyst v1.3 — Price Decision v1
 - Рекомендация по цене: **ОСТАВИТЬ**.
 - Рекомендуемая тестовая цена: **757 ₽**.
 - Изменение: **0 ₽ / 0.0%**.
-- Рекомендация по акции: **ОСТАВИТЬ**.
-- Расчётная текущая маржа: **13.6%** до налога; подтверждено доставок: **3**.
+- Рекомендация по акции: **ВЫЙТИ**.
+- Финансы периода: PBT **81.11 ₽**; прибыль/шт. **40.555 ₽**; маржа **6.49%**.
 - Уверенность: **ВЫСОКАЯ**.
-- Причина: Фактическая цена 624 ₽ совпадает с активной акцией; маржа 13.6% при 3 подтверждённых доставках.
+- Причина: Фактическая цена 624 ₽ совпадает с активной акцией; маржа 6.49% при 2 подтверждённых доставках.
 ## Правила Price Decision v1
 diagnostic dump
 """
@@ -38,8 +38,11 @@ class CompactReportTests(unittest.TestCase):
         self.assertIn("2 шт.", payload["html"])
         self.assertIn("1 248 ₽", payload["html"])
         self.assertIn("757 ₽ → 757 ₽", payload["html"])
-        self.assertIn("Акция: оставить", payload["html"])
+        self.assertIn("Акция: выйти", payload["html"])
         self.assertIn("уверенность: высокая", payload["html"])
+        self.assertIn("PBT: 81.11 ₽", payload["html"])
+        self.assertIn("прибыль/шт.: 40.555 ₽", payload["html"])
+        self.assertIn("маржа: 6.49%", payload["html"])
         self.assertNotIn("Правила Price Decision v1", payload["html"])
         self.assertNotIn("diagnostic dump", payload["html"])
         self.assertLess(len(payload["html"]), 8000)
@@ -57,6 +60,22 @@ class CompactReportTests(unittest.TestCase):
         self.assertIsNone(skus[0].sales)
         self.assertIn("УФ 001Б", payload["html"])
         self.assertIn("Продажи вчера: н/д шт. / н/д", payload["text"])
+
+    def test_negative_pbt_keeps_missing_unit_profit_and_margin_as_not_available(self):
+        report = REPORT.replace(
+            "PBT **81.11 ₽**; прибыль/шт. **40.555 ₽**; маржа **6.49%**",
+            "PBT **-6.43 ₽**; прибыль/шт. **н/д**; маржа **н/д**",
+        ).replace("Рекомендация по акции: **ВЫЙТИ**", "Рекомендация по акции: **ПРОВЕРИТЬ**")
+
+        _, skus, _ = parse_report(report)
+        payload = render(report)
+
+        self.assertEqual(skus[0].pbt, "-6.43 ₽")
+        self.assertEqual(skus[0].profit_per_unit, "н/д")
+        self.assertEqual(skus[0].margin, "н/д")
+        self.assertEqual(skus[0].promo_action, "ПРОВЕРИТЬ")
+        self.assertIn("PBT: -6.43 ₽ · прибыль/шт.: н/д · маржа: н/д", payload["text"])
+        self.assertNotIn("маржа: 0%", payload["text"])
 
 
 if __name__ == "__main__":

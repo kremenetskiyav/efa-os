@@ -175,6 +175,26 @@ class PriceDecisionTests(unittest.TestCase):
         self.assertEqual(decision["confidence"], "Н/Д")
         self.assertIsNone(decision["margin"])
 
+    def test_negative_period_pbt_is_visible_but_does_not_drive_price_or_promo_change(self):
+        item = product(
+            current_price="757",
+            actual_price="666",
+            profit="-6.43",
+            confirmed_units=0,
+            rank=3,
+            active_price="666",
+        )
+
+        decision = analyst._commercial_recommendation(item, AS_OF)
+
+        self.assertEqual(decision["profit"], Decimal("-6.43"))
+        self.assertIsNone(decision["profit_per_unit"])
+        self.assertIsNone(decision["margin"])
+        self.assertEqual(decision["price"], "ОСТАВИТЬ")
+        self.assertEqual(decision["promotion"], "ПРОВЕРИТЬ")
+        self.assertEqual(decision["confidence"], "Н/Д")
+        self.assertIn("ценовой вывод ограничен", decision["reason"])
+
     def test_candidate_promo_uses_ten_percent_estimated_margin_floor(self):
         item = product(
             current_price="700",
