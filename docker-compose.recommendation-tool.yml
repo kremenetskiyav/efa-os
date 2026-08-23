@@ -18,6 +18,10 @@ services:
       EFA_ANOMALY_LOGISTICS_INCREASE_PERCENT: ${EFA_ANOMALY_LOGISTICS_INCREASE_PERCENT:-20}
       EFA_ANOMALY_COMMISSION_INCREASE_PERCENT: ${EFA_ANOMALY_COMMISSION_INCREASE_PERCENT:-20}
       EFA_PROMOTION_ENDING_SOON_DAYS: ${EFA_PROMOTION_ENDING_SOON_DAYS:-7}
+    volumes:
+      - ./config/ozon_price_calculator_v1.json:/app/config/ozon_price_calculator_v1.json:ro
+      - ./config/taxpayer.2026.json:/app/config/taxpayer.2026.json:ro
+      - ./services/tax_engine:/app/tax_engine:ro
     networks:
       - efa-tools
 

@@ -3,9 +3,10 @@ from __future__ import annotations
 
 from collections import defaultdict
 from contextlib import contextmanager
-from typing import Iterator
+from typing import Collection, Iterator
 
 from config import DatabaseConfig
+from input_resolver import CalculatorSourceRow
 from models import PriceWindow, ProductEconomics, PromotionState
 from models import PeriodEconomics
 
@@ -149,6 +150,38 @@ JOIN latest_successful_run r ON r.run_id = s.run_id
 ORDER BY s.offer_id NULLS LAST, s.source_list_type, s.action_id, s.product_id
 """
 
+CALCULATOR_SOURCE_QUERY = """
+SELECT p.offer_id, p.product_id, p.price, p.cost_price,
+       s.snapshot_id, s.price_collection_run_id,
+       s.snapshot_product_id, s.snapshot_offer_id,
+       s.observed_at, s.run_status, s.sales_percent_fbs,
+       s.fbs_deliv_to_customer_amount, s.acquiring,
+       s.fbs_direct_flow_trans_min_amount,
+       s.fbs_direct_flow_trans_max_amount,
+       s.fbs_return_flow_amount
+FROM products p
+LEFT JOIN LATERAL (
+  SELECT t.snapshot_id, t.price_collection_run_id,
+         t.product_id AS snapshot_product_id,
+         t.offer_id AS snapshot_offer_id,
+         t.observed_at, r.status AS run_status,
+         t.sales_percent_fbs, t.fbs_deliv_to_customer_amount,
+         t.acquiring, t.fbs_direct_flow_trans_min_amount,
+         t.fbs_direct_flow_trans_max_amount, t.fbs_return_flow_amount
+  FROM ozon_fbs_tariff_snapshots t
+  JOIN price_collection_runs r
+    ON r.run_id = t.price_collection_run_id
+   AND r.status = 'success'
+  WHERE t.product_id = p.product_id
+    AND t.offer_id = p.offer_id
+  ORDER BY t.observed_at DESC, t.created_at DESC, t.snapshot_id DESC
+  LIMIT 1
+) s ON TRUE
+WHERE p.offer_id = ANY(%s)
+  AND p.archived IS NOT TRUE
+ORDER BY p.offer_id
+"""
+
 @contextmanager
 def open_read_only_connection(config: DatabaseConfig) -> Iterator[object]:
     try:
@@ -209,3 +242,42 @@ def fetch_promotion_states(config: DatabaseConfig) -> list[PromotionState]:
     except Exception as error:
         raise DatabaseError("Read-only promotion monitoring query failed") from error
     return [PromotionState(*row, ()) for row in rows]
+
+
+def fetch_calculator_source_rows(
+    config: DatabaseConfig,
+    offer_ids: Collection[str],
+) -> list[CalculatorSourceRow]:
+    requested_offer_ids = tuple(sorted(set(offer_ids)))
+    if not requested_offer_ids:
+        return []
+    try:
+        with open_read_only_connection(config) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(CALCULATOR_SOURCE_QUERY, (list(requested_offer_ids),))
+                rows = cursor.fetchall()
+    except DatabaseError:
+        raise
+    except Exception as error:
+        raise DatabaseError("Read-only calculator source query failed") from error
+    return [
+        CalculatorSourceRow(
+            offer_id=row[0],
+            product_id=row[1],
+            seller_price=row[2],
+            cost_price=row[3],
+            snapshot_id=str(row[4]) if row[4] is not None else None,
+            price_collection_run_id=str(row[5]) if row[5] is not None else None,
+            snapshot_product_id=row[6],
+            snapshot_offer_id=row[7],
+            observed_at=row[8],
+            run_status=row[9],
+            sales_percent_fbs=row[10],
+            fbs_deliv_to_customer_amount=row[11],
+            raw_acquiring=row[12],
+            direct_flow_min=row[13],
+            direct_flow_max=row[14],
+            raw_return_flow=row[15],
+        )
+        for row in rows
+    ]
