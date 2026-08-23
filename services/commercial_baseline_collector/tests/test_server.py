@@ -15,5 +15,5 @@ class ServerTests(unittest.TestCase):
             self.assertNotIn(forbidden,source)
 
     def test_price_default_is_non_persistent(self):
-        result=collect(PRICE_PATH,{"collection_ref":"p","collected_at":"2026-08-16T00:00:00Z","items":[{"product_id":1,"offer_id":"x","price":{"price":1,"old_price":1,"min_price":1,"marketing_price":1,"marketing_seller_price":1}}]},lambda:None)
+        result=collect(PRICE_PATH,{"collection_ref":"p","collected_at":"2026-08-16T00:00:00Z","items":[{"product_id":1,"offer_id":"x","commissions":{"sales_percent_fbs":1,"fbs_deliv_to_customer_amount":1},"price":{"price":1,"old_price":1,"min_price":1,"marketing_price":1,"marketing_seller_price":1}}]},lambda:None)
         self.assertFalse(result["persisted"])

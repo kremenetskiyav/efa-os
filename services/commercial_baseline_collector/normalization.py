@@ -45,6 +45,26 @@ def _optional_decimal(source: dict[str, Any], name: str) -> Decimal | None:
     return None if value is None else _decimal(value, name)
 
 
+def _tariff_decimal(value: Any, name: str) -> Decimal:
+    """Preserve a raw finite Ozon JSON number without binary-float arithmetic."""
+    if isinstance(value, bool) or not isinstance(value, (int, float, Decimal)):
+        raise PayloadError(f"{name} must be numeric")
+    try:
+        parsed = Decimal(str(value))
+    except (InvalidOperation, ValueError) as error:
+        raise PayloadError(f"{name} must be numeric") from error
+    if not parsed.is_finite():
+        raise PayloadError(f"{name} must be finite")
+    if parsed < 0:
+        raise PayloadError(f"{name} is out of range")
+    return parsed
+
+
+def _optional_tariff_decimal(source: dict[str, Any], name: str) -> Decimal | None:
+    value = source.get(name)
+    return None if value is None else _tariff_decimal(value, name)
+
+
 def _omitted_zero_int(source: dict[str, Any], name: str) -> int:
     """Performance statistics omit some counters when their value is zero."""
     return _positive_int(source.get(name, 0), name)
@@ -220,6 +240,22 @@ def normalize_prices(payload: object) -> dict[str, Any]:
         price = source.get("price")
         if not isinstance(price, dict):
             raise PayloadError(f"price object is required:{product_id}")
+        commissions = source.get("commissions")
+        if not isinstance(commissions, dict):
+            raise PayloadError(f"commissions object is required:{product_id}")
+        sales_percent_fbs = _tariff_decimal(
+            commissions.get("sales_percent_fbs"), "sales_percent_fbs"
+        )
+        if sales_percent_fbs > Decimal("100"):
+            raise PayloadError("sales_percent_fbs is out of range")
+        direct_min = _optional_tariff_decimal(
+            commissions, "fbs_direct_flow_trans_min_amount"
+        )
+        direct_max = _optional_tariff_decimal(
+            commissions, "fbs_direct_flow_trans_max_amount"
+        )
+        if direct_min is not None and direct_max is not None and direct_min > direct_max:
+            raise PayloadError("fbs direct flow minimum exceeds maximum")
         rows.append({
             "product_id": product_id,
             "offer_id": str(source.get("offer_id") or "").strip(),
@@ -229,6 +265,17 @@ def normalize_prices(payload: object) -> dict[str, Any]:
             # v5 account response confirms this field may be absent.
             "marketing_price": _optional_decimal(price, "marketing_price"),
             "marketing_seller_price": _decimal(price.get("marketing_seller_price"), "marketing_seller_price"),
+            "sales_percent_fbs": sales_percent_fbs,
+            "fbs_deliv_to_customer_amount": _tariff_decimal(
+                commissions.get("fbs_deliv_to_customer_amount"),
+                "fbs_deliv_to_customer_amount",
+            ),
+            "acquiring": _optional_tariff_decimal(source, "acquiring"),
+            "fbs_direct_flow_trans_min_amount": direct_min,
+            "fbs_direct_flow_trans_max_amount": direct_max,
+            "fbs_return_flow_amount": _optional_tariff_decimal(
+                commissions, "fbs_return_flow_amount"
+            ),
         })
     return {"kind": "prices", "persist": bool(data.get("persist", False)), "rows": rows,
             "collection_ref": str(data["collection_ref"]), "collected_at": str(data["collected_at"])}

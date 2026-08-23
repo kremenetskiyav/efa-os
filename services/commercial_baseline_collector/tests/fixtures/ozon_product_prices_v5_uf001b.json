@@ -1,0 +1,23 @@
+{
+  "acquiring": 6.24,
+  "offer_id": "УФ 001Б",
+  "product_id": 4861934525,
+  "volume_weight": 0.3,
+  "commissions": {
+    "fbs_deliv_to_customer_amount": 25,
+    "fbs_direct_flow_trans_min_amount": 74,
+    "fbs_direct_flow_trans_max_amount": 218,
+    "fbs_first_mile_max_amount": 10,
+    "fbs_first_mile_min_amount": 0,
+    "fbs_return_flow_amount": 218,
+    "sales_percent_fbs": 44
+  },
+  "price": {
+    "marketing_seller_price": 624,
+    "min_price": 835,
+    "old_price": 2900,
+    "price": 910,
+    "vat": 0,
+    "net_price": 166
+  }
+}

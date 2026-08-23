@@ -157,7 +157,7 @@ def persist_prices(collection: dict[str, Any], connection_factory: Callable[[], 
                              FROM products p WHERE p.product_id = ANY(%s) FOR UPDATE""", (product_ids,))
         current = {row[0]: row[1:] for row in cursor.fetchall()}
         unmapped = sorted(set(product_ids) - set(current))
-        mismatched = [row["product_id"] for row in collection["rows"] if row["offer_id"] and current.get(row["product_id"], (None,))[0] != row["offer_id"]]
+        mismatched = [row["product_id"] for row in collection["rows"] if current.get(row["product_id"], (None,))[0] != row["offer_id"]]
         if unmapped or mismatched or len(current) != len(collection["rows"]):
             raise PersistenceError("price payload does not map exactly to canonical products")
 
@@ -183,6 +183,15 @@ def persist_prices(collection: dict[str, Any], connection_factory: Callable[[], 
                     (row["product_id"], previous[0], row["price"], row["old_price"], row["min_price"],
                      row["marketing_price"], row["marketing_seller_price"], collection["collected_at"]))
                 changed += 1
+            cursor.execute("""INSERT INTO ozon_fbs_tariff_snapshots
+                (price_collection_run_id,product_id,offer_id,observed_at,sales_percent_fbs,
+                 fbs_deliv_to_customer_amount,acquiring,fbs_direct_flow_trans_min_amount,
+                 fbs_direct_flow_trans_max_amount,fbs_return_flow_amount)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                (run_id, row["product_id"], previous[0], collection["collected_at"],
+                 row["sales_percent_fbs"], row["fbs_deliv_to_customer_amount"], row["acquiring"],
+                 row["fbs_direct_flow_trans_min_amount"], row["fbs_direct_flow_trans_max_amount"],
+                 row["fbs_return_flow_amount"]))
         unchanged = len(collection["rows"]) - changed
         cursor.execute("""UPDATE price_collection_runs SET status='success',changed_records=%s,
             unchanged_records=%s WHERE run_id=%s AND status='running'""", (changed, unchanged, run_id))
