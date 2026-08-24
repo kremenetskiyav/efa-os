@@ -2,19 +2,40 @@
 
 ## Status and scope
 
-This document is the frozen architecture and business-logic checkpoint for
-EFA Ozon Price Calculator V1 as of 2026-08-23, Europe/Moscow.
+This document records the validated architecture and current production
+checkpoint for EFA Ozon Price Calculator V1 as of 2026-08-24, Europe/Moscow.
 
 - Business logic and Golden SKU validation: **COMPLETED**.
 - Formula status: **VALIDATED** against EcomUnit.
-- Project status: **READY FOR PHASE 1**.
-- Phase 1 implementation status: **NOT STARTED**.
-- Phase 2 status: **NOT READY FOR PHASE 2**.
+- Phase 1 calculator core: **COMPLETE**.
+- Phase 2 development: **COMPLETE**.
+- Phase 2 production rollout: **COMPLETE**.
+- Phase 3: **NOT STARTED**.
 
-This checkpoint is not calculator code and does not indicate that
-implementation has started. It is not a live observation of current Ozon
-tariffs, prices or EcomUnit behavior. Time-sensitive marketplace inputs must be
-revalidated before Phase 2.
+Production runs the Git checkpoint
+`87b442e9a1ae16d256101b0bf48f0c142c5d447d`. The calculator remains a
+read-only decision-support component; it does not automatically change Ozon
+prices.
+
+## Phase 2 production rollout
+
+- Migration `016_ozon_fbs_tariff_snapshots_v1.sql` is applied.
+- Commercial Baseline Collector Phase 2B and Recommendation Engine Phase 2C
+  are deployed and healthy.
+- A normal Ozon price collection created tariff observations for all five
+  configured SKUs; the latest validated snapshot has
+  `observed_at = 2026-08-24T03:20:00.383+00:00`.
+- Recommendation Engine has no host port exposure. Calculator and taxpayer
+  configuration mounts are read-only, and the PostgreSQL connection uses
+  `default_transaction_read_only=on`.
+- Production shadow acceptance passed for all five SKUs. Counts remained
+  unchanged at 25 `price_collection_runs` and 10
+  `ozon_fbs_tariff_snapshots`, confirming that shadow execution did not write
+  to these tables.
+
+The detailed deployment provenance, backup and rollback references, and the
+five-SKU acceptance results are recorded in
+[`PROJECT_STATUS.md`](../PROJECT_STATUS.md).
 
 ## Business margin policy
 
@@ -184,7 +205,7 @@ Future consumers are:
 - margin classification;
 - Golden and unit tests.
 
-Status: **NOT STARTED**.
+Status: **COMPLETE**.
 
 ### Phase 2 — live input resolution
 
@@ -194,13 +215,15 @@ Status: **NOT STARTED**.
 - versioned EFA calculator configuration;
 - Input Resolver.
 
-Status: **NOT READY**.
+Status: **COMPLETE IN PRODUCTION**.
 
 ### Phase 3 — decision integration
 
 - Recommendation Engine and Price Decision integration;
 - replace the AI Analyst simplified forecast with the calculator result;
 - keep n8n as transport only.
+
+Status: **NOT STARTED**.
 
 ### Phase 4 — portfolio acceptance
 
@@ -209,15 +232,20 @@ Status: **NOT READY**.
 - Control Center display;
 - promotion economics readiness.
 
-## Phase 2 questions
+Status: **PARTIAL**. Read-only production shadow acceptance is complete for
+all five SKUs; the remaining integration scope has not started.
 
-These questions are not blockers for Phase 1:
+## Phase 2 design record
 
-- confirm the semantics of the live `/v5` tariff fields;
-- determine whether `sales_percent_fbs` is a base or effective commission;
-- determine route selection when the API returns minimum and maximum values;
-- capture acceptance baselines for УФ 002Б–005Б;
-- define the dynamic versus fallback acquiring policy.
+Phase 2 addressed these design concerns through live `/v5` contract
+validation, immutable tariff observations, versioned configuration, the Input
+Resolver and five-SKU production shadow acceptance:
+
+- semantics of the live `/v5` tariff fields;
+- treatment of `sales_percent_fbs`;
+- route selection when the API returns minimum and maximum values;
+- acceptance baselines for УФ 002Б–005Б;
+- dynamic versus fallback acquiring policy.
 
 ## Static product dimensions
 
@@ -225,15 +253,11 @@ Dimensions for all five EFA SKUs were previously confirmed. They are not
 required in Calculator Core Phase 1 because the validated model receives
 monetary logistics inputs.
 
-Do not add a `/v4/product/info/attributes` collector in Phase 1.
+Phase 1 therefore did not add a `/v4/product/info/attributes` collector.
 
 ## Resume point
 
-The complete implementation prompt was prepared externally but has not been
-executed. No calculator implementation exists at this checkpoint.
-
-The next development action is:
-
-**START PHASE 1 — pure calculator core + unit tests.**
-
-Do not accidentally start Phase 2.
+Phase 2 production rollout is complete. Phase 3 has not started. The next
+development decision concerns Phase 3 integration; it must preserve the
+read-only boundary until a separate production-write capability is explicitly
+designed, reviewed and approved.

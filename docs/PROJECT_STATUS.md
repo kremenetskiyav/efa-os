@@ -1,14 +1,49 @@
 # Project Status
 
-## EFA Ozon Price Calculator V1 checkpoint — 2026-08-23
+## EFA Ozon Price Calculator V1 production checkpoint — 2026-08-24
 
-Business logic and Golden SKU validation are **COMPLETED** and **VALIDATED**
-against EcomUnit. The project is **READY FOR PHASE 1** and **NOT READY FOR
-PHASE 2**.
+Phase 2 development and production rollout are **COMPLETE**. Phase 3 is
+**NOT STARTED**. The calculator remains read-only: no automatic Ozon price
+change is implemented or enabled.
 
-**PHASE 1 NOT STARTED.** No calculator code, database change, collector,
-workflow, MCP, AI Analyst, Control Center or production change is part of this
-checkpoint.
+### Production provenance and deployment
+
+- Production Git HEAD:
+  `87b442e9a1ae16d256101b0bf48f0c142c5d447d`.
+- Migration `016_ozon_fbs_tariff_snapshots_v1.sql` was applied successfully.
+- The pre-migration PostgreSQL backup is stored outside Git at
+  `/var/backups/efa-os/pre-price-calculator-v1-20260823-171114.dump`; its
+  SHA-256 is
+  `7cb2a13b3960211f49bc8271f0866c9145d5d5b4b8dcdabcdd737f9acb6cb783`.
+- Commercial Baseline Collector Phase 2B is deployed and healthy. Its rollback
+  image is
+  `efa-commercial-baseline-collector:rollback-pre-price-calculator-20260823-171654`.
+- A normal Ozon price collection created five tariff snapshots for all five
+  configured SKUs. The latest validated snapshot has
+  `observed_at = 2026-08-24T03:20:00.383+00:00`.
+- Recommendation Engine Phase 2C is deployed and healthy. It has no host port
+  exposure; calculator and taxpayer configuration mounts are read-only; its
+  PostgreSQL connection uses `default_transaction_read_only=on`.
+
+### Production shadow acceptance
+
+Read-only production shadow acceptance passed for all five SKUs. Database
+counts were identical before and after shadow execution: 25
+`price_collection_runs` and 10 `ozon_fbs_tariff_snapshots`.
+
+| SKU | Seller price | Profit | Margin | P10 | P12 | P15 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| УФ 001Б | 910 ₽ | 155.59 ₽ | 17.10% | 751 ₽ | 790 ₽ | 857 ₽ |
+| УФ 002Б | 950 ₽ | 162.79 ₽ | 17.14% | 783 ₽ | 824 ₽ | 893 ₽ |
+| УФ 003Б | 860 ₽ | 146.56 ₽ | 17.04% | 711 ₽ | 748 ₽ | 811 ₽ |
+| УФ 004Б | 950 ₽ | 162.79 ₽ | 17.14% | 783 ₽ | 824 ₽ | 893 ₽ |
+| УФ 005Б | 910 ₽ | 155.59 ₽ | 17.10% | 751 ₽ | 790 ₽ | 857 ₽ |
+
+The Golden SKU `УФ 001Б` matched its validated checkpoint: seller price
+910 ₽, cost 166 ₽, profit 155.59 ₽, margin approximately 17.10%, P10 751 ₽,
+P12 790 ₽ and P15 857 ₽.
+
+### Policy and phase boundary
 
 The approved Price Calculator V1 margin policy is:
 
@@ -21,18 +56,19 @@ must not override this policy. The forecast input is `seller_price`; observed
 `marketing_seller_price`, `buyer_price`, `card_price` and confirmed revenue are
 not forecast inputs.
 
-The full frozen checkpoint, Golden SKU values, validated formula, architecture
-decision and phase boundaries are documented in
+The Golden SKU values, validated formula, current architecture and phase
+boundaries are documented in
 [`OZON_PRICE_CALCULATOR_V1.md`](architecture/OZON_PRICE_CALCULATOR_V1.md).
 
-Next development action after resuming: **START PHASE 1 — pure calculator core
-+ unit tests**. Do not start Phase 2 as part of Phase 1.
+The next development phase is **Phase 3**, but it has not started. Any future
+price write remains a separate controlled production action requiring explicit
+approval.
 
 ## EFA OS production checkpoint — 2026-08-22
 
-This section is the current production checkpoint. Older sections below are
-retained as historical implementation records and must not override this
-state.
+This section is a historical production checkpoint. It is retained with the
+older implementation records below and must not override the newer Price
+Calculator production checkpoint above.
 
 ### Infrastructure
 
