@@ -103,6 +103,13 @@ VIEW_QUERIES = {
     """,
 }
 
+LATEST_COMPOSITE_DATE_QUERY = "SELECT max(business_date) FROM mcp_read.product_daily_performance"
+LATEST_DEMAND_DATE_QUERY = """
+    SELECT max(business_date)
+    FROM mcp_read.product_daily_performance
+    WHERE demand_collected_at IS NOT NULL
+"""
+
 ACTION_TEXT = {
     "DEMAND_INCOMPLETE": "Проверить штатный сбор спроса для {skus}; недельное сравнение пока неполное, но доступные факты используются в ценовом решении.",
     "STOCK_UNTRUSTED": "Обновить и проверить штатный снимок остатков для {skus}; до подтверждения не менять остатки, цены или рекламу.",
@@ -119,6 +126,20 @@ ACTION_TEXT = {
 
 class SafeReportError(RuntimeError):
     """A report error whose message contains no credentials or database payload."""
+
+
+def _analysis_windows(composite_end: date, demand_end: date) -> dict[str, date]:
+    """Keep operational/economics dates separate from confirmed Demand dates."""
+    return {
+        "composite_end": composite_end,
+        "economics_current_start": composite_end - timedelta(days=6),
+        "economics_previous_end": composite_end - timedelta(days=7),
+        "economics_previous_start": composite_end - timedelta(days=13),
+        "demand_end": demand_end,
+        "demand_current_start": demand_end - timedelta(days=6),
+        "demand_previous_end": demand_end - timedelta(days=7),
+        "demand_previous_start": demand_end - timedelta(days=13),
+    }
 
 
 def _database_url() -> str:
@@ -800,7 +821,17 @@ def _diagnose(product: dict[str, Any], current_end: date) -> None:
         _add_issue(product, "LOGISTICS_HIGH", 60, f"{route}: +{_fmt_number(worst['logistics_rate_delta_pp'], 1)} п.п., {worst['orders_count']} заказов", "региональный маршрут дороже базового при достаточной выборке")
 
 
-def _render(products: list[dict[str, Any]], current_start: date, current_end: date, previous_start: date, previous_end: date, limit: int) -> str:
+def _render(
+    products: list[dict[str, Any]],
+    current_start: date,
+    current_end: date,
+    previous_start: date,
+    previous_end: date,
+    limit: int,
+    *,
+    report_date: date | None = None,
+) -> str:
+    report_date = report_date or current_end
     current_units = sum((p["performance"]["current"]["units"] for p in products), Decimal("0"))
     previous_units = sum((p["performance"]["previous"]["units"] for p in products), Decimal("0"))
     current_revenue = sum((p["performance"]["current"]["revenue"] for p in products), Decimal("0"))
@@ -828,7 +859,10 @@ def _render(products: list[dict[str, Any]], current_start: date, current_end: da
     lines = [
         "# AI Analyst v1.3 — Price Decision v1",
         "",
-        f"## Сегодня: {current_end.isoformat()} против {(current_end - timedelta(days=1)).isoformat()}",
+        f"## Сегодня: {report_date.isoformat()} против {(report_date - timedelta(days=1)).isoformat()}",
+        "",
+        f"Последний подтверждённый день спроса: **{current_end.isoformat()}**; "
+        f"daily-сравнение: **{current_end.isoformat()} против {(current_end - timedelta(days=1)).isoformat()}**.",
         "",
         "Первым показан SKU, который требует больше внимания. `н/д` означает отсутствие факта; оно не считается нулём.",
     ]
@@ -873,7 +907,8 @@ def _render(products: list[dict[str, Any]], current_start: date, current_end: da
     lines.extend([
         "",
         f"Данные продаж: **{current_start.isoformat()} — {current_end.isoformat()}**; сравнение: **{previous_start.isoformat()} — {previous_end.isoformat()}**. "
-        "Окна привязаны к последней доступной `business_date` (Europe/Moscow). Продажи = ordered demand, выручка = ordered revenue.",
+        "Окна спроса привязаны к последней `business_date` с фактическим "
+        "`demand_collected_at` (Europe/Moscow). Продажи = ordered demand, выручка = ordered revenue.",
         "",
         "## Продажи: последние 7 дней против предыдущих 7",
         "",
@@ -1009,35 +1044,61 @@ async def _run(limit: int) -> str:
             )
             if identity["role"] != EXPECTED_ROLE or identity["db"] != EXPECTED_DATABASE or identity["read_only"] != "on":
                 raise SafeReportError("Database read-only identity check failed")
-            current_end = await connection.fetchval(
-                "SELECT max(business_date) FROM mcp_read.product_daily_performance"
-            )
-            if current_end is None:
+            composite_end = await connection.fetchval(LATEST_COMPOSITE_DATE_QUERY)
+            if composite_end is None:
                 raise SafeReportError("No performance dates are available")
-            current_start = current_end - timedelta(days=6)
-            previous_end = current_start - timedelta(days=1)
-            previous_start = previous_end - timedelta(days=6)
+            demand_end = await connection.fetchval(LATEST_DEMAND_DATE_QUERY)
+            if demand_end is None:
+                raise SafeReportError("No confirmed demand dates are available")
+            windows = _analysis_windows(composite_end, demand_end)
 
             overview = [dict(row) for row in await connection.fetch(VIEW_QUERIES["overview"])]
             price = [dict(row) for row in await connection.fetch(VIEW_QUERIES["price"])]
             stock = [dict(row) for row in await connection.fetch(VIEW_QUERIES["stock"])]
-            performance = [dict(row) for row in await connection.fetch(VIEW_QUERIES["performance"], previous_start, current_end)]
+            performance = [
+                dict(row)
+                for row in await connection.fetch(
+                    VIEW_QUERIES["performance"],
+                    windows["demand_previous_start"],
+                    windows["demand_end"],
+                )
+            ]
             current_economics = [
                 dict(row)
-                for row in await connection.fetch(VIEW_QUERIES["economics"], current_start, current_end)
+                for row in await connection.fetch(
+                    VIEW_QUERIES["economics"],
+                    windows["economics_current_start"],
+                    windows["composite_end"],
+                )
             ]
             previous_economics = [
                 dict(row)
-                for row in await connection.fetch(VIEW_QUERIES["economics"], previous_start, previous_end)
+                for row in await connection.fetch(
+                    VIEW_QUERIES["economics"],
+                    windows["economics_previous_start"],
+                    windows["economics_previous_end"],
+                )
             ]
             logistics_rows = [dict(row) for row in await connection.fetch(VIEW_QUERIES["logistics"])]
             promotion_rows = [dict(row) for row in await connection.fetch(VIEW_QUERIES["promotions"])]
-            cpc_rows = [dict(row) for row in await connection.fetch(VIEW_QUERIES["cpc"], previous_start, current_end)]
+            cpc_rows = [
+                dict(row)
+                for row in await connection.fetch(
+                    VIEW_QUERIES["cpc"],
+                    windows["economics_previous_start"],
+                    windows["composite_end"],
+                )
+            ]
 
-            performance_by_offer = _aggregate_performance(performance, current_start, previous_start, previous_end)
+            performance_by_offer = _aggregate_performance(
+                performance,
+                windows["demand_current_start"],
+                windows["demand_previous_start"],
+                windows["demand_previous_end"],
+            )
             _apply_period_economics(performance_by_offer, current_economics, "current")
             _apply_period_economics(performance_by_offer, previous_economics, "previous")
-            cpc_by_offer = _aggregate_cpc(cpc_rows, current_start)
+            cpc_by_offer = _aggregate_cpc(cpc_rows, windows["economics_current_start"])
             promotions_by_offer = _aggregate_promotions(promotion_rows, datetime.now(MOSCOW).date())
             logistics_by_offer = _aggregate_logistics(logistics_rows)
             price_snapshots = _latest_two(price)
@@ -1064,8 +1125,12 @@ async def _run(limit: int) -> str:
                 product["cpc_rows"] = cpc_product_rows[row["offer_id"]]
                 product["price_history"] = product["price_snapshots"][0] if product["price_snapshots"] else None
                 product["stock_history"] = product["stock_snapshots"][0] if product["stock_snapshots"] else None
-                product["daily"] = _daily_comparison(product, current_end, current_end - timedelta(days=1))
-                _diagnose(product, current_end)
+                product["daily"] = _daily_comparison(
+                    product,
+                    windows["demand_end"],
+                    windows["demand_end"] - timedelta(days=1),
+                )
+                _diagnose(product, windows["composite_end"])
                 products.append(product)
             if not products:
                 raise SafeReportError("No active products are available")
@@ -1077,8 +1142,18 @@ async def _run(limit: int) -> str:
                 product["sales_rank"] = rank
                 product["sales_product_count"] = len(sales_ranked)
             for product in products:
-                product["commercial"] = _commercial_recommendation(product, current_end)
-            return _render(products, current_start, current_end, previous_start, previous_end, limit)
+                product["commercial"] = _commercial_recommendation(
+                    product, windows["composite_end"]
+                )
+            return _render(
+                products,
+                windows["demand_current_start"],
+                windows["demand_end"],
+                windows["demand_previous_start"],
+                windows["demand_previous_end"],
+                limit,
+                report_date=windows["composite_end"],
+            )
     finally:
         await connection.close()
 

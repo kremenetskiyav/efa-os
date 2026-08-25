@@ -47,11 +47,24 @@ N8N_URL = os.environ.get("EFA_N8N_URL", "http://127.0.0.1:5678")
 
 
 COLLECTOR_QUERY = """
+WITH latest_demand_date AS (
+  SELECT max(business_date) AS business_date
+    FROM mcp_read.product_daily_performance
+   WHERE demand_collected_at IS NOT NULL
+), demand_snapshot AS (
+  SELECT
+    p.business_date,
+    max(p.demand_collected_at) AS collected_at,
+    array_remove(array_agg(DISTINCT p.demand_quality_status), NULL) AS statuses
+  FROM mcp_read.product_daily_performance p
+  JOIN latest_demand_date d ON d.business_date = p.business_date
+  WHERE p.demand_collected_at IS NOT NULL
+  GROUP BY p.business_date
+)
 SELECT
-  (SELECT max(business_date) FROM mcp_read.product_daily_performance) AS demand_date,
-  (SELECT array_remove(array_agg(DISTINCT demand_quality_status), NULL)
-     FROM mcp_read.product_daily_performance
-    WHERE business_date = (SELECT max(business_date) FROM mcp_read.product_daily_performance)) AS demand_statuses,
+  (SELECT business_date FROM demand_snapshot) AS demand_date,
+  (SELECT collected_at FROM demand_snapshot) AS demand_at,
+  (SELECT statuses FROM demand_snapshot) AS demand_statuses,
   (SELECT max(price_checked_at) FROM mcp_read.product_overview) AS price_at,
   (SELECT max(stock_snapshot_at) FROM mcp_read.product_overview) AS stock_at,
   (SELECT array_remove(array_agg(DISTINCT stock_data_quality_status), NULL)
@@ -102,6 +115,11 @@ def _statuses_ok(values: list[str] | None) -> bool:
         return False
     bad = ("FAIL", "ERROR", "INVALID", "STALE", "MISSING", "STUCK")
     return not any(any(word in str(value).upper() for word in bad) for value in values)
+
+
+def _demand_statuses_ok(values: list[str] | None) -> bool:
+    """Demand is healthy only when every latest-source row is explicitly valid."""
+    return bool(values) and all(value == "valid" for value in values)
 
 
 def parse_cron_schedule(text: str, now: datetime, lock_name: str = "efa-ai-analyst.lock") -> tuple[datetime | None, str]:
@@ -212,17 +230,32 @@ async def read_database() -> tuple[bool, dict[str, Any]]:
 
 def collector_snapshot(row: dict[str, Any], now: datetime) -> tuple[list[dict[str, Any]], datetime | date | None]:
     definitions = [
-        ("Спрос", row.get("demand_date"), row.get("demand_statuses")),
-        ("Цены", row.get("price_at"), ["OK"] if row.get("price_at") else []),
-        ("Остатки", row.get("stock_at"), row.get("stock_statuses")),
-        ("Акции", row.get("promotion_at"), row.get("promotion_statuses")),
-        ("CPC", row.get("cpc_at") or row.get("cpc_date"), row.get("cpc_statuses")),
-        ("Operational finance", row.get("operations_date"), row.get("operations_statuses")),
+        (
+            "Спрос",
+            row.get("demand_at") or row.get("demand_date"),
+            row.get("demand_statuses"),
+            _demand_statuses_ok,
+        ),
+        ("Цены", row.get("price_at"), ["OK"] if row.get("price_at") else [], _statuses_ok),
+        ("Остатки", row.get("stock_at"), row.get("stock_statuses"), _statuses_ok),
+        ("Акции", row.get("promotion_at"), row.get("promotion_statuses"), _statuses_ok),
+        (
+            "CPC",
+            row.get("cpc_at") or row.get("cpc_date"),
+            row.get("cpc_statuses"),
+            _statuses_ok,
+        ),
+        (
+            "Operational finance",
+            row.get("operations_date"),
+            row.get("operations_statuses"),
+            _statuses_ok,
+        ),
     ]
     result = []
     observed_values = []
-    for name, observed, statuses in definitions:
-        ok = _age_ok(observed, now) and _statuses_ok(list(statuses or []))
+    for name, observed, statuses, status_check in definitions:
+        ok = _age_ok(observed, now) and status_check(list(statuses or []))
         result.append({
             "name": name,
             "ok": ok,

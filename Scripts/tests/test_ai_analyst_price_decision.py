@@ -2,7 +2,7 @@ import sys
 import types
 import unittest
 from collections import defaultdict
-from datetime import date
+from datetime import date, timedelta
 from decimal import ROUND_DOWN, Decimal
 from pathlib import Path
 
@@ -280,6 +280,57 @@ class PriceDecisionTests(unittest.TestCase):
         decision = analyst._commercial_recommendation(item, AS_OF)
         self.assertEqual(decision["price"], "ПОДНЯТЬ")
         self.assertEqual(decision["test_price"], Decimal("720"))
+
+
+class DemandDateAnchorTests(unittest.TestCase):
+    def test_latest_demand_query_requires_actual_demand_presence(self):
+        normalized = " ".join(analyst.LATEST_DEMAND_DATE_QUERY.split())
+
+        self.assertIn("WHERE demand_collected_at IS NOT NULL", normalized)
+
+    def test_return_only_composite_date_does_not_move_daily_demand_anchor(self):
+        composite_end = date(2026, 8, 25)
+        demand_end = date(2026, 8, 24)
+        windows = analyst._analysis_windows(composite_end, demand_end)
+        item = {
+            "performance_rows": [
+                {
+                    "business_date": date(2026, 8, 23),
+                    "ordered_units": 1,
+                    "ordered_revenue": Decimal("600"),
+                },
+                {
+                    "business_date": date(2026, 8, 24),
+                    "ordered_units": 2,
+                    "ordered_revenue": Decimal("1244"),
+                },
+                {
+                    "business_date": composite_end,
+                    "ordered_units": None,
+                    "ordered_revenue": None,
+                },
+            ],
+            "stock_snapshots": [],
+        }
+
+        daily = analyst._daily_comparison(
+            item,
+            windows["demand_end"],
+            windows["demand_end"] - timedelta(days=1),
+        )
+
+        self.assertEqual(windows["composite_end"], composite_end)
+        self.assertEqual(windows["demand_end"], demand_end)
+        self.assertEqual(daily["yesterday"]["business_date"], demand_end)
+        self.assertEqual(daily["day_before"]["business_date"], date(2026, 8, 23))
+
+    def test_financial_windows_remain_anchored_to_composite_date(self):
+        windows = analyst._analysis_windows(date(2026, 8, 25), date(2026, 8, 24))
+
+        self.assertEqual(windows["economics_current_start"], date(2026, 8, 19))
+        self.assertEqual(windows["composite_end"], date(2026, 8, 25))
+        self.assertEqual(windows["demand_current_start"], date(2026, 8, 18))
+        self.assertEqual(windows["demand_end"], date(2026, 8, 24))
 
 
 if __name__ == "__main__":

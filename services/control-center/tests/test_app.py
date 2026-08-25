@@ -3,7 +3,7 @@ import json
 import sys
 import tempfile
 import unittest
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 
@@ -41,6 +41,30 @@ REPORT = """# AI Analyst v1.3 — Price Decision v1
 
 
 class ControlCenterTests(unittest.TestCase):
+    @staticmethod
+    def collector_row(demand_at, demand_statuses):
+        current = datetime(2026, 8, 25, 12, 0, tzinfo=timezone.utc)
+        return {
+            "demand_date": date(2026, 8, 24) if demand_at else None,
+            "demand_at": demand_at,
+            "demand_statuses": demand_statuses,
+            "price_at": current,
+            "stock_at": current,
+            "stock_statuses": ["VALID"],
+            "promotion_at": current,
+            "promotion_statuses": ["valid"],
+            "cpc_at": current,
+            "cpc_date": current.date(),
+            "cpc_statuses": ["SUCCESS_NONZERO"],
+            "operations_date": current.date(),
+            "operations_statuses": ["NO_DELIVERIES"],
+        }
+
+    @staticmethod
+    def demand_health(row, now):
+        collectors, _ = app.collector_snapshot(row, now)
+        return next(item for item in collectors if item["name"] == "Спрос")
+
     def test_reuses_compact_report_parser(self):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "report.txt"
@@ -105,6 +129,46 @@ class ControlCenterTests(unittest.TestCase):
         self.assertIn("ВЫЙТИ", prices)
         self.assertIn("CPC расход", cpc)
         self.assertNotIn("Изменить цену", prices)
+
+    def test_demand_is_healthy_when_latest_source_date_is_current_and_valid(self):
+        now = datetime(2026, 8, 25, 12, 0, tzinfo=timezone.utc)
+        demand = self.demand_health(self.collector_row(now - timedelta(hours=1), ["valid"]), now)
+
+        self.assertTrue(demand["ok"])
+        self.assertEqual(demand["status"], "OK")
+
+    def test_return_only_future_date_does_not_replace_latest_demand_snapshot(self):
+        now = datetime(2026, 8, 25, 12, 0, tzinfo=timezone.utc)
+        row = self.collector_row(now - timedelta(hours=5), ["valid"])
+        row["composite_date"] = date(2026, 8, 25)
+
+        demand = self.demand_health(row, now)
+
+        self.assertTrue(demand["ok"])
+        self.assertEqual(row["demand_date"], date(2026, 8, 24))
+        self.assertIn("WHERE demand_collected_at IS NOT NULL", app.COLLECTOR_QUERY)
+        self.assertIn("AS demand_at", app.COLLECTOR_QUERY)
+
+    def test_review_demand_status_is_unhealthy(self):
+        now = datetime(2026, 8, 25, 12, 0, tzinfo=timezone.utc)
+        demand = self.demand_health(self.collector_row(now, ["review"]), now)
+
+        self.assertFalse(demand["ok"])
+
+    def test_missing_demand_is_unhealthy(self):
+        now = datetime(2026, 8, 25, 12, 0, tzinfo=timezone.utc)
+        demand = self.demand_health(self.collector_row(None, []), now)
+
+        self.assertFalse(demand["ok"])
+
+    def test_stale_demand_is_unhealthy_after_54_hours(self):
+        now = datetime(2026, 8, 25, 12, 0, tzinfo=timezone.utc)
+        demand = self.demand_health(
+            self.collector_row(now - timedelta(hours=55), ["valid"]),
+            now,
+        )
+
+        self.assertFalse(demand["ok"])
 
 
 if __name__ == "__main__":
