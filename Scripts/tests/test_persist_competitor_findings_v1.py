@@ -368,6 +368,36 @@ class SafetyAndTransactionTests(unittest.TestCase):
         self.assertEqual(result.inserts, 0)
         self.assertTrue(connection.rolled_back)
 
+    def test_43_real_psycopg2_uuid_adapter(self) -> None:
+        from psycopg2.extensions import adapt
+
+        writer._register_psycopg2_uuid(None)
+        value = writer.deterministic_uuid(writer.APPROVED_SET_KEY)
+        quoted = adapt(value).getquoted()
+        self.assertIn(str(value).encode("ascii"), quoted)
+        self.assertTrue(quoted.endswith(b"::uuid"))
+
+    def test_44_actual_insert_uuid_parameters_are_psycopg2_adaptable(self) -> None:
+        from psycopg2.extensions import adapt
+
+        writer._register_psycopg2_uuid(None)
+        _, _, plan = built()
+        manifest_values = writer._manifest_insert_parameters(plan)
+        finding_values = writer._finding_insert_parameters(plan)
+        manifest_uuids = [value for value in manifest_values if isinstance(value, uuid.UUID)]
+        finding_uuids = [
+            value
+            for values in finding_values
+            for value in values
+            if isinstance(value, uuid.UUID)
+        ]
+
+        self.assertEqual(len(finding_values), 10)
+        self.assertEqual(len(manifest_uuids), 1)
+        self.assertEqual(len(finding_uuids), 48)
+        self.assertTrue(all(adapt(value).getquoted() for value in manifest_uuids))
+        self.assertTrue(all(adapt(value).getquoted() for value in finding_uuids))
+
 
 if __name__ == "__main__":
     unittest.main()

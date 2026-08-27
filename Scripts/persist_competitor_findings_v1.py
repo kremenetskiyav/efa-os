@@ -684,19 +684,33 @@ INSERT INTO public.competitor_findings (
 """
 
 
+def _manifest_insert_parameters(plan: PersistencePlan) -> tuple[Any, ...]:
+    return tuple(plan.manifest[name] for name in MANIFEST_COLUMNS)
+
+
+def _finding_insert_parameters(plan: PersistencePlan) -> list[tuple[Any, ...]]:
+    return [
+        tuple(
+            json.dumps(
+                row[name],
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+                allow_nan=False,
+            )
+            if name in {"evidence", "details"}
+            else row[name]
+            for name in FINDING_COLUMNS
+        )
+        for row in plan.findings
+    ]
+
+
 def _insert_plan(connection: Any, plan: PersistencePlan) -> None:
     with connection.cursor() as cursor:
-        cursor.execute(MANIFEST_INSERT_SQL, tuple(plan.manifest[name] for name in MANIFEST_COLUMNS))
-        if plan.findings:
-            values = []
-            for row in plan.findings:
-                values.append(
-                    tuple(
-                        json.dumps(row[name], ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
-                        if name in {"evidence", "details"} else row[name]
-                        for name in FINDING_COLUMNS
-                    )
-                )
+        cursor.execute(MANIFEST_INSERT_SQL, _manifest_insert_parameters(plan))
+        values = _finding_insert_parameters(plan)
+        if values:
             cursor.executemany(FINDING_INSERT_SQL, values)
 
 
@@ -750,17 +764,28 @@ def load_database_config(environment: Mapping[str, str]) -> DatabaseConfig:
     )
 
 
+def _register_psycopg2_uuid(connection: Any) -> None:
+    from psycopg2.extras import register_uuid
+
+    register_uuid(conn_or_curs=connection)
+
+
 def connect_database(config: DatabaseConfig, *, read_only: bool) -> Any:
+    connection = None
     try:
         import psycopg2
         options = "-c statement_timeout=30000"
         if read_only:
             options += " -c default_transaction_read_only=on"
-        return psycopg2.connect(
+        connection = psycopg2.connect(
             host=config.host, port=config.port, dbname=config.name, user=config.user,
             password=config.password, connect_timeout=10, options=options,
         )
+        _register_psycopg2_uuid(connection)
+        return connection
     except Exception as error:
+        if connection is not None:
+            connection.close()
         raise DatabaseError("PostgreSQL connection failed") from error
 
 

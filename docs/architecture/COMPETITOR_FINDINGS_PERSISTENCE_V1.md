@@ -17,6 +17,14 @@ The default is `DRY_RUN`. A write requires all of the following:
 
 Environment configuration uses `EFA_DB_HOST`, `EFA_DB_PORT`, `EFA_DB_NAME`, `EFA_DB_USER`, and `EFA_DB_PASSWORD`. Credentials and DSNs are never printed.
 
+Immediately after opening the psycopg2 connection, the writer calls
+`psycopg2.extras.register_uuid(conn_or_curs=connection)`. PostgreSQL UUID
+typecasters are scoped to that connection. Psycopg2 registers the Python
+`uuid.UUID` input adapter process-wide by library design; this is acceptable
+because the writer runs as a dedicated short-lived process and does not host
+other application workloads. UUIDv5 identities remain UUID values through
+parameter binding and are not converted or re-derived.
+
 ## Immutable hash gates
 
 The approved first set has:
