@@ -2,9 +2,13 @@ import importlib.util
 import json
 import sys
 import tempfile
+import threading
+import types
 import unittest
+import urllib.request
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
+from unittest import mock
 
 
 MODULE_PATH = Path(__file__).resolve().parents[1] / "app.py"
@@ -38,6 +42,92 @@ REPORT = """# AI Analyst v1.3 — Price Decision v1
 - Уверенность: **ВЫСОКАЯ**.
 - Причина: Фактическая цена 624 ₽ совпадает с активной акцией; маржа 6.49% при 2 подтверждённых доставках.
 """
+
+
+def competitor_summary(*, available=True, total=10, reason=None):
+    own_lost = {
+        "finding_key": "own-lost",
+        "finding_type": "OWN_SEARCH_VISIBILITY_LOST",
+        "severity": "WATCH",
+        "offer_id": "УФ 005Б",
+        "role_label": "Наша карточка",
+        "message": "УФ 005Б: наша карточка не найдена по OEM 647941 в пределах лимита текущего снимка; найдена по OEM 647975.",
+    }
+    own_restored = {
+        "finding_key": "own-restored",
+        "finding_type": "OWN_SEARCH_VISIBILITY_RESTORED",
+        "severity": "INFO",
+        "offer_id": "УФ 004Б",
+        "role_label": "Наша карточка",
+        "message": "УФ 004Б: наша карточка снова найдена по OEM 5Q0819669 в пределах лимита текущего снимка.",
+    }
+    competitor = {
+        "finding_key": "competitor-lost",
+        "finding_type": "COMPETITOR_VISIBILITY_LOST",
+        "severity": "INFO",
+        "offer_id": "УФ 001Б",
+        "role_label": "Основной конкурент",
+        "message": "УФ 001Б: основной конкурент не найден по OEM 80292SLJ013 в пределах лимита текущего снимка.",
+    }
+    competitor_two = {
+        "finding_key": "competitor-restored",
+        "finding_type": "COMPETITOR_VISIBILITY_RESTORED",
+        "severity": "INFO",
+        "offer_id": "УФ 002Б",
+        "role_label": "Основной конкурент",
+        "message": "УФ 002Б: основной конкурент снова найден по OEM 6R0820367 в пределах лимита текущего снимка.",
+    }
+    price = {
+        "finding_key": "price-change",
+        "offer_id": "УФ 005Б",
+        "role_label": "Дополнительный конкурент",
+        "previous_price": 689,
+        "current_price": 698,
+        "delta": 9,
+        "delta_pct": 1.3062,
+        "currency": "RUB",
+    }
+    return {
+        "contract_version": "competitor_monitor_summary.v1",
+        "generated_at": "2026-08-28T05:00:00.000Z",
+        "available": available,
+        "degraded_reason": reason,
+        "coverage": {
+            "portfolio_sku_count": 5,
+            "active_monitored_sku_count": 4,
+            "unmonitored_skus": [{"offer_id": "УФ 003Б", "watchlist_state": "HOLD", "reason": None}],
+        },
+        "snapshot": {
+            "reference_at": "2026-08-26T06:14:43.000Z",
+            "captured_through": "2026-08-26T06:16:00.000Z",
+            "freshness_status": "UNKNOWN",
+        },
+        "status": "WATCH" if total else "NORMAL",
+        "counts": {
+            "important_count": 0,
+            "watch_count": 1 if total else 0,
+            "info_count": 9 if total else 0,
+            "total_findings": total,
+        },
+        "headline": own_lost if total else {"finding_key": None, "message": "Нет findings уровня WATCH или IMPORTANT."},
+        "own": {
+            "own_watch_count": 1 if total else 0,
+            "own_restored_count": 1 if total else 0,
+            "own_findings": [own_lost, own_restored] if total else [],
+        },
+        "competitors": {
+            "visibility_lost_count": 4 if total else 0,
+            "visibility_restored_count": 3 if total else 0,
+            "findings": [competitor, competitor_two] if total else [],
+        },
+        "prices": {
+            "price_changes_count": 1 if total else 0,
+            "price_increased_count": 1 if total else 0,
+            "price_decreased_count": 0,
+            "price_changes": [price] if total else [],
+        },
+        "top_findings": [own_lost, own_restored, competitor, competitor_two, price] if total else [],
+    }
 
 
 class ControlCenterTests(unittest.TestCase):
@@ -169,6 +259,289 @@ class ControlCenterTests(unittest.TestCase):
         )
 
         self.assertFalse(demand["ok"])
+
+    def test_competitor_api_field_is_additive_and_core_fields_remain(self):
+        with mock.patch.object(
+            app, "read_database", new=mock.AsyncMock(return_value=(False, {}))
+        ), mock.patch.object(app, "load_competitor_summary", return_value=competitor_summary()):
+            payload = app.build_status()
+        for key in (
+            "generated_at", "system", "collectors", "last_data_update",
+            "analyst", "delivery", "attention", "competitor_monitor",
+        ):
+            self.assertIn(key, payload)
+        self.assertEqual("competitor_monitor_summary.v1", payload["competitor_monitor"]["contract_version"])
+
+    def test_api_status_handler_returns_http_200_with_competitor_monitor(self):
+        payload = {"system": {}, "competitor_monitor": competitor_summary()}
+        with mock.patch.object(app, "build_status", return_value=payload):
+            server = app.ThreadingHTTPServer(("127.0.0.1", 0), app.Handler)
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                with urllib.request.urlopen(
+                    f"http://127.0.0.1:{server.server_port}/api/status", timeout=3
+                ) as response:
+                    actual = json.loads(response.read().decode("utf-8"))
+                    self.assertEqual(200, response.status)
+            finally:
+                server.shutdown()
+                server.server_close()
+                thread.join(timeout=3)
+        self.assertIn("competitor_monitor", actual)
+
+    def test_current_watch_mapping(self):
+        value = competitor_summary()
+        self.assertEqual((True, "WATCH"), (value["available"], value["status"]))
+
+    def test_current_headline_mapping(self):
+        headline = competitor_summary()["headline"]
+        self.assertEqual("OWN_SEARCH_VISIBILITY_LOST", headline["finding_type"])
+        self.assertIn("УФ 005Б", headline["message"])
+        self.assertIn("647941", headline["message"])
+        self.assertIn("647975", headline["message"])
+
+    def test_current_dynamic_coverage_is_five_four_with_hold(self):
+        coverage = competitor_summary()["coverage"]
+        self.assertEqual((5, 4), (coverage["portfolio_sku_count"], coverage["active_monitored_sku_count"]))
+        self.assertEqual("HOLD", coverage["unmonitored_skus"][0]["watchlist_state"])
+
+    def test_current_severity_counts(self):
+        counts = competitor_summary()["counts"]
+        self.assertEqual((0, 1, 9, 10), tuple(counts.values()))
+
+    def test_current_own_counts(self):
+        own = competitor_summary()["own"]
+        self.assertEqual((1, 1), (own["own_watch_count"], own["own_restored_count"]))
+
+    def test_current_competitor_counts(self):
+        value = competitor_summary()["competitors"]
+        self.assertEqual((4, 3), (value["visibility_lost_count"], value["visibility_restored_count"]))
+
+    def test_current_price_counts_and_direction(self):
+        prices = competitor_summary()["prices"]
+        self.assertEqual((1, 1, 0), (
+            prices["price_changes_count"],
+            prices["price_increased_count"],
+            prices["price_decreased_count"],
+        ))
+
+    def test_zero_finding_state_is_healthy(self):
+        value = competitor_summary(total=0)
+        page = app.render_competitor_detail(value)
+        self.assertTrue(value["available"])
+        self.assertEqual("NORMAL", value["status"])
+        self.assertIn("Изменений, соответствующих правилам Finding Engine v1, не обнаружено", page)
+
+    def test_all_approved_degraded_reasons_render_module_only_state(self):
+        reasons = (
+            "FINDING_SET_MISSING", "FINDING_SET_INVALID", "FINDING_SET_STALE",
+            "SNAPSHOT_UNAVAILABLE", "CONTROL_CENTER_COMPETITOR_READ_ERROR",
+        )
+        for reason in reasons:
+            page = app.render_competitor_detail(
+                competitor_summary(available=False, reason=reason)
+            )
+            self.assertIn("Данные мониторинга сейчас недоступны", page)
+            self.assertNotIn("IMPORTANT 0", page)
+
+    def test_summary_exception_is_isolated(self):
+        with mock.patch.object(
+            app, "read_competitor_summary", new=mock.AsyncMock(side_effect=RuntimeError("blocked"))
+        ):
+            value = app.load_competitor_summary()
+        self.assertFalse(value["available"])
+        self.assertEqual("CONTROL_CENTER_COMPETITOR_READ_ERROR", value["degraded_reason"])
+
+    def test_competitor_failure_does_not_change_collectors_ok(self):
+        healthy_collectors = [{"name": "Спрос", "ok": True}]
+        with mock.patch.object(
+            app, "read_database", new=mock.AsyncMock(return_value=(True, {}))
+        ), mock.patch.object(
+            app, "collector_snapshot", return_value=(healthy_collectors, None)
+        ), mock.patch.object(
+            app,
+            "load_competitor_summary",
+            return_value=competitor_summary(
+                available=False, reason="CONTROL_CENTER_COMPETITOR_READ_ERROR"
+            ),
+        ):
+            payload = app.build_status()
+        self.assertTrue(payload["system"]["collectors_ok"])
+        self.assertFalse(payload["competitor_monitor"]["available"])
+
+    def test_safe_visibility_wording(self):
+        page = app.render_competitor_detail(competitor_summary()).lower()
+        self.assertIn("не найдена по oem 647941", page)
+        self.assertIn("в пределах лимита текущего снимка", page)
+        self.assertIn("видимость", page)
+
+    def test_forbidden_visibility_claims_absent(self):
+        content = (
+            app.render_competitor_detail(competitor_summary())
+            + (STATIC_PATH / "app.js").read_text(encoding="utf-8")
+            + (STATIC_PATH / "index.html").read_text(encoding="utf-8")
+        ).lower()
+        for forbidden in (
+            "карточка пропала", "товар исчез", "товар удалён", "продажи остановлены",
+        ):
+            self.assertNotIn(forbidden, content)
+
+    def test_detail_role_labels(self):
+        page = app.render_competitor_detail(competitor_summary())
+        for label in ("Наша карточка", "Основной конкурент", "Дополнительный конкурент"):
+            self.assertIn(label, page)
+
+    def test_main_dashboard_does_not_render_all_findings(self):
+        script = (STATIC_PATH / "app.js").read_text(encoding="utf-8")
+        self.assertNotIn("top_findings", script)
+        self.assertEqual(5, len(competitor_summary()["top_findings"]))
+
+    def test_details_use_four_required_groups(self):
+        page = app.render_competitor_detail(competitor_summary())
+        for title in (
+            "Наша карточка", "Видимость конкурентов", "Изменения цен",
+            "Прочие информационные события",
+        ):
+            self.assertIn(f"<h2>{title}</h2>", page)
+
+    def test_detail_cards_are_deduplicated_by_finding_key(self):
+        value = competitor_summary()
+        duplicate = dict(value["own"]["own_findings"][0])
+        value["competitors"]["findings"].append(duplicate)
+        page = app.render_competitor_detail(value)
+        self.assertEqual(1, page.count(duplicate["message"]))
+
+    def test_price_formatting_is_neutral_and_factual(self):
+        page = app.render_competitor_detail(competitor_summary())
+        self.assertIn("689 → 698 ₽", page)
+        self.assertIn("изменение 9 ₽ (+1.3%)", page)
+        for forbidden in ("резко", "значительно", "агрессивно"):
+            self.assertNotIn(forbidden, page.lower())
+
+    def test_database_derived_html_is_escaped(self):
+        value = competitor_summary()
+        value["own"]["own_findings"][0]["role_label"] = "<script>alert(1)</script>"
+        value["own"]["own_findings"][0]["message"] = "<img src=x onerror=alert(1)>"
+        page = app.render_competitor_detail(value)
+        self.assertNotIn("<script>alert(1)</script>", page)
+        self.assertNotIn("<img src=x", page)
+        self.assertIn("&lt;script&gt;", page)
+        self.assertIn("&lt;img", page)
+
+    def test_sensitive_provenance_fields_are_not_rendered(self):
+        value = competitor_summary()
+        value["own"]["own_findings"][0].update({
+            "raw_ref": "secret-raw-ref",
+            "raw_source_ref": "secret-source-ref",
+            "observation_id": "00000000-0000-0000-0000-000000000000",
+            "source_url": "https://example.invalid/private",
+        })
+        page = app.render_competitor_detail(value)
+        for hidden in (
+            "secret-raw-ref", "secret-source-ref", "00000000-0000-0000-0000-000000000000",
+            "example.invalid",
+        ):
+            self.assertNotIn(hidden, page)
+
+    def test_competitor_summary_is_json_serializable(self):
+        payload = json.dumps(competitor_summary(), ensure_ascii=False)
+        self.assertIn("competitor_monitor_summary.v1", payload)
+
+    def test_source_path_is_exactly_three_mcp_read_queries(self):
+        class Transaction:
+            async def __aenter__(self):
+                return self
+            async def __aexit__(self, *args):
+                return False
+
+        class Connection:
+            def __init__(self):
+                self.queries = []
+                self.closed = False
+            def transaction(self, *, readonly):
+                self.readonly = readonly
+                return Transaction()
+            async def fetchrow(self, query, *args):
+                self.queries.append(query)
+                if "current_user AS role" in query:
+                    return {"role": "efa_mcp_readonly", "db": "efa", "ro": "on"}
+                return {"finding_set_id": "00000000-0000-0000-0000-000000000001"}
+            async def fetch(self, query, *args):
+                self.queries.append(query)
+                return []
+            async def close(self):
+                self.closed = True
+
+        connection = Connection()
+        captured = {}
+
+        async def connect(**kwargs):
+            captured.update(kwargs)
+            return connection
+
+        fake_asyncpg = types.SimpleNamespace(connect=connect)
+        with mock.patch.dict(sys.modules, {"asyncpg": fake_asyncpg}), mock.patch.dict(
+            app.os.environ, {"DATABASE_URL": "postgresql://masked@db/efa"}
+        ), mock.patch.object(app, "build_summary", return_value=competitor_summary()):
+            value = app.asyncio.run(app.read_competitor_summary())
+        source_queries = [query for query in connection.queries if "current_user AS role" not in query]
+        self.assertEqual(3, len(source_queries))
+        self.assertTrue(all("mcp_read.competitor_" in query for query in source_queries))
+        self.assertTrue(connection.readonly)
+        self.assertTrue(connection.closed)
+        self.assertEqual("on", captured["server_settings"]["default_transaction_read_only"])
+        self.assertTrue(value["available"])
+
+    def test_jsonb_records_are_decoded_without_exposure(self):
+        decoded = app._decode_competitor_record({
+            "evidence": '[{"query":"647941"}]',
+            "details": '{"membership_status":"CONTROL"}',
+        })
+        self.assertIsInstance(decoded["evidence"], list)
+        self.assertEqual("CONTROL", decoded["details"]["membership_status"])
+
+    def test_no_raw_table_fallback_or_database_write_path(self):
+        source = MODULE_PATH.read_text(encoding="utf-8")
+        runtime_sql = "\n".join((
+            app.LATEST_FINDING_SET_SQL, app.FINDINGS_SQL, app.COVERAGE_SQL,
+        ))
+        self.assertNotIn("public.competitor_", runtime_sql)
+        for forbidden in ("INSERT ", "UPDATE ", "DELETE ", "ON CONFLICT"):
+            self.assertNotIn(forbidden, runtime_sql.upper())
+        self.assertNotIn("execute_write", source)
+
+    def test_freshness_is_unknown_and_ui_makes_no_fresh_claim(self):
+        value = competitor_summary()
+        script = (STATIC_PATH / "app.js").read_text(encoding="utf-8").lower()
+        self.assertEqual("UNKNOWN", value["snapshot"]["freshness_status"])
+        self.assertNotIn("данные свежие", script)
+        self.assertNotIn("freshness_status", script)
+
+    def test_dashboard_has_competitor_block_and_detail_link(self):
+        page = (STATIC_PATH / "index.html").read_text(encoding="utf-8")
+        for element_id in (
+            "competitor-panel", "competitor-status", "competitor-snapshot",
+            "competitor-headline", "competitor-coverage", "competitor-own",
+            "competitor-visibility", "competitor-prices", "competitor-important",
+            "competitor-watch", "competitor-info",
+        ):
+            self.assertIn(f'id="{element_id}"', page)
+        self.assertIn('href="/competitors"', page)
+
+    def test_ui_uses_text_content_for_competitor_values(self):
+        script = (STATIC_PATH / "app.js").read_text(encoding="utf-8")
+        for element_id in (
+            "competitor-headline", "competitor-coverage", "competitor-own",
+            "competitor-visibility", "competitor-prices",
+        ):
+            self.assertIn(f"getElementById('{element_id}').textContent", script)
+
+    def test_responsive_rules_cover_tablet_and_mobile(self):
+        styles = (STATIC_PATH / "styles.css").read_text(encoding="utf-8")
+        self.assertIn("@media(max-width:850px)", styles)
+        self.assertIn("@media(max-width:560px)", styles)
+        self.assertIn(".competitor-metrics{grid-template-columns:1fr}", styles)
 
 
 if __name__ == "__main__":

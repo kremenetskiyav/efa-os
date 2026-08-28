@@ -43,7 +43,7 @@ SELECT finding_set_id::text,set_key,persistence_contract_version,
        previous_captured_through,current_source_kind,
        current_derived_batch_id,current_reference_at,
        current_captured_through,expected_findings_count,applied_at
-  FROM public.competitor_finding_sets
+  FROM mcp_read.competitor_latest_finding_set
  WHERE finding_set_contract_version = 'competitor_finding_set.v1'
  ORDER BY current_reference_at DESC, applied_at DESC, finding_set_id DESC
  LIMIT 1
@@ -55,25 +55,15 @@ SELECT finding_id::text,finding_set_id::text,finding_kind,offer_id,
        old_observation_id::text,new_observation_id::text,topic,metric,
        severity,confidence,status,evidence,details,finding_key,
        first_detected_at,last_detected_at
-  FROM public.competitor_findings
+  FROM mcp_read.competitor_findings
  WHERE finding_set_id = %s::uuid
  ORDER BY finding_key
 """
 
 COVERAGE_SQL = """
-SELECT p.offer_id,p.watchlist_state,NULLIF(btrim(p.notes),'') AS source_reason,
-       (
-         p.watchlist_state = 'ACTIVE'
-         AND EXISTS (
-           SELECT 1
-             FROM public.competitor_watchlist_memberships m
-            WHERE m.offer_id = p.offer_id
-              AND m.valid_to IS NULL
-              AND m.membership_status IN ('CONTROL','PRIMARY','RESERVE')
-         )
-       ) AS active_monitored
-  FROM public.competitor_sku_profiles p
- ORDER BY p.offer_id
+SELECT offer_id,watchlist_state,source_reason,active_monitored
+  FROM mcp_read.competitor_monitoring_coverage
+ ORDER BY offer_id
 """
 
 

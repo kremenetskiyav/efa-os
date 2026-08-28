@@ -7,22 +7,23 @@ for Control Center and daily-report consumers. It is built from the latest
 persisted Competitor Finding Set and does not run the Snapshot Analyzer or
 Finding Engine on demand.
 
-The standalone implementation is
-`Scripts/build_competitor_monitor_summary_v1.py`. Integration into Control
-Center or reports is outside v1 scope.
+The implementation is `Scripts/build_competitor_monitor_summary_v1.py`.
+Control Center consumes the same DTO through the approved `mcp_read` source
+surface; report integration remains outside v1 scope.
 
 ## Runtime sources
 
 Primary facts:
 
-- `public.competitor_finding_sets`;
-- `public.competitor_findings`.
+- `mcp_read.competitor_latest_finding_set`;
+- `mcp_read.competitor_findings`.
 
 Dynamic portfolio coverage:
 
-- `public.competitor_sku_profiles`;
-- active `public.competitor_watchlist_memberships` in `CONTROL`, `PRIMARY`, or
-  `RESERVE` state.
+- `mcp_read.competitor_monitoring_coverage`.
+
+The views preserve source equivalence while keeping the runtime role away from
+raw `public.competitor_*` relations. There is no fallback to raw tables.
 
 Archived JSON is evidence and recovery material, not the normal runtime source.
 

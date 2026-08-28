@@ -387,6 +387,24 @@ class SummaryContractTests(unittest.TestCase):
         )
         self.assertIn("снова найден по OEM", row["message"])
 
+    def test_39_runtime_sources_are_only_approved_mcp_read_views(self) -> None:
+        sql = "\n".join(
+            (summary.LATEST_FINDING_SET_SQL, summary.FINDINGS_SQL, summary.COVERAGE_SQL)
+        )
+        self.assertNotIn("public.competitor_", sql)
+        self.assertIn("mcp_read.competitor_latest_finding_set", sql)
+        self.assertIn("mcp_read.competitor_findings", sql)
+        self.assertIn("mcp_read.competitor_monitoring_coverage", sql)
+
+    def test_40_exactly_three_bounded_source_queries_remain(self) -> None:
+        statements = (
+            summary.LATEST_FINDING_SET_SQL,
+            summary.FINDINGS_SQL,
+            summary.COVERAGE_SQL,
+        )
+        self.assertEqual(3, len(statements))
+        self.assertTrue(all(value.lstrip().upper().startswith("SELECT") for value in statements))
+
 
 if __name__ == "__main__":
     unittest.main()

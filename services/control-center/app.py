@@ -15,7 +15,7 @@ from datetime import date, datetime, time, timedelta, timezone
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping, Sequence
 from urllib.parse import urlsplit
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -23,6 +23,13 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from Scripts.format_ai_analyst_email import parse_report  # noqa: E402
+from Scripts.build_competitor_monitor_summary_v1 import (  # noqa: E402
+    COVERAGE_SQL,
+    FINDINGS_SQL,
+    LATEST_FINDING_SET_SQL,
+    SourceData,
+    build_summary,
+)
 
 
 MOSCOW = timezone(timedelta(hours=3), name="Europe/Moscow")
@@ -228,6 +235,76 @@ async def read_database() -> tuple[bool, dict[str, Any]]:
             await connection.close()
 
 
+def _decode_competitor_record(record: Mapping[str, Any]) -> dict[str, Any]:
+    result = dict(record)
+    for field in ("evidence", "details"):
+        value = result.get(field)
+        if isinstance(value, str):
+            result[field] = json.loads(value)
+    return result
+
+
+async def read_competitor_summary() -> dict[str, Any]:
+    """Read the approved three-view source using the dedicated runtime role."""
+    import asyncpg
+
+    dsn = os.environ.get("DATABASE_URL", "").strip()
+    if not dsn:
+        raise RuntimeError("Competitor Monitor database configuration is unavailable")
+    connection = None
+    try:
+        connection = await asyncpg.connect(
+            dsn=dsn,
+            timeout=3,
+            command_timeout=5,
+            server_settings={
+                "application_name": "efa_control_center_competitor_v1",
+                "default_transaction_read_only": "on",
+                "statement_timeout": "5000ms",
+                "lock_timeout": "1500ms",
+                "search_path": "mcp_read,pg_catalog",
+            },
+        )
+        async with connection.transaction(readonly=True):
+            identity = await connection.fetchrow(
+                "SELECT current_user AS role, current_database() AS db, "
+                "current_setting('transaction_read_only') AS ro"
+            )
+            if identity["role"] != "efa_mcp_readonly" or identity["db"] != "efa" or identity["ro"] != "on":
+                raise RuntimeError("Competitor Monitor runtime identity is invalid")
+            manifest_row = await connection.fetchrow(LATEST_FINDING_SET_SQL)
+            manifest = _decode_competitor_record(manifest_row) if manifest_row is not None else None
+            if manifest is None:
+                findings: tuple[dict[str, Any], ...] = ()
+            else:
+                findings_query = FINDINGS_SQL.replace("%s::uuid", "$1::uuid")
+                finding_rows = await connection.fetch(findings_query, manifest["finding_set_id"])
+                findings = tuple(_decode_competitor_record(row) for row in finding_rows)
+            coverage_rows = await connection.fetch(COVERAGE_SQL)
+            source = SourceData(
+                manifest,
+                findings,
+                tuple(_decode_competitor_record(row) for row in coverage_rows),
+            )
+        return build_summary(source)
+    finally:
+        if connection is not None:
+            await connection.close()
+
+
+def _competitor_read_error() -> dict[str, Any]:
+    result = build_summary(SourceData(None, (), ()))
+    result["degraded_reason"] = "CONTROL_CENTER_COMPETITOR_READ_ERROR"
+    return result
+
+
+def load_competitor_summary() -> dict[str, Any]:
+    try:
+        return asyncio.run(read_competitor_summary())
+    except Exception:
+        return _competitor_read_error()
+
+
 def collector_snapshot(row: dict[str, Any], now: datetime) -> tuple[list[dict[str, Any]], datetime | date | None]:
     definitions = [
         (
@@ -332,6 +409,7 @@ def build_status() -> dict[str, Any]:
             **delivery_config,
         },
         "attention": report,
+        "competitor_monitor": load_competitor_summary(),
     }
 
 
@@ -353,6 +431,81 @@ def _compact_money(value: int | None) -> str:
     return "н/д" if value is None else f"{value:,} ₽".replace(",", " ")
 
 
+def _detail_items(items: Sequence[Mapping[str, Any]]) -> str:
+    seen: set[str] = set()
+    rows = []
+    for item in items:
+        key = str(item.get("finding_key", ""))
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        role = html.escape(str(item.get("role_label") or "Событие"))
+        message = html.escape(str(item.get("message") or "Нет описания"))
+        rows.append(f"<li><b>{role}</b><p>{message}</p></li>")
+    return "".join(rows) or "<li class='muted'>Нет событий.</li>"
+
+
+def _unique_findings(
+    items: Sequence[Mapping[str, Any]], seen: set[str]
+) -> list[Mapping[str, Any]]:
+    result = []
+    for item in items:
+        key = str(item.get("finding_key", ""))
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        result.append(item)
+    return result
+
+
+def _price_items(items: Sequence[Mapping[str, Any]]) -> str:
+    rows = []
+    seen: set[str] = set()
+    for item in items:
+        key = str(item.get("finding_key", ""))
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        offer_id = html.escape(str(item.get("offer_id") or "SKU"))
+        role = html.escape(str(item.get("role_label") or "Конкурент"))
+        previous = html.escape(str(item.get("previous_price") if item.get("previous_price") is not None else "н/д"))
+        current = html.escape(str(item.get("current_price") if item.get("current_price") is not None else "н/д"))
+        delta = html.escape(str(item.get("delta") if item.get("delta") is not None else "н/д"))
+        delta_pct = item.get("delta_pct")
+        pct = "н/д" if delta_pct is None else f"{float(delta_pct):+.1f}%"
+        rows.append(
+            f"<li><b>{offer_id} — {role}</b>"
+            f"<p>{previous} → {current} ₽; изменение {delta} ₽ ({html.escape(pct)}).</p></li>"
+        )
+    return "".join(rows) or "<li class='muted'>Нет изменений цен.</li>"
+
+
+def render_competitor_detail(summary: Mapping[str, Any]) -> str:
+    if not summary.get("available"):
+        content = "<p class='module-unavailable'>Данные мониторинга сейчас недоступны.</p>"
+    elif (summary.get("counts") or {}).get("total_findings") == 0:
+        content = "<p>Изменений, соответствующих правилам Finding Engine v1, не обнаружено.</p>"
+    else:
+        used: set[str] = set()
+        own = _unique_findings((summary.get("own") or {}).get("own_findings") or [], used)
+        competitors = _unique_findings(
+            (summary.get("competitors") or {}).get("findings") or [], used
+        )
+        prices = _unique_findings((summary.get("prices") or {}).get("price_changes") or [], used)
+        other = _unique_findings(summary.get("top_findings") or [], used)
+        reference = html.escape(str((summary.get("snapshot") or {}).get("reference_at") or "Нет данных"))
+        content = (
+            f"<p class='detail-snapshot'>Последний снимок: {reference}</p>"
+            "<section class='detail-section'><h2>Наша карточка</h2><ul>" + _detail_items(own) + "</ul></section>"
+            "<section class='detail-section'><h2>Видимость конкурентов</h2><ul>" + _detail_items(competitors) + "</ul></section>"
+            "<section class='detail-section'><h2>Изменения цен</h2><ul>" + _price_items(prices) + "</ul></section>"
+            "<section class='detail-section'><h2>Прочие информационные события</h2><ul>" + _detail_items(other) + "</ul></section>"
+        )
+    return f"""<!doctype html><html lang='ru'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
+<title>Конкуренты — EFA OS</title><link rel='stylesheet' href='/static/styles.css'></head><body>
+<main class='detail-wrap'><a class='back' href='/'>← Control Center</a><h1>Конкуренты</h1>{content}</main></body></html>"""
+
+
 def render_detail(kind: str, report: str) -> str:
     titles = {
         "prices": "Цены и акции",
@@ -360,8 +513,12 @@ def render_detail(kind: str, report: str) -> str:
         "cpc": "CPC",
         "collectors": "Статус collectors",
         "report": "Последний отчёт Analyst",
+        "competitors": "Конкуренты",
     }
     title = titles.get(kind, "Control Center")
+    if kind == "competitors":
+        content = render_competitor_detail(load_competitor_summary())
+        return content
     if kind == "report":
         content = f"<pre class='report'>{html.escape(report or 'Отчёт недоступен')}</pre>"
     elif kind == "collectors":
@@ -424,7 +581,7 @@ class Handler(BaseHTTPRequestHandler):
             name = path.removeprefix("/static/")
             content_type = "text/css; charset=utf-8" if name.endswith(".css") else "text/javascript; charset=utf-8"
             self._file(STATIC_DIR / name, content_type)
-        elif path in {"/report", "/prices", "/stocks", "/cpc", "/collectors"}:
+        elif path in {"/report", "/prices", "/stocks", "/cpc", "/collectors", "/competitors"}:
             _, report = report_snapshot(REPORT_PATH)
             body = render_detail(path.lstrip("/"), report).encode("utf-8")
             self._send(HTTPStatus.OK, body, "text/html; charset=utf-8")
