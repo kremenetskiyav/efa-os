@@ -14,6 +14,23 @@ from urllib.parse import unquote, urlsplit, urlunsplit
 
 import asyncpg
 
+if __package__:
+    from .competitor_report_v1 import (
+        CompetitorPresentation,
+        build_presentation as build_competitor_presentation,
+        read_summary as read_competitor_summary,
+        render_source_section as render_competitor_source_section,
+        unavailable_presentation as unavailable_competitor_presentation,
+    )
+else:
+    from competitor_report_v1 import (
+        CompetitorPresentation,
+        build_presentation as build_competitor_presentation,
+        read_summary as read_competitor_summary,
+        render_source_section as render_competitor_source_section,
+        unavailable_presentation as unavailable_competitor_presentation,
+    )
+
 
 EXPECTED_DATABASE = "efa"
 EXPECTED_ROLE = "efa_mcp_readonly"
@@ -126,6 +143,14 @@ ACTION_TEXT = {
 
 class SafeReportError(RuntimeError):
     """A report error whose message contains no credentials or database payload."""
+
+
+async def _competitor_presentation(connection: Any) -> CompetitorPresentation:
+    """Keep an unavailable competitor module from failing the core report."""
+    try:
+        return build_competitor_presentation(await read_competitor_summary(connection))
+    except Exception:
+        return unavailable_competitor_presentation()
 
 
 def _analysis_windows(composite_end: date, demand_end: date) -> dict[str, date]:
@@ -830,6 +855,7 @@ def _render(
     limit: int,
     *,
     report_date: date | None = None,
+    competitor_presentation: CompetitorPresentation | None = None,
 ) -> str:
     report_date = report_date or current_end
     current_units = sum((p["performance"]["current"]["units"] for p in products), Decimal("0"))
@@ -1022,6 +1048,14 @@ def _render(
         "кандидат оценивается по текущей фактической доле комиссии и расходам на единицу без предположения об uplift. "
         "CPC включается только при фактической привязке к единице; здесь он не распределён. Скрипт работает только READ + PROPOSE и ничего не изменяет.",
     ])
+    lines.extend(
+        [
+            "",
+            render_competitor_source_section(
+                competitor_presentation or unavailable_competitor_presentation()
+            ),
+        ]
+    )
     return "\n".join(lines)
 
 
@@ -1145,6 +1179,7 @@ async def _run(limit: int) -> str:
                 product["commercial"] = _commercial_recommendation(
                     product, windows["composite_end"]
                 )
+            competitor_presentation = await _competitor_presentation(connection)
             return _render(
                 products,
                 windows["demand_current_start"],
@@ -1153,6 +1188,7 @@ async def _run(limit: int) -> str:
                 windows["demand_previous_end"],
                 limit,
                 report_date=windows["composite_end"],
+                competitor_presentation=competitor_presentation,
             )
     finally:
         await connection.close()

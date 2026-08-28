@@ -11,6 +11,19 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+if __package__:
+    from .competitor_report_v1 import (
+        parse_source_section as parse_competitor_source_section,
+        render_email_html as render_competitor_email_html,
+        render_telegram_text as render_competitor_telegram_text,
+    )
+else:
+    from competitor_report_v1 import (
+        parse_source_section as parse_competitor_source_section,
+        render_email_html as render_competitor_email_html,
+        render_telegram_text as render_competitor_telegram_text,
+    )
+
 
 @dataclass
 class Sku:
@@ -159,6 +172,9 @@ def parse_report(report: str) -> tuple[str, list[Sku], str]:
 
 def render(report: str) -> dict[str, str]:
     report_date, skus, freshness = parse_report(report)
+    competitor = parse_competitor_source_section(report)
+    competitor_html = render_competitor_email_html(competitor)
+    competitor_text = render_competitor_telegram_text(competitor)
     total_sales = sum(s.sales for s in skus if s.sales is not None) if skus and all(s.sales is not None for s in skus) else None
     total_revenue = sum(s.revenue for s in skus if s.revenue is not None) if skus and all(s.revenue is not None for s in skus) else None
     attention = sum("ПРОВЕРИТЬ СЕЙЧАС" in s.signal for s in skus)
@@ -191,7 +207,7 @@ table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;p
 <h1>EFA — отчёт на {report_date}</h1><h2>ИТОГ ДНЯ</h2><div class='metrics'>
 <div class='metric'><b>{_fmt_number(total_sales)} шт.</b>{_fmt_money(total_revenue)}</div><div class='metric'><b>{attention}</b>требуют внимания</div>
 <div class='metric'><b>{watch}</b>наблюдать</div><div class='metric'><b>{leave}</b>не трогать</div></div>
-<div class='fresh'>{html.escape(freshness)}</div><h2>ЦЕНОВЫЕ РЕШЕНИЯ</h2>{action_html}
+<div class='fresh'>{html.escape(freshness)}</div>{competitor_html}<h2>ЦЕНОВЫЕ РЕШЕНИЯ</h2>{action_html}
 <h2>ВСЕ SKU</h2><table><thead><tr><th>SKU</th><th>Продажи</th><th>Текущая → тест</th><th>Решение</th><th>Акция / уверенность</th></tr></thead><tbody>{rows}</tbody></table>
 </div></body></html>"""
 
@@ -199,7 +215,7 @@ table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;p
         f"EFA — отчёт на {report_date}", "", "ИТОГ ДНЯ",
         f"Продажи вчера: {_fmt_number(total_sales)} шт. / {_fmt_money(total_revenue)}",
         f"Требуют внимания: {attention} · Наблюдать: {watch} · Не трогать: {leave}", freshness,
-        "", "ЦЕНОВЫЕ РЕШЕНИЯ",
+        "", competitor_text, "", "ЦЕНОВЫЕ РЕШЕНИЯ",
     ]
     for sku in actions:
         text_lines += [
