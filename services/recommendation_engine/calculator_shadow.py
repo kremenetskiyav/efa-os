@@ -130,6 +130,11 @@ def _shadow_item(
             "other_expenses": str(resolved.other_expenses),
         },
         "provenance": dict(resolved.provenance),
+        "price": {
+            "source": resolved.provenance["seller_price"],
+            "observed_at": resolved.price_observed_at.isoformat(),
+            "checked_at": resolved.price_checked_at.isoformat(),
+        },
         "snapshot": {
             "snapshot_id": resolved.snapshot_id,
             "price_collection_run_id": resolved.price_collection_run_id,

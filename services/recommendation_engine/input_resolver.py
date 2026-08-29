@@ -18,6 +18,7 @@ ZERO = Decimal("0")
 ONE = Decimal("1")
 PERCENT = Decimal("100")
 MAX_TARIFF_SNAPSHOT_AGE = timedelta(hours=12)
+MAX_PRICE_AGE = timedelta(hours=12)
 
 
 class InputResolutionError(ValueError):
@@ -30,6 +31,8 @@ class CalculatorSourceRow:
     product_id: int
     seller_price: Decimal | None
     cost_price: Decimal | None
+    price_observed_at: datetime | None
+    price_checked_at: datetime | None
     snapshot_id: str | None
     price_collection_run_id: str | None
     snapshot_product_id: int | None
@@ -60,6 +63,8 @@ class ResolvedCalculatorInputs:
     buyout_rate: Decimal
     tax_rate: Decimal
     other_expenses: Decimal
+    price_observed_at: datetime
+    price_checked_at: datetime
     snapshot_id: str
     price_collection_run_id: str
     observed_at: datetime
@@ -105,6 +110,19 @@ def resolve_calculator_inputs(
         raise InputResolutionError("offer_id must be non-empty")
     if isinstance(source.product_id, bool) or not isinstance(source.product_id, int) or source.product_id <= 0:
         raise InputResolutionError("product_id must be a positive integer")
+
+    if source.price_observed_at is None:
+        raise InputResolutionError("price observed_at is required")
+    if source.price_checked_at is None:
+        raise InputResolutionError("price checked_at is required")
+    _aware_datetime("price observed_at", source.price_observed_at)
+    _aware_datetime("price checked_at", source.price_checked_at)
+    if source.price_observed_at > calculation_at or source.price_checked_at > calculation_at:
+        raise InputResolutionError("price timestamps cannot be in the future")
+    if source.price_observed_at > source.price_checked_at:
+        raise InputResolutionError("price observed_at cannot be later than checked_at")
+    if calculation_at - source.price_checked_at > MAX_PRICE_AGE:
+        raise InputResolutionError("price check is older than 12 hours")
 
     if not source.snapshot_id or not source.price_collection_run_id:
         raise InputResolutionError("successful tariff snapshot is required")
@@ -154,7 +172,9 @@ def resolve_calculator_inputs(
 
     forward_amount = product_profile.forward_logistics_amount
     provenance = MappingProxyType({
-        "seller_price": "products.price",
+        "seller_price": "mcp_read.product_overview.current_price",
+        "seller_price_observed_at": "mcp_read.product_overview.price_observed_at",
+        "seller_price_freshness": "mcp_read.product_overview.price_checked_at",
         "cost_price": "products.cost_price",
         "base_commission_percent": "ozon_fbs_tariff_snapshots.sales_percent_fbs",
         "commission_adjustment_pp": "calculator_config.recommended_slot_adjustment_pp",
@@ -183,6 +203,8 @@ def resolve_calculator_inputs(
         buyout_rate=config.buyout_rate,
         tax_rate=resolved_tax_rate,
         other_expenses=config.other_expenses,
+        price_observed_at=source.price_observed_at,
+        price_checked_at=source.price_checked_at,
         snapshot_id=str(source.snapshot_id),
         price_collection_run_id=str(source.price_collection_run_id),
         observed_at=source.observed_at,

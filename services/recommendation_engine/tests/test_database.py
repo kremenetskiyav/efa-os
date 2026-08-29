@@ -47,19 +47,23 @@ class UnitEconomicsQueryTests(unittest.TestCase):
         self.assertIn("FROM ozon_fbs_tariff_snapshots", CALCULATOR_SOURCE_QUERY)
         self.assertIn("JOIN price_collection_runs", CALCULATOR_SOURCE_QUERY)
         self.assertIn("r.status = 'success'", CALCULATOR_SOURCE_QUERY)
-        self.assertIn("t.product_id = p.product_id", CALCULATOR_SOURCE_QUERY)
+        self.assertIn("t.product_id = p.ozon_product_id", CALCULATOR_SOURCE_QUERY)
         self.assertIn("t.offer_id = p.offer_id", CALCULATOR_SOURCE_QUERY)
         self.assertIn("ORDER BY t.observed_at DESC", CALCULATOR_SOURCE_QUERY)
         self.assertIn("LIMIT 1", CALCULATOR_SOURCE_QUERY)
-        self.assertIn("p.price, p.cost_price", CALCULATOR_SOURCE_QUERY)
+        self.assertIn("FROM mcp_read.product_overview p", CALCULATOR_SOURCE_QUERY)
+        self.assertIn("p.current_price, p.cost_price", CALCULATOR_SOURCE_QUERY)
+        self.assertIn("p.price_observed_at, p.price_checked_at", CALCULATOR_SOURCE_QUERY)
+        self.assertNotIn("p.price, p.cost_price", CALCULATOR_SOURCE_QUERY)
         for forbidden in ("INSERT ", "UPDATE ", "DELETE ", "ALTER ", "DROP "):
             self.assertNotIn(forbidden, CALCULATOR_SOURCE_QUERY.upper())
 
     def test_calculator_adapter_returns_raw_source_contract(self) -> None:
         observed_at = datetime(2026, 8, 23, 15, 0, tzinfo=timezone.utc)
         rows = [(
-            "УФ 001Б", 4861934525, Decimal("910"), Decimal("166"),
-            "snapshot-1", "run-1", 4861934525, "УФ 001Б", observed_at,
+            "УФ 001Б", 4861934525, Decimal("1290"), Decimal("166"),
+            observed_at, observed_at, "snapshot-1", "run-1",
+            4861934525, "УФ 001Б", observed_at,
             "success", Decimal("44"), Decimal("25"), Decimal("6.24"),
             Decimal("74"), Decimal("218"), Decimal("218"),
         )]
@@ -101,6 +105,8 @@ class UnitEconomicsQueryTests(unittest.TestCase):
 
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0].product_id, 4861934525)
+        self.assertEqual(result[0].seller_price, Decimal("1290"))
+        self.assertEqual(result[0].price_checked_at, observed_at)
         self.assertEqual(result[0].snapshot_product_id, 4861934525)
         self.assertEqual(result[0].sales_percent_fbs, Decimal("44"))
         self.assertEqual(result[0].raw_acquiring, Decimal("6.24"))

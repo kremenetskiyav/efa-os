@@ -27,6 +27,8 @@ def source_row(offer_id: str = "УФ 001Б", **changes) -> CalculatorSourceRow:
         "product_id": product_id,
         "seller_price": D("910"),
         "cost_price": D("166"),
+        "price_observed_at": CALCULATION_AT - timedelta(hours=2),
+        "price_checked_at": CALCULATION_AT - timedelta(hours=1),
         "snapshot_id": "snapshot-1",
         "price_collection_run_id": "run-1",
         "snapshot_product_id": product_id,
@@ -57,6 +59,17 @@ def resolve(source: CalculatorSourceRow | None = None, **changes):
 
 
 class InputResolverTests(unittest.TestCase):
+    def test_fresh_ozon_price_replaces_stale_products_price(self):
+        stale_products_price = D("910")
+        result = resolve(source_row(seller_price=D("1290")))
+
+        self.assertNotEqual(result.seller_price, stale_products_price)
+        self.assertEqual(result.seller_price, D("1290"))
+        self.assertEqual(
+            result.provenance["seller_price"],
+            "mcp_read.product_overview.current_price",
+        )
+
     def test_golden_resolution_applies_policy_once_and_ignores_raw_diagnostics(self):
         result = resolve()
 
@@ -99,9 +112,38 @@ class InputResolverTests(unittest.TestCase):
         )
         self.assertEqual(exact_boundary.observed_at, CALCULATION_AT - timedelta(hours=12))
 
-    def test_price_cost_commission_delivery_and_profile_fail_closed(self):
+    def test_price_presence_identity_and_freshness_fail_closed(self):
         invalid_sources = (
             source_row(seller_price=None),
+            source_row(price_observed_at=None),
+            source_row(price_checked_at=None),
+            source_row(price_checked_at=CALCULATION_AT - timedelta(hours=12, seconds=1)),
+            source_row(price_checked_at=CALCULATION_AT + timedelta(seconds=1)),
+            source_row(price_checked_at=CALCULATION_AT.replace(tzinfo=None)),
+            source_row(price_observed_at=CALCULATION_AT + timedelta(seconds=1)),
+            source_row(price_observed_at=CALCULATION_AT.replace(tzinfo=None)),
+            source_row(
+                price_observed_at=CALCULATION_AT - timedelta(minutes=30),
+                price_checked_at=CALCULATION_AT - timedelta(hours=1),
+            ),
+        )
+        for source in invalid_sources:
+            with self.subTest(source=source), self.assertRaises(InputResolutionError):
+                resolve(source)
+
+        exact_boundary = resolve(
+            source_row(
+                price_observed_at=CALCULATION_AT - timedelta(hours=12),
+                price_checked_at=CALCULATION_AT - timedelta(hours=12),
+            )
+        )
+        self.assertEqual(
+            exact_boundary.price_checked_at,
+            CALCULATION_AT - timedelta(hours=12),
+        )
+
+    def test_price_cost_commission_delivery_and_profile_fail_closed(self):
+        invalid_sources = (
             source_row(seller_price=D("0")),
             source_row(seller_price=D("300")),
             source_row(cost_price=None),

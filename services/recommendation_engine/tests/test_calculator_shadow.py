@@ -31,6 +31,8 @@ def source_row(offer_id: str) -> CalculatorSourceRow:
         product_id=product_id,
         seller_price=D("910"),
         cost_price=D("166"),
+        price_observed_at=CALCULATION_AT - timedelta(hours=2),
+        price_checked_at=CALCULATION_AT - timedelta(hours=1),
         snapshot_id=f"snapshot-{product_id}",
         price_collection_run_id="run-1",
         snapshot_product_id=product_id,
@@ -93,6 +95,11 @@ class CalculatorShadowTests(unittest.TestCase):
             "search_to": "9100",
             "price_step": "1",
             "ceiling_policy": "technical:current_seller_price_x10",
+        })
+        self.assertEqual(golden["price"], {
+            "source": "mcp_read.product_overview.current_price",
+            "observed_at": (CALCULATION_AT - timedelta(hours=2)).isoformat(),
+            "checked_at": (CALCULATION_AT - timedelta(hours=1)).isoformat(),
         })
         uf003 = next(item for item in report["items"] if item["offer_id"] == "УФ 003Б")
         self.assertEqual(
