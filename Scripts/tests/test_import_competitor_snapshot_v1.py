@@ -332,10 +332,10 @@ def reference_snapshot() -> importer.ProductionSnapshot:
         for offer, query in (("УФ 001Б", "OEM-A"), ("УФ 002Б", "OEM-B"))
     )
     memberships = []
-    for offer, product, status, oems_for_listing in (
-        ("УФ 001Б", "100", "PRIMARY", ("OEM-A",)),
-        ("УФ 001Б", "101", "CONTROL", ("OEM-A",)),
-        ("УФ 002Б", "200", "RESERVE", ("OEM-B",)),
+    for reference_ordinal, offer, product, status, oems_for_listing in (
+        (1, "УФ 001Б", "100", "PRIMARY", ("OEM-A",)),
+        (2, "УФ 001Б", "101", "CONTROL", ("OEM-A",)),
+        (3, "УФ 002Б", "200", "RESERVE", ("OEM-B",)),
     ):
         memberships.append(
             importer.MembershipReference(
@@ -349,6 +349,7 @@ def reference_snapshot() -> importer.ProductionSnapshot:
                 product_family_id=str(uuid.uuid5(uuid.NAMESPACE_URL, f"family:{offer}:{product}")),
                 ozon_product_id=product,
                 seller_id=f"S{product}" if product != "101" else None,
+                reference_ordinal=reference_ordinal,
             )
         )
     return importer.ProductionSnapshot(
@@ -362,6 +363,31 @@ def reference_snapshot() -> importer.ProductionSnapshot:
         constraint_names=frozenset(importer.REQUIRED_CONSTRAINTS),
         index_names=frozenset(importer.REQUIRED_INDEXES),
     )
+
+
+def membership_source_rows(
+    snapshot: importer.ProductionSnapshot,
+) -> list[dict[str, object]]:
+    return [
+        {
+            "record_kind": "MEMBERSHIP_QUERY",
+            "query_text_exact": query_text,
+            "membership_id": membership.membership_id,
+            "offer_id": membership.offer_id,
+            "membership_status": membership.membership_status,
+            "matched_oem_set": list(membership.matched_oem_set),
+            "valid_from": membership.valid_from,
+            "valid_to": membership.valid_to,
+            "listing_id": membership.listing_id,
+            "product_family_id": membership.product_family_id,
+            "ozon_product_id": membership.ozon_product_id,
+            "seller_id": membership.seller_id,
+            "product_name": membership.product_name,
+            "reference_ordinal": membership.reference_ordinal,
+        }
+        for membership in snapshot.memberships
+        for query_text in membership.matched_oem_set
+    ]
 
 
 def write_artifacts(
@@ -689,7 +715,7 @@ class ReferenceLayerTests(SnapshotImporterTestCase):
             oems.append(importer.SkuOemReference(str(uuid.uuid4()), offer, query, True, reference - timedelta(days=1)))
             for slot in range(slots):
                 product = f"{index + 1}{slot:02d}"
-                memberships.append(importer.MembershipReference(str(uuid.uuid4()), offer, "PRIMARY", (query,), reference - timedelta(days=1), None, str(uuid.uuid4()), str(uuid.uuid4()), product, None))
+                memberships.append(importer.MembershipReference(str(uuid.uuid4()), offer, "PRIMARY", (query,), reference - timedelta(days=1), None, str(uuid.uuid4()), str(uuid.uuid4()), product, None, len(memberships) + 1))
         layer = importer.derive_reference_layer(replace(self.snapshot, oems=tuple(oems), memberships=tuple(memberships)), reference)
         self.assertEqual((len(layer.oem_by_query), len(layer.membership_by_slot)), (9, 87))
 
@@ -702,7 +728,12 @@ class ReferenceLayerTests(SnapshotImporterTestCase):
             importer.derive_reference_layer(replace(self.snapshot, oems=self.snapshot.oems[1:]), self.load().reference_at)
 
     def test_41_duplicate_historical_slot_is_conflict(self) -> None:
-        duplicate = replace(self.snapshot.memberships[0], membership_id=str(uuid.uuid4()), listing_id=str(uuid.uuid4()))
+        duplicate = replace(
+            self.snapshot.memberships[0],
+            membership_id=str(uuid.uuid4()),
+            listing_id=str(uuid.uuid4()),
+            reference_ordinal=4,
+        )
         with self.assertRaisesRegex(importer.ReferenceConflictError, "duplicate historical"):
             importer.derive_reference_layer(replace(self.snapshot, memberships=self.snapshot.memberships + (duplicate,)), self.load().reference_at)
 
@@ -754,6 +785,48 @@ class ReferenceLayerTests(SnapshotImporterTestCase):
     def test_72_hold_sku_without_memberships_is_excluded_by_references(self) -> None:
         layer = importer.derive_reference_layer(self.snapshot, self.load().reference_at)
         self.assertFalse(any(offer == "УФ 003Б" for offer, _ in layer.oem_by_query))
+
+    def test_87_missing_reference_ordinal_is_rejected(self) -> None:
+        rows = membership_source_rows(self.snapshot)
+        rows[0].pop("reference_ordinal")
+        with self.assertRaisesRegex(importer.DatabaseError, "invalid reference_ordinal"):
+            importer._membership_references_from_rows(rows)
+
+    def test_88_zero_reference_ordinal_is_rejected(self) -> None:
+        rows = membership_source_rows(self.snapshot)
+        rows[0]["reference_ordinal"] = 0
+        with self.assertRaisesRegex(importer.DatabaseError, "invalid reference_ordinal"):
+            importer._membership_references_from_rows(rows)
+
+    def test_89_negative_reference_ordinal_is_rejected(self) -> None:
+        rows = membership_source_rows(self.snapshot)
+        rows[0]["reference_ordinal"] = -1
+        with self.assertRaisesRegex(importer.DatabaseError, "invalid reference_ordinal"):
+            importer._membership_references_from_rows(rows)
+
+    def test_90_duplicate_reference_ordinal_across_memberships_is_rejected(self) -> None:
+        rows = membership_source_rows(self.snapshot)
+        rows[1]["reference_ordinal"] = rows[0]["reference_ordinal"]
+        with self.assertRaisesRegex(importer.DatabaseError, "multiple memberships"):
+            importer._membership_references_from_rows(rows)
+
+    def test_91_same_membership_with_inconsistent_ordinal_is_rejected(self) -> None:
+        rows = membership_source_rows(self.snapshot)
+        inconsistent = dict(rows[0])
+        inconsistent["reference_ordinal"] = 99
+        with self.assertRaisesRegex(importer.DatabaseError, "rows are inconsistent"):
+            importer._membership_references_from_rows(rows + [inconsistent])
+
+    def test_92_unordered_source_rows_are_sorted_by_reference_ordinal(self) -> None:
+        rows = list(reversed(membership_source_rows(self.snapshot)))
+        memberships = importer._membership_references_from_rows(rows)
+        self.assertEqual([membership.reference_ordinal for membership in memberships], [1, 2, 3])
+
+    def test_93_non_membership_reference_ordinal_must_be_null(self) -> None:
+        rows = membership_source_rows(self.snapshot)
+        rows.append({"record_kind": "PROFILE", "reference_ordinal": 4})
+        with self.assertRaisesRegex(importer.DatabaseError, "non-NULL"):
+            importer._membership_references_from_rows(rows)
 
 
 class PlanStateAndSafetyTests(SnapshotImporterTestCase):
@@ -934,6 +1007,23 @@ class PlanStateAndSafetyTests(SnapshotImporterTestCase):
             with self.assertRaisesRegex(RuntimeError, "test failure"):
                 importer.execute_write(connection, payload_path=self.bundle.payload_path, evidence_path=self.bundle.evidence_path, payload_sha256=self.bundle.payload_sha256, evidence_sha256=self.bundle.evidence_sha256)
         self.assertEqual(connection.rollbacks, 1)
+
+    def test_78_production_read_sql_uses_only_approved_mcp_surfaces(self) -> None:
+        source = "\n".join(importer.APPROVED_READ_SQL)
+        self.assertNotRegex(source, r"(?i)\b(?:FROM|JOIN)\s+public\.competitor_")
+        self.assertIn("mcp_read.competitor_reference_plan_source", source)
+        self.assertIn("mcp_read.competitor_snapshot_runs", source)
+        self.assertIn("mcp_read.competitor_snapshot_observations", source)
+        self.assertNotIn("FROM public.products", source)
+        self.assertRegex(
+            importer.REFERENCE_PLAN_SQL,
+            r"product_name\s*,\s*reference_ordinal\s+FROM\s+mcp_read\.competitor_reference_plan_source",
+        )
+
+    def test_79_write_targets_remain_unchanged_and_separate(self) -> None:
+        self.assertIn("INSERT INTO public.competitor_search_runs", importer.SEARCH_INSERT_SQL)
+        self.assertIn("INSERT INTO public.competitor_observations", importer.OBSERVATION_INSERT_SQL)
+        self.assertTrue(all("INSERT INTO" not in query.upper() for query in importer.APPROVED_READ_SQL))
 
 
 if __name__ == "__main__":

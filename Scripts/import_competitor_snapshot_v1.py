@@ -36,6 +36,140 @@ KNOWN_OLD_PRICE_STATUSES = COMPLETE_OLD_PRICE_STATUSES | {
 }
 MONITORED_MEMBERSHIP_STATUSES = {"PRIMARY", "RESERVE", "CONTROL"}
 
+REFERENCE_PLAN_SQL = """
+SELECT
+    record_kind,
+    offer_id,
+    watchlist_state,
+    sku_oem_id::text,
+    query_normalized,
+    oem_active,
+    oem_created_at,
+    membership_id::text,
+    membership_status,
+    matched_oem_set,
+    valid_from,
+    valid_to,
+    listing_id::text,
+    product_family_id::text,
+    ozon_product_id::text,
+    seller_id,
+    product_name,
+    reference_ordinal
+FROM mcp_read.competitor_reference_plan_source
+"""
+
+SNAPSHOT_COUNTS_SQL = """
+SELECT
+    (SELECT count(*) FROM mcp_read.competitor_snapshot_runs) AS search_runs,
+    (SELECT count(*) FROM mcp_read.competitor_snapshot_observations) AS observations,
+    0::bigint AS reviews,
+    (SELECT count(*) FROM mcp_read.competitor_findings) AS findings
+"""
+
+WRITE_TARGET_COLUMNS_SQL = """
+SELECT
+    rel.relname AS table_name,
+    att.attname AS column_name,
+    format_type(att.atttypid, att.atttypmod) AS data_type,
+    CASE WHEN att.attnotnull THEN 'NO' ELSE 'YES' END AS is_nullable,
+    att.atthasdef AS has_default
+FROM pg_catalog.pg_class rel
+JOIN pg_catalog.pg_namespace nsp ON nsp.oid = rel.relnamespace
+JOIN pg_catalog.pg_attribute att ON att.attrelid = rel.oid
+WHERE nsp.nspname = 'public'
+  AND rel.relname IN ('competitor_search_runs', 'competitor_observations')
+  AND rel.relkind IN ('r', 'p')
+  AND att.attnum > 0
+  AND NOT att.attisdropped
+ORDER BY rel.relname, att.attnum
+"""
+
+WRITE_TARGET_CONSTRAINTS_SQL = """
+SELECT con.conname
+FROM pg_catalog.pg_constraint con
+JOIN pg_catalog.pg_class rel ON rel.oid = con.conrelid
+JOIN pg_catalog.pg_namespace nsp ON nsp.oid = rel.relnamespace
+WHERE nsp.nspname = 'public'
+  AND rel.relname IN ('competitor_search_runs', 'competitor_observations')
+"""
+
+WRITE_TARGET_INDEXES_SQL = """
+SELECT idx.relname AS indexname
+FROM pg_catalog.pg_index link
+JOIN pg_catalog.pg_class rel ON rel.oid = link.indrelid
+JOIN pg_catalog.pg_namespace nsp ON nsp.oid = rel.relnamespace
+JOIN pg_catalog.pg_class idx ON idx.oid = link.indexrelid
+WHERE nsp.nspname = 'public'
+  AND rel.relname IN ('competitor_search_runs', 'competitor_observations')
+"""
+
+SNAPSHOT_RUNS_SQL = """
+SELECT
+    search_run_id::text,
+    offer_id,
+    sku_oem_id::text,
+    query_kind,
+    query_text_exact,
+    query_normalized,
+    region_key,
+    location_label,
+    captured_at,
+    status,
+    page_count_observed,
+    result_count_observed,
+    collection_ref,
+    raw_source_ref
+FROM mcp_read.competitor_snapshot_runs
+WHERE collection_ref = ANY(%s::text[])
+"""
+
+SNAPSHOT_OBSERVATIONS_SQL = """
+SELECT
+    observation_id::text,
+    search_run_id::text,
+    listing_id::text,
+    membership_id::text,
+    captured_at,
+    enrichment_captured_at,
+    page_number,
+    position_on_page,
+    rank,
+    ad_flag,
+    bank_price,
+    other_payment_price,
+    old_price,
+    currency,
+    rating,
+    reviews_count_observed,
+    reviews_scope,
+    purchase_count_observed,
+    purchase_indicator_raw,
+    availability_status,
+    availability_raw,
+    observed_oem_raw,
+    observed_dimensions_raw,
+    observed_length_mm,
+    observed_width_mm,
+    observed_height_mm,
+    carbon_claim_raw,
+    origin_raw,
+    quality_status,
+    quality_flags,
+    source_ref,
+    raw_ref,
+    observation_ref
+FROM mcp_read.competitor_snapshot_observations
+WHERE search_run_id = ANY(%s::uuid[])
+"""
+
+APPROVED_READ_SQL = (
+    REFERENCE_PLAN_SQL,
+    SNAPSHOT_COUNTS_SQL,
+    SNAPSHOT_RUNS_SQL,
+    SNAPSHOT_OBSERVATIONS_SQL,
+)
+
 SEARCH_INSERT_COLUMNS = (
     "search_run_id",
     "offer_id",
@@ -174,6 +308,8 @@ class MembershipReference:
     product_family_id: str
     ozon_product_id: str
     seller_id: str | None
+    reference_ordinal: int
+    product_name: str | None = None
 
 
 @dataclass(frozen=True)
@@ -880,10 +1016,34 @@ def membership_valid_at(reference: MembershipReference, reference_at: datetime) 
     )
 
 
+def order_memberships_by_reference_ordinal(
+    memberships: Sequence[MembershipReference],
+) -> tuple[MembershipReference, ...]:
+    ordinal_by_membership: dict[str, int] = {}
+    membership_by_ordinal: dict[int, str] = {}
+    for membership in memberships:
+        ordinal = membership.reference_ordinal
+        if type(ordinal) is not int or ordinal <= 0:
+            raise ReferenceConflictError(
+                "REFERENCE_CONFLICT: membership reference_ordinal must be a positive integer"
+            )
+        existing_ordinal = ordinal_by_membership.setdefault(membership.membership_id, ordinal)
+        if existing_ordinal != ordinal:
+            raise ReferenceConflictError(
+                "REFERENCE_CONFLICT: membership reference_ordinal is inconsistent"
+            )
+        existing_membership = membership_by_ordinal.setdefault(ordinal, membership.membership_id)
+        if existing_membership != membership.membership_id:
+            raise ReferenceConflictError(
+                "REFERENCE_CONFLICT: duplicate reference_ordinal across memberships"
+            )
+    return tuple(sorted(memberships, key=lambda membership: membership.reference_ordinal))
+
+
 def derive_reference_layer(snapshot: ProductionSnapshot, reference_at: datetime) -> ReferenceLayer:
     memberships = [
         reference
-        for reference in snapshot.memberships
+        for reference in order_memberships_by_reference_ordinal(snapshot.memberships)
         if reference.membership_status in MONITORED_MEMBERSHIP_STATUSES
         and membership_valid_at(reference, reference_at)
     ]
@@ -1194,60 +1354,68 @@ def _fetch_dicts(cursor: Any, query: str, parameters: tuple[object, ...] = ()) -
     return [dict(zip(names, row)) for row in cursor.fetchall()]
 
 
+def _membership_references_from_rows(
+    reference_rows: Sequence[Mapping[str, Any]],
+) -> tuple[MembershipReference, ...]:
+    membership_by_id: dict[str, MembershipReference] = {}
+    membership_by_ordinal: dict[int, str] = {}
+    for row in reference_rows:
+        record_kind = row["record_kind"]
+        reference_ordinal = row.get("reference_ordinal")
+        if record_kind in {"PROFILE", "SKU_OEM"}:
+            if reference_ordinal is not None:
+                raise DatabaseError(
+                    "Non-membership reference-plan row has a non-NULL reference_ordinal"
+                )
+            continue
+        if record_kind != "MEMBERSHIP_QUERY":
+            continue
+        if type(reference_ordinal) is not int or reference_ordinal <= 0:
+            raise DatabaseError(
+                "Membership reference-plan row has an invalid reference_ordinal"
+            )
+        membership_id = row["membership_id"]
+        ordinal_owner = membership_by_ordinal.setdefault(reference_ordinal, membership_id)
+        if ordinal_owner != membership_id:
+            raise DatabaseError(
+                "Reference-plan reference_ordinal belongs to multiple memberships"
+            )
+        membership = MembershipReference(
+            membership_id=membership_id,
+            offer_id=row["offer_id"],
+            membership_status=row["membership_status"],
+            matched_oem_set=tuple(row["matched_oem_set"]),
+            valid_from=row["valid_from"],
+            valid_to=row["valid_to"],
+            listing_id=row["listing_id"],
+            product_family_id=row["product_family_id"],
+            ozon_product_id=row["ozon_product_id"],
+            seller_id=row["seller_id"],
+            reference_ordinal=reference_ordinal,
+            product_name=row["product_name"],
+        )
+        existing = membership_by_id.setdefault(membership.membership_id, membership)
+        if existing != membership:
+            raise DatabaseError("Reference-plan membership rows are inconsistent")
+    return order_memberships_by_reference_ordinal(tuple(membership_by_id.values()))
+
+
 def read_production_snapshot(connection: Any, reference_at: datetime) -> ProductionSnapshot:
     """Read schema and all versioned references; no history facts are changed."""
 
     try:
         with connection.cursor() as cursor:
-            profile_rows = _fetch_dicts(cursor, "SELECT offer_id, watchlist_state FROM public.competitor_sku_profiles")
-            oem_rows = _fetch_dicts(
-                cursor,
-                """SELECT sku_oem_id::text, offer_id, oem_normalized, active, created_at
-                     FROM public.competitor_sku_oems""",
-            )
-            membership_rows = _fetch_dicts(
-                cursor,
-                """SELECT m.membership_id::text, m.offer_id, m.membership_status,
-                          m.matched_oem_set, m.valid_from, m.valid_to,
-                          l.listing_id::text, l.product_family_id::text,
-                          l.ozon_product_id::text, l.seller_id
-                     FROM public.competitor_watchlist_memberships m
-                     JOIN public.competitor_listings l ON l.listing_id=m.listing_id
-                     JOIN public.competitor_product_families f
-                       ON f.product_family_id=l.product_family_id""",
-            )
-            count_row = _fetch_dicts(
-                cursor,
-                """SELECT
-                    (SELECT count(*) FROM public.competitor_search_runs) AS search_runs,
-                    (SELECT count(*) FROM public.competitor_observations) AS observations,
-                    (SELECT count(*) FROM public.competitor_reviews) AS reviews,
-                    (SELECT count(*) FROM public.competitor_findings) AS findings""",
-            )[0]
-            column_rows = _fetch_dicts(
-                cursor,
-                """SELECT table_name,column_name,data_type,is_nullable,
-                          column_default IS NOT NULL AS has_default
-                     FROM information_schema.columns
-                    WHERE table_schema='public'
-                      AND table_name IN ('competitor_search_runs','competitor_observations')""",
-            )
-            constraint_rows = _fetch_dicts(
-                cursor,
-                """SELECT con.conname FROM pg_constraint con
-                     JOIN pg_class rel ON rel.oid=con.conrelid
-                     JOIN pg_namespace nsp ON nsp.oid=rel.relnamespace
-                    WHERE nsp.nspname='public'
-                      AND rel.relname IN ('competitor_search_runs','competitor_observations')""",
-            )
-            index_rows = _fetch_dicts(
-                cursor,
-                """SELECT indexname FROM pg_indexes
-                    WHERE schemaname='public'
-                      AND tablename IN ('competitor_search_runs','competitor_observations')""",
-            )
+            reference_rows = _fetch_dicts(cursor, REFERENCE_PLAN_SQL)
+            count_row = _fetch_dicts(cursor, SNAPSHOT_COUNTS_SQL)[0]
+            column_rows = _fetch_dicts(cursor, WRITE_TARGET_COLUMNS_SQL)
+            constraint_rows = _fetch_dicts(cursor, WRITE_TARGET_CONSTRAINTS_SQL)
+            index_rows = _fetch_dicts(cursor, WRITE_TARGET_INDEXES_SQL)
     except Exception as error:
         raise DatabaseError("Read-only production reference reconciliation failed") from error
+
+    profile_rows = [row for row in reference_rows if row["record_kind"] == "PROFILE"]
+    oem_rows = [row for row in reference_rows if row["record_kind"] == "SKU_OEM"]
+    memberships = _membership_references_from_rows(reference_rows)
 
     schema: dict[str, list[SchemaColumn]] = {
         "competitor_search_runs": [],
@@ -1268,27 +1436,13 @@ def read_production_snapshot(connection: Any, reference_at: datetime) -> Product
             SkuOemReference(
                 sku_oem_id=row["sku_oem_id"],
                 offer_id=row["offer_id"],
-                oem_normalized=row["oem_normalized"],
-                active=bool(row["active"]),
-                created_at=row["created_at"],
+                oem_normalized=row["query_normalized"],
+                active=bool(row["oem_active"]),
+                created_at=row["oem_created_at"],
             )
             for row in oem_rows
         ),
-        memberships=tuple(
-            MembershipReference(
-                membership_id=row["membership_id"],
-                offer_id=row["offer_id"],
-                membership_status=row["membership_status"],
-                matched_oem_set=tuple(row["matched_oem_set"]),
-                valid_from=row["valid_from"],
-                valid_to=row["valid_to"],
-                listing_id=row["listing_id"],
-                product_family_id=row["product_family_id"],
-                ozon_product_id=row["ozon_product_id"],
-                seller_id=row["seller_id"],
-            )
-            for row in membership_rows
-        ),
+        memberships=memberships,
         history_counts={name: int(count_row[name]) for name in count_row},
         search_rows=(),
         observation_rows=(),
@@ -1307,30 +1461,12 @@ def read_batch_history(
         with connection.cursor() as cursor:
             search_rows = _fetch_dicts(
                 cursor,
-                """SELECT search_run_id::text,offer_id,sku_oem_id::text,
-                          query_kind,query_text_exact,query_normalized,
-                          region_key,location_label,captured_at,status,
-                          page_count_observed,result_count_observed,
-                          collection_ref,raw_source_ref
-                     FROM public.competitor_search_runs
-                    WHERE collection_ref=ANY(%s::text[])""",
+                SNAPSHOT_RUNS_SQL,
                 (collection_refs,),
             )
             observation_rows = _fetch_dicts(
                 cursor,
-                """SELECT observation_id::text,search_run_id::text,
-                          listing_id::text,membership_id::text,captured_at,
-                          enrichment_captured_at,page_number,position_on_page,
-                          rank,ad_flag,bank_price,other_payment_price,old_price,
-                          currency,rating,reviews_count_observed,reviews_scope,
-                          purchase_count_observed,purchase_indicator_raw,
-                          availability_status,availability_raw,observed_oem_raw,
-                          observed_dimensions_raw,observed_length_mm,
-                          observed_width_mm,observed_height_mm,carbon_claim_raw,
-                          origin_raw,quality_status,quality_flags,source_ref,
-                          raw_ref,observation_ref
-                     FROM public.competitor_observations
-                    WHERE search_run_id=ANY(%s::uuid[])""",
+                SNAPSHOT_OBSERVATIONS_SQL,
                 (search_run_ids,),
             )
     except Exception as error:
