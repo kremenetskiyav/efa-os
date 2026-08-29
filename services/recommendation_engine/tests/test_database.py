@@ -10,9 +10,11 @@ from config import DatabaseConfig
 from database import (
     ANOMALY_ECONOMICS_QUERY,
     CALCULATOR_SOURCE_QUERY,
+    CPC_LATEST_PRODUCT_QUERY,
     PRODUCT_ECONOMICS_QUERY,
     PROMOTION_MONITORING_QUERY,
     fetch_calculator_source_rows,
+    fetch_latest_product_cpc_observations,
 )
 
 
@@ -112,3 +114,63 @@ class UnitEconomicsQueryTests(unittest.TestCase):
         self.assertEqual(result[0].raw_acquiring, Decimal("6.24"))
         self.assertEqual(cursor.executed[0], CALCULATOR_SOURCE_QUERY)
         self.assertEqual(cursor.executed[1], (["УФ 001Б"],))
+
+    def test_cpc_query_uses_product_rows_from_curated_view_only(self) -> None:
+        self.assertIn("FROM mcp_read.product_cpc_daily", CPC_LATEST_PRODUCT_QUERY)
+        self.assertIn("data_scope = 'PRODUCT'", CPC_LATEST_PRODUCT_QUERY)
+        self.assertIn("DISTINCT ON (offer_id)", CPC_LATEST_PRODUCT_QUERY)
+        self.assertIn("business_date DESC, observed_at DESC", CPC_LATEST_PRODUCT_QUERY)
+        self.assertNotIn("cpc_advertising_daily", CPC_LATEST_PRODUCT_QUERY)
+        for forbidden in ("INSERT ", "UPDATE ", "DELETE ", "ALTER ", "DROP "):
+            self.assertNotIn(forbidden, CPC_LATEST_PRODUCT_QUERY.upper())
+
+    def test_cpc_adapter_preserves_nullable_observed_metrics(self) -> None:
+        observed_at = datetime(2026, 8, 25, 4, 40, tzinfo=timezone.utc)
+        rows = [(
+            observed_at.date(), "PRODUCT", "УФ 004Б", 1, 0, 0, 0, None,
+            Decimal("0.00"), 1, Decimal("805.00"), Decimal("0.00"),
+            Decimal("0.00"), None, None, "valid", "SUCCESS_NONZERO",
+            observed_at,
+        )]
+
+        class Cursor:
+            def __init__(self):
+                self.executed = None
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return None
+
+            def execute(self, query, params):
+                self.executed = (query, params)
+
+            def fetchall(self):
+                return rows
+
+        class Connection:
+            def __init__(self, cursor):
+                self._cursor = cursor
+
+            def cursor(self):
+                return self._cursor
+
+        cursor = Cursor()
+
+        @contextmanager
+        def connection_factory(_config):
+            yield Connection(cursor)
+
+        with patch("database.open_read_only_connection", side_effect=connection_factory):
+            result = fetch_latest_product_cpc_observations(
+                DatabaseConfig("host", 5432, "db", "user", "password"),
+                {"УФ 004Б"},
+            )
+
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].offer_id, "УФ 004Б")
+        self.assertEqual(result[0].spend, Decimal("0.00"))
+        self.assertIsNone(result[0].general_drr_percent)
+        self.assertEqual(cursor.executed[0], CPC_LATEST_PRODUCT_QUERY)
+        self.assertEqual(cursor.executed[1], (["УФ 004Б"],))

@@ -5,6 +5,7 @@ from collections import defaultdict
 from contextlib import contextmanager
 from typing import Collection, Iterator
 
+from advertising_overlay import CpcObservation
 from config import DatabaseConfig
 from input_resolver import CalculatorSourceRow
 from models import PriceWindow, ProductEconomics, PromotionState
@@ -183,6 +184,19 @@ WHERE p.offer_id = ANY(%s)
 ORDER BY p.offer_id
 """
 
+CPC_LATEST_PRODUCT_QUERY = """
+SELECT DISTINCT ON (offer_id)
+       business_date, data_scope, offer_id, campaigns_count,
+       active_campaigns_count, views, clicks, ctr_percent, spend,
+       attributed_orders, attributed_revenue, product_gmv, drr_percent,
+       general_drr_percent, average_bid, data_quality_status,
+       collection_status, observed_at
+FROM mcp_read.product_cpc_daily
+WHERE data_scope = 'PRODUCT'
+  AND offer_id = ANY(%s)
+ORDER BY offer_id, business_date DESC, observed_at DESC
+"""
+
 @contextmanager
 def open_read_only_connection(config: DatabaseConfig) -> Iterator[object]:
     try:
@@ -284,3 +298,25 @@ def fetch_calculator_source_rows(
         )
         for row in rows
     ]
+
+
+def fetch_latest_product_cpc_observations(
+    config: DatabaseConfig,
+    offer_ids: Collection[str],
+) -> list[CpcObservation]:
+    requested_offer_ids = tuple(sorted(set(offer_ids)))
+    if not requested_offer_ids:
+        return []
+    try:
+        with open_read_only_connection(config) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    CPC_LATEST_PRODUCT_QUERY,
+                    (list(requested_offer_ids),),
+                )
+                rows = cursor.fetchall()
+    except DatabaseError:
+        raise
+    except Exception as error:
+        raise DatabaseError("Read-only product CPC query failed") from error
+    return [CpcObservation(*row) for row in rows]
