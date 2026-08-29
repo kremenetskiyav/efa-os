@@ -15,7 +15,9 @@ from typing import Any, Callable, Mapping, Sequence
 
 CONTRACT_VERSION = "competitor_snapshot_analysis.v1"
 DERIVED_BATCH_CONTRACT = "competitor_snapshot_derived_batch.v1"
-EXPECTED_RUNS_PER_BATCH = 9
+# Retained only for the standalone legacy CLI. Recurring daily-cycle callers
+# supply the exact query set from their frozen reference plan.
+LEGACY_RUNS_PER_BATCH = 9
 BATCH_GAP = timedelta(minutes=5)
 ACTIVE_OFFERS = ("УФ 001Б", "УФ 002Б", "УФ 004Б", "УФ 005Б")
 ALL_OFFERS = ("УФ 001Б", "УФ 002Б", "УФ 003Б", "УФ 004Б", "УФ 005Б")
@@ -30,9 +32,14 @@ SELECT
     r.captured_at AS run_captured_at,
     r.status AS run_status,
     r.collection_ref,
+    r.raw_source_ref,
     o.observation_id::text,
-    l.ozon_product_id::text,
-    m.membership_status,
+    o.observation_ref,
+    o.listing_id::text,
+    o.source_ref,
+    o.raw_ref,
+    o.ozon_product_id::text,
+    o.membership_status,
     o.captured_at,
     o.enrichment_captured_at,
     o.page_number,
@@ -59,26 +66,23 @@ SELECT
     o.origin_raw,
     o.quality_status,
     o.quality_flags
-FROM public.competitor_search_runs AS r
-JOIN public.competitor_observations AS o
+FROM mcp_read.competitor_snapshot_runs AS r
+JOIN mcp_read.competitor_snapshot_observations AS o
   ON o.search_run_id = r.search_run_id
-JOIN public.competitor_listings AS l
-  ON l.listing_id = o.listing_id
-LEFT JOIN public.competitor_watchlist_memberships AS m
-  ON m.membership_id = o.membership_id
 WHERE r.collection_ref LIKE 'cm-baseline-v1:run:%'
    OR r.collection_ref LIKE 'cm-snapshot-v1:run:%'
 ORDER BY r.captured_at, r.collection_ref, r.offer_id,
-         r.query_text_exact, l.ozon_product_id
+         r.query_text_exact, o.ozon_product_id
 """
 
-COUNTS_QUERY = """
+OPERATIONAL_COUNTS_QUERY = """
 SELECT
-  (SELECT count(*) FROM public.competitor_search_runs) AS search_runs,
-  (SELECT count(*) FROM public.competitor_observations) AS observations,
-  (SELECT count(*) FROM public.competitor_reviews) AS reviews,
-  (SELECT count(*) FROM public.competitor_findings) AS findings
+  (SELECT count(*) FROM mcp_read.competitor_snapshot_runs) AS search_runs,
+  (SELECT count(*) FROM mcp_read.competitor_snapshot_observations) AS observations,
+  (SELECT count(*) FROM mcp_read.competitor_findings) AS findings
 """
+
+APPROVED_READ_SQL = (HISTORY_QUERY, OPERATIONAL_COUNTS_QUERY)
 
 
 class AnalyzerError(RuntimeError):
@@ -219,8 +223,9 @@ def _unique_runs(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
 def resolve_snapshot_batches(
     rows: Sequence[Mapping[str, Any]],
     *,
-    expected_runs: int = EXPECTED_RUNS_PER_BATCH,
+    expected_runs: int | None = LEGACY_RUNS_PER_BATCH,
     batch_gap: timedelta = BATCH_GAP,
+    expected_queries_at: Callable[[datetime], Sequence[tuple[str, str]]] | None = None,
 ) -> tuple[SnapshotBatch, ...]:
     if not rows:
         raise BatchResolutionError("No snapshot history is available")
@@ -237,13 +242,27 @@ def resolve_snapshot_batches(
 
     batches: list[SnapshotBatch] = []
     for cluster in clusters:
-        if len(cluster) != expected_runs:
+        reference_at = min(row["run_captured_at"] for row in cluster)
+        expected_queries = (
+            frozenset(expected_queries_at(reference_at))
+            if expected_queries_at is not None
+            else None
+        )
+        authoritative_run_count = (
+            len(expected_queries) if expected_queries is not None else expected_runs
+        )
+        if authoritative_run_count is None:
+            authoritative_run_count = len(cluster)
+        if len(cluster) != authoritative_run_count:
             raise BatchResolutionError(
-                f"Incomplete batch structure: expected={expected_runs} actual={len(cluster)}"
+                "Incomplete batch structure: "
+                f"expected={authoritative_run_count} actual={len(cluster)}"
             )
         query_keys = {(row["offer_id"], row["query_text_exact"]) for row in cluster}
-        if len(query_keys) != expected_runs:
+        if len(query_keys) != authoritative_run_count:
             raise BatchResolutionError("Batch query identities are not unique")
+        if expected_queries is not None and query_keys != expected_queries:
+            raise BatchResolutionError("Batch query set differs from the frozen reference plan")
         regions = {row["region_key"] for row in cluster}
         if len(regions) != 1:
             raise BatchResolutionError("Batch contains multiple regions")
@@ -259,7 +278,7 @@ def resolve_snapshot_batches(
             SnapshotBatch(
                 source_kind=next(iter(kinds)),
                 derived_batch_id=_derived_batch_id(refs),
-                reference_at=min(row["run_captured_at"] for row in cluster),
+                reference_at=reference_at,
                 captured_through=max(row["run_captured_at"] for row in cluster),
                 region_key=next(iter(regions)),
                 run_ids=run_ids,
@@ -270,14 +289,59 @@ def resolve_snapshot_batches(
     return tuple(batches)
 
 
-def resolve_snapshot_pair(rows: Sequence[Mapping[str, Any]]) -> tuple[SnapshotBatch, SnapshotBatch]:
-    batches = resolve_snapshot_batches(rows)
-    if len(batches) < 2:
+def resolve_snapshot_pair(
+    rows: Sequence[Mapping[str, Any]],
+    *,
+    current_collection_refs: Sequence[str] | None = None,
+    expected_queries_at: Callable[[datetime], Sequence[tuple[str, str]]] | None = None,
+) -> tuple[SnapshotBatch, SnapshotBatch]:
+    batches = resolve_snapshot_batches(
+        rows,
+        expected_runs=None if expected_queries_at is not None else LEGACY_RUNS_PER_BATCH,
+        expected_queries_at=expected_queries_at,
+    )
+    if current_collection_refs is None:
+        if len(batches) < 2:
+            raise BatchResolutionError("At least two complete batches are required")
+        current = batches[-1]
+    else:
+        expected_refs = frozenset(str(value) for value in current_collection_refs)
+        matches = [
+            batch for batch in batches
+            if frozenset(batch.collection_refs) == expected_refs
+        ]
+        if len(matches) != 1:
+            raise BatchResolutionError("Exact current batch identity was not resolved")
+        current = matches[0]
+    previous_candidates = [
+        batch for batch in batches if batch.reference_at < current.reference_at
+    ]
+    if not previous_candidates:
         raise BatchResolutionError("At least two complete batches are required")
-    previous, current = batches[-2], batches[-1]
+    previous = max(previous_candidates, key=lambda batch: batch.reference_at)
     if current.reference_at <= previous.reference_at:
         raise BatchResolutionError("Current snapshot is not newer than previous")
     return previous, current
+
+
+def deterministic_source_counts(
+    rows: Sequence[Mapping[str, Any]], current: SnapshotBatch
+) -> dict[str, int]:
+    """Return canonical Analyzer input coverage through the selected current batch.
+
+    Review and finding table totals are deliberately not inputs to Analysis v1.
+    Their canonical values remain zero because reviews are observed per snapshot
+    and findings are derived downstream from the completed analysis artifact.
+    """
+    eligible = [
+        row for row in rows if row["run_captured_at"] <= current.captured_through
+    ]
+    return {
+        "search_runs": len({str(row["search_run_id"]) for row in eligible}),
+        "observations": len({str(row["observation_id"]) for row in eligible}),
+        "reviews": 0,
+        "findings": 0,
+    }
 
 
 def _slot_key(row: Mapping[str, Any]) -> tuple[str, str, str]:
@@ -676,9 +740,10 @@ def _fetch_dicts(cursor: Any, query: str) -> list[dict[str, Any]]:
     return [dict(zip(names, row)) for row in cursor.fetchall()]
 
 
-def read_counts(connection: Any) -> dict[str, int]:
+def read_operational_counts(connection: Any) -> dict[str, int]:
+    """Read live diagnostics used only by the in-memory read-consistency guard."""
     with connection.cursor() as cursor:
-        rows = _fetch_dicts(cursor, COUNTS_QUERY)
+        rows = _fetch_dicts(cursor, OPERATIONAL_COUNTS_QUERY)
     return {key: int(value) for key, value in rows[0].items()}
 
 
@@ -688,11 +753,12 @@ def read_history(connection: Any) -> list[dict[str, Any]]:
 
 
 def run_analysis(connection: Any) -> dict[str, Any]:
-    before = read_counts(connection)
+    before = read_operational_counts(connection)
     rows = read_history(connection)
     previous, current = resolve_snapshot_pair(rows)
-    report = build_analysis(previous, current, before)
-    after = read_counts(connection)
+    source_counts = deterministic_source_counts(rows, current)
+    report = build_analysis(previous, current, source_counts)
+    after = read_operational_counts(connection)
     if before != after:
         raise DataContractError("Source table counts changed during read-only analysis")
     connection.rollback()

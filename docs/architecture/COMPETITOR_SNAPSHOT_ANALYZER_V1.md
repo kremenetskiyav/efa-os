@@ -4,7 +4,7 @@
 
 `Scripts/analyze_competitor_snapshots_v1.py` produces a factual, derived comparison of the latest two complete Competitor Monitor snapshot batches. It reads `competitor_search_runs`, `competitor_observations`, listings, and watchlist membership identity. It does not create findings, reviews, signals, or any database state.
 
-The analyzer has no database write mode. PostgreSQL connections set `default_transaction_read_only=on`; source counts are read before and after analysis and must remain identical. The only optional output is a local JSON report selected with `--output`.
+The analyzer has no database write mode. PostgreSQL connections set `default_transaction_read_only=on`. Live read-surface counts are checked before and after analysis only as an in-memory operational consistency guard; they are not serialized into the canonical artifact. The only optional output is a local JSON report selected with `--output`.
 
 ## Snapshot pair resolution
 
@@ -61,13 +61,13 @@ Comparisons retain previous/current quality statuses and flags. Two valid found 
 The report contract is `competitor_snapshot_analysis.v1` and contains:
 
 - metadata for the previous and current derived snapshot batches;
-- source-count evidence;
+- deterministic Analyzer input coverage through the selected current snapshot: distinct eligible search runs and observations, with canonical `reviews=0` and `findings=0` because neither mutable downstream table is an Analyzer input;
 - slot reconciliation and dimension summaries;
 - per-SKU summaries for monitored SKUs, with `УФ 003Б` explicitly marked `NO_ACTIVE_MONITORING`;
 - a separate `CONTROL` membership summary;
 - one factual comparison object per reconciled logical slot.
 
-All summary dimensions must total `slots_total`. Per-SKU slot totals must also equal `slots_total`. Analyzer validation rejects duplicates, summary mismatches, and source-count inconsistencies.
+All summary dimensions must total `slots_total`. Per-SKU slot totals must also equal `slots_total`. Analyzer validation rejects duplicates and summary mismatches. Standalone Analyzer and Daily Cycle use the same deterministic source-count helper, so later review or finding persistence cannot change Analysis v1 bytes.
 
 ## Safety and non-goals
 

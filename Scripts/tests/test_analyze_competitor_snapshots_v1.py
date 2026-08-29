@@ -1,12 +1,17 @@
 from __future__ import annotations
 
 import copy
+import hashlib
+import inspect
+import json
+import os
 import re
 import sys
 import unittest
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -20,6 +25,14 @@ import analyze_competitor_snapshots_v1 as analyzer  # noqa: E402
 UTC = timezone.utc
 T0 = datetime(2026, 8, 25, 18, 22, 30, tzinfo=UTC)
 T1 = datetime(2026, 8, 26, 6, 14, 43, tzinfo=UTC)
+CANONICAL_T1_SHA256 = "99483c51928b7073f00cfc2f93c2fcafd52e25a94676774091b21740f24e03dd"
+
+
+def canonical_bytes(report: dict) -> bytes:
+    return (
+        json.dumps(report, ensure_ascii=False, sort_keys=True, indent=2, allow_nan=False)
+        + "\n"
+    ).encode("utf-8")
 
 
 def observation(
@@ -304,6 +317,134 @@ class BatchAndSafetyTests(unittest.TestCase):
         after = observation(captured_at=T1, source_kind="SNAPSHOT_V1")
         report = analyzer.build_analysis(snapshot([before], "BASELINE_V1", T0), snapshot([after], "SNAPSHOT_V1", T1), {})
         self.assertEqual("competitor_snapshot_analysis.v1", report["contract_version"])
+
+    def test_38_dynamic_query_plan_replaces_static_count_authority(self) -> None:
+        rows = self.history()
+        expected = lambda _reference: tuple(
+            (row["offer_id"], row["query_text_exact"])
+            for row in rows[:9]
+        )
+        batches = analyzer.resolve_snapshot_batches(
+            rows, expected_runs=None, expected_queries_at=expected
+        )
+        self.assertEqual([len(batch.run_ids) for batch in batches], [9, 9])
+
+    def test_39_dynamic_query_plan_mismatch_rejected(self) -> None:
+        rows = self.history()
+        with self.assertRaisesRegex(analyzer.BatchResolutionError, "expected=1"):
+            analyzer.resolve_snapshot_batches(
+                rows,
+                expected_runs=None,
+                expected_queries_at=lambda _reference: (("УФ 001Б", "OTHER"),),
+            )
+
+    def test_40_exact_current_batch_identity(self) -> None:
+        rows = self.history()
+        refs = tuple(sorted({row["collection_ref"] for row in rows[9:]}))
+        previous, current = analyzer.resolve_snapshot_pair(
+            rows, current_collection_refs=refs
+        )
+        self.assertEqual(current.source_kind, "SNAPSHOT_V1")
+        self.assertLess(previous.reference_at, current.reference_at)
+
+    def test_41_latest_complete_before_current_allows_calendar_gap(self) -> None:
+        rows = self.history()
+        for row in rows[9:]:
+            row["run_captured_at"] += timedelta(days=5)
+            row["captured_at"] += timedelta(days=5)
+        refs = tuple(sorted({row["collection_ref"] for row in rows[9:]}))
+        previous, current = analyzer.resolve_snapshot_pair(rows, current_collection_refs=refs)
+        self.assertGreater(current.reference_at - previous.reference_at, timedelta(days=4))
+
+    def test_42_production_reads_use_only_approved_mcp_surfaces(self) -> None:
+        source = "\n".join(analyzer.APPROVED_READ_SQL)
+        self.assertNotRegex(source, r"(?i)\b(?:FROM|JOIN)\s+public\.competitor_")
+        self.assertIn("mcp_read.competitor_snapshot_runs", source)
+        self.assertIn("mcp_read.competitor_snapshot_observations", source)
+        self.assertIn("mcp_read.competitor_findings", source)
+
+    def _run_with_operational_counts(self, counts: dict[str, int]) -> bytes:
+        connection = mock.Mock()
+        with (
+            mock.patch.object(analyzer, "read_history", return_value=self.history()),
+            mock.patch.object(
+                analyzer, "read_operational_counts", side_effect=[counts, counts]
+            ),
+        ):
+            report = analyzer.run_analysis(connection)
+        connection.rollback.assert_called_once_with()
+        return canonical_bytes(report)
+
+    def test_43_persisted_findings_zero_to_ten_do_not_change_analysis(self) -> None:
+        zero = {"search_runs": 18, "observations": 18, "findings": 0}
+        persisted = {**zero, "findings": 10}
+        self.assertEqual(
+            self._run_with_operational_counts(zero),
+            self._run_with_operational_counts(persisted),
+        )
+
+    def test_44_further_finding_growth_does_not_change_analysis(self) -> None:
+        ten = {"search_runs": 18, "observations": 18, "findings": 10}
+        further = {**ten, "findings": 1000}
+        self.assertEqual(
+            self._run_with_operational_counts(ten),
+            self._run_with_operational_counts(further),
+        )
+
+    def test_45_review_table_diagnostics_do_not_change_analysis(self) -> None:
+        zero = {"search_runs": 18, "observations": 18, "findings": 10, "reviews": 0}
+        changed = {**zero, "reviews": 200}
+        self.assertEqual(
+            self._run_with_operational_counts(zero),
+            self._run_with_operational_counts(changed),
+        )
+
+    def test_46_eligible_input_coverage_changes_deterministically(self) -> None:
+        rows = self.history()
+        _, current = analyzer.resolve_snapshot_pair(rows)
+        baseline = analyzer.deterministic_source_counts(rows, current)
+        future = copy.deepcopy(rows[0])
+        future.update(
+            search_run_id="future-run",
+            observation_id="future-observation",
+            run_captured_at=current.captured_through + timedelta(seconds=1),
+        )
+        self.assertEqual(
+            baseline,
+            analyzer.deterministic_source_counts([*rows, future], current),
+        )
+        eligible = copy.deepcopy(future)
+        eligible.update(
+            search_run_id="eligible-run",
+            observation_id="eligible-observation",
+            run_captured_at=current.captured_through,
+        )
+        changed = analyzer.deterministic_source_counts([*rows, eligible], current)
+        self.assertEqual(baseline["search_runs"] + 1, changed["search_runs"])
+        self.assertEqual(baseline["observations"] + 1, changed["observations"])
+        self.assertEqual((0, 0), (changed["reviews"], changed["findings"]))
+
+    def test_47_canonical_helper_has_no_downstream_count_dependency(self) -> None:
+        source = inspect.getsource(analyzer.deterministic_source_counts)
+        self.assertNotIn("competitor_findings", source)
+        self.assertNotIn("competitor_reviews", source)
+        self.assertNotRegex(
+            "\n".join(analyzer.APPROVED_READ_SQL),
+            r"(?i)\b(?:FROM|JOIN)\s+public\.competitor_",
+        )
+        self.assertNotIn("reviews", analyzer.OPERATIONAL_COUNTS_QUERY.lower())
+
+    def test_48_t1_canonical_archive_sha_regression(self) -> None:
+        value = os.environ.get("EFA_T1_CANONICAL_ANALYSIS")
+        if not value:
+            self.skipTest("EFA_T1_CANONICAL_ANALYSIS is not configured")
+        artifact = Path(value).read_bytes()
+        self.assertEqual(CANONICAL_T1_SHA256, hashlib.sha256(artifact).hexdigest())
+        report = json.loads(artifact)
+        self.assertEqual(
+            {"search_runs": 18, "observations": 174, "reviews": 0, "findings": 0},
+            report["source_table_counts"],
+        )
 
 
 if __name__ == "__main__":
