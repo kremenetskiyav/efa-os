@@ -20,12 +20,21 @@ if str(SCRIPTS) not in sys.path:
 import persist_competitor_findings_v1 as writer
 
 
-ARTIFACT = ROOT / "COMPETITOR_T1_VS_T0_FINDINGS_V1.json"
+ARTIFACT = (
+    Path.home()
+    / ".efa-os/archive/competitor-monitor/finding-set-v1/2026-08-27"
+    / "097963f537b2a32a919d325698ca099889aa8ab08b4dbc8367e1e0684f520f7b"
+    / "COMPETITOR_T1_VS_T0_FINDINGS_V1.json"
+)
+LEGACY_FINDINGS_SHA256 = "3202131a109e04c1a05dcb735f33190b75a76ab596bd6921fbafd7b7e0c8fbcd"
+LEGACY_SEMANTIC_SHA256 = "7fbf7c23a285749733d6beaaba7602701c3d47af04d793f0978a600fd5919e47"
+LEGACY_ANALYSIS_SHA256 = "99483c51928b7073f00cfc2f93c2fcafd52e25a94676774091b21740f24e03dd"
+LEGACY_SET_KEY = "cm-finding-set-v1:097963f537b2a32a919d325698ca099889aa8ab08b4dbc8367e1e0684f520f7b"
 
 
 def load_bundle() -> writer.ArtifactBundle:
     return writer.load_artifact(
-        ARTIFACT, writer.APPROVED_FINDINGS_SHA256, writer.APPROVED_ANALYSIS_SHA256
+        ARTIFACT, LEGACY_FINDINGS_SHA256, LEGACY_ANALYSIS_SHA256
     )
 
 
@@ -102,19 +111,19 @@ def persisted_snapshot(
 
 class HashAndIdentityTests(unittest.TestCase):
     def test_01_exact_finding_artifact_hash_accepted(self) -> None:
-        self.assertEqual(load_bundle().findings_sha256, writer.APPROVED_FINDINGS_SHA256)
+        self.assertEqual(load_bundle().findings_sha256, LEGACY_FINDINGS_SHA256)
 
     def test_02_wrong_finding_artifact_hash_rejected(self) -> None:
         with self.assertRaises(writer.InputContractError):
-            writer.load_artifact(ARTIFACT, "0" * 64, writer.APPROVED_ANALYSIS_SHA256)
+            writer.load_artifact(ARTIFACT, "0" * 64, LEGACY_ANALYSIS_SHA256)
 
     def test_03_wrong_analysis_hash_rejected(self) -> None:
         with self.assertRaises(writer.InputContractError):
-            writer.load_artifact(ARTIFACT, writer.APPROVED_FINDINGS_SHA256, "0" * 64)
+            writer.load_artifact(ARTIFACT, LEGACY_FINDINGS_SHA256, "0" * 64)
 
     def test_04_semantic_hash_exact(self) -> None:
         bundle = load_bundle()
-        self.assertEqual(writer.semantic_sha256(bundle.report), writer.APPROVED_SEMANTIC_SHA256)
+        self.assertEqual(writer.semantic_sha256(bundle.report), LEGACY_SEMANTIC_SHA256)
 
     def test_05_semantic_hash_mismatch_rejected(self) -> None:
         raw = json.loads(ARTIFACT.read_text(encoding="utf-8"))
@@ -124,12 +133,12 @@ class HashAndIdentityTests(unittest.TestCase):
             path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
             digest = hashlib.sha256(path.read_bytes()).hexdigest()
             with self.assertRaises(writer.InputContractError):
-                writer.load_artifact(path, digest, writer.APPROVED_ANALYSIS_SHA256)
+                writer.load_artifact(path, digest, LEGACY_ANALYSIS_SHA256)
 
     def test_06_deterministic_set_key(self) -> None:
         bundle = load_bundle()
         first = writer.build_set_key(bundle.report, bundle.semantic_sha256)
-        self.assertEqual(first, writer.APPROVED_SET_KEY)
+        self.assertEqual(first, LEGACY_SET_KEY)
         self.assertEqual(first, writer.build_set_key(bundle.report, bundle.semantic_sha256))
 
     def test_07_set_identity_contract_exact(self) -> None:
@@ -154,8 +163,8 @@ class HashAndIdentityTests(unittest.TestCase):
         self.assertNotIn("query_text_exact", json.dumps(identity))
 
     def test_11_uuidv5_deterministic(self) -> None:
-        value = writer.deterministic_uuid(writer.APPROVED_SET_KEY)
-        self.assertEqual(value, writer.deterministic_uuid(writer.APPROVED_SET_KEY))
+        value = writer.deterministic_uuid(LEGACY_SET_KEY)
+        self.assertEqual(value, writer.deterministic_uuid(LEGACY_SET_KEY))
         self.assertEqual(value.version, 5)
 
     def test_12_source_artifact_unchanged(self) -> None:
@@ -163,17 +172,32 @@ class HashAndIdentityTests(unittest.TestCase):
         load_bundle()
         self.assertEqual(hashlib.sha256(ARTIFACT.read_bytes()).hexdigest(), before)
 
+    def test_12a_generic_valid_analysis_hash_is_accepted(self) -> None:
+        report = json.loads(ARTIFACT.read_text(encoding="utf-8"))
+        report["source_analysis_sha256"] = "a" * 64
+        with TemporaryDirectory() as folder:
+            path = Path(folder) / "generic.json"
+            path.write_bytes(writer.canonical_json_bytes(report))
+            digest = hashlib.sha256(path.read_bytes()).hexdigest()
+            bundle = writer.load_artifact(path, digest, "a" * 64)
+        self.assertEqual(bundle.analysis_sha256, "a" * 64)
+
+    def test_12b_writer_has_no_t1_approved_constants(self) -> None:
+        source = (SCRIPTS / "persist_competitor_findings_v1.py").read_text(encoding="utf-8")
+        self.assertNotIn("APPROVED_FINDINGS_SHA256", source)
+        self.assertNotIn(LEGACY_SET_KEY, source)
+
 
 class PlanTests(unittest.TestCase):
     def test_13_manifest_mapping(self) -> None:
         _, _, plan = built()
-        self.assertEqual(plan.manifest["set_key"], writer.APPROVED_SET_KEY)
+        self.assertEqual(plan.manifest["set_key"], LEGACY_SET_KEY)
         self.assertEqual(plan.manifest["expected_findings_count"], 10)
         self.assertEqual(plan.manifest["persistence_contract_version"], writer.PERSISTENCE_CONTRACT)
 
     def test_14_manifest_uuidv5(self) -> None:
         _, _, plan = built()
-        self.assertEqual(plan.manifest["finding_set_id"], writer.deterministic_uuid(writer.APPROVED_SET_KEY))
+        self.assertEqual(plan.manifest["finding_set_id"], writer.deterministic_uuid(LEGACY_SET_KEY))
 
     def test_15_single_query_scalar_observation_ids(self) -> None:
         _, _, plan = built()
@@ -191,10 +215,32 @@ class PlanTests(unittest.TestCase):
         _, _, plan = built()
         self.assertEqual(sum(len(row["evidence"]) for row in plan.findings), 21)
 
+    def test_17a_snapshot_to_snapshot_previous_prefix_supported(self) -> None:
+        report = json.loads(ARTIFACT.read_text(encoding="utf-8"))
+        report["previous_snapshot"]["source_kind"] = "SNAPSHOT_V1"
+        report["source_analysis_sha256"] = "b" * 64
+        with TemporaryDirectory() as folder:
+            path = Path(folder) / "snapshot-pair.json"
+            path.write_bytes(writer.canonical_json_bytes(report))
+            digest = hashlib.sha256(path.read_bytes()).hexdigest()
+            bundle = writer.load_artifact(path, digest, "b" * 64)
+        snapshot = fake_snapshot(bundle)
+        observations = {
+            key: {
+                **row,
+                "collection_ref": str(row["collection_ref"]).replace(
+                    "cm-baseline-v1:run:", "cm-snapshot-v1:run:"
+                ),
+            }
+            for key, row in snapshot.observations.items()
+        }
+        plan = writer.build_plan(bundle, replace(snapshot, observations=observations))
+        self.assertEqual(plan.manifest["previous_source_kind"], "SNAPSHOT_V1")
+
     def test_18_details_contract(self) -> None:
         _, _, plan = built()
         self.assertTrue(all(row["details"]["contract_version"] == writer.DETAILS_CONTRACT for row in plan.findings))
-        self.assertTrue(all(row["details"]["finding_set_semantic_sha256"] == writer.APPROVED_SEMANTIC_SHA256 for row in plan.findings))
+        self.assertTrue(all(row["details"]["finding_set_semantic_sha256"] == LEGACY_SEMANTIC_SHA256 for row in plan.findings))
 
     def test_19_observation_resolution_exact(self) -> None:
         _, _, plan = built()
@@ -301,7 +347,7 @@ class SafetyAndTransactionTests(unittest.TestCase):
 
     def test_36_env_gate_without_write_does_not_enable_write(self) -> None:
         writer.validate_write_gate(False, {writer.WRITE_GATE: "true"})
-        args = writer.parse_arguments(["--findings", str(ARTIFACT), "--findings-sha256", writer.APPROVED_FINDINGS_SHA256, "--analysis-sha256", writer.APPROVED_ANALYSIS_SHA256])
+        args = writer.parse_arguments(["--findings", str(ARTIFACT), "--findings-sha256", LEGACY_FINDINGS_SHA256, "--analysis-sha256", LEGACY_ANALYSIS_SHA256])
         self.assertFalse(args.write)
 
     def test_37_dry_run_zero_inserts(self) -> None:
@@ -343,7 +389,7 @@ class SafetyAndTransactionTests(unittest.TestCase):
         connection = Connection()
         with patch.object(writer, "load_artifact", side_effect=writer.InputContractError("stop")):
             with self.assertRaises(writer.InputContractError):
-                writer.execute_write(connection, ARTIFACT, writer.APPROVED_FINDINGS_SHA256, writer.APPROVED_ANALYSIS_SHA256)
+                writer.execute_write(connection, ARTIFACT, LEGACY_FINDINGS_SHA256, LEGACY_ANALYSIS_SHA256)
         self.assertTrue(connection.rolled_back)
 
     def test_42_already_applied_causes_zero_inserts(self) -> None:
@@ -363,7 +409,7 @@ class SafetyAndTransactionTests(unittest.TestCase):
 
         connection = Connection()
         with patch.object(writer, "load_artifact", return_value=bundle), patch.object(writer, "read_reference_snapshot", return_value=snapshot), patch.object(writer, "build_plan", return_value=plan), patch.object(writer, "read_history", return_value=existing), patch.object(writer, "_insert_plan") as insert:
-            result = writer.execute_write(connection, ARTIFACT, writer.APPROVED_FINDINGS_SHA256, writer.APPROVED_ANALYSIS_SHA256)
+            result = writer.execute_write(connection, ARTIFACT, LEGACY_FINDINGS_SHA256, LEGACY_ANALYSIS_SHA256)
         insert.assert_not_called()
         self.assertEqual(result.inserts, 0)
         self.assertTrue(connection.rolled_back)
@@ -372,7 +418,7 @@ class SafetyAndTransactionTests(unittest.TestCase):
         from psycopg2.extensions import adapt
 
         writer._register_psycopg2_uuid(None)
-        value = writer.deterministic_uuid(writer.APPROVED_SET_KEY)
+        value = writer.deterministic_uuid(LEGACY_SET_KEY)
         quoted = adapt(value).getquoted()
         self.assertIn(str(value).encode("ascii"), quoted)
         self.assertTrue(quoted.endswith(b"::uuid"))
@@ -397,6 +443,19 @@ class SafetyAndTransactionTests(unittest.TestCase):
         self.assertEqual(len(finding_uuids), 48)
         self.assertTrue(all(adapt(value).getquoted() for value in manifest_uuids))
         self.assertTrue(all(adapt(value).getquoted() for value in finding_uuids))
+
+    def test_45_production_reads_use_only_approved_mcp_surfaces(self) -> None:
+        source = "\n".join(writer.APPROVED_READ_SQL)
+        self.assertNotRegex(source, r"(?i)\b(?:FROM|JOIN)\s+public\.competitor_")
+        self.assertIn("mcp_read.competitor_snapshot_observations", source)
+        self.assertIn("mcp_read.competitor_snapshot_runs", source)
+        self.assertIn("mcp_read.competitor_reference_plan_source", source)
+        self.assertIn("mcp_read.competitor_finding_sets_reconciliation", source)
+        self.assertIn("mcp_read.competitor_findings", source)
+
+    def test_46_history_reads_all_reconciliation_manifests(self) -> None:
+        self.assertNotIn("WHERE", writer.FINDING_SET_RECONCILIATION_SQL.upper())
+        self.assertTrue(all("INSERT INTO" not in query.upper() for query in writer.APPROVED_READ_SQL))
 
 
 if __name__ == "__main__":

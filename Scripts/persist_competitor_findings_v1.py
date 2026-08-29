@@ -21,11 +21,6 @@ DETAILS_CONTRACT = "competitor_finding_details.v1"
 WRITE_GATE = "COMPETITOR_FINDINGS_WRITE_ENABLED"
 ADVISORY_LOCK_KEY = "efa-os:competitor-findings-persist:v1"
 
-APPROVED_FINDINGS_SHA256 = "3202131a109e04c1a05dcb735f33190b75a76ab596bd6921fbafd7b7e0c8fbcd"
-APPROVED_SEMANTIC_SHA256 = "7fbf7c23a285749733d6beaaba7602701c3d47af04d793f0978a600fd5919e47"
-APPROVED_ANALYSIS_SHA256 = "99483c51928b7073f00cfc2f93c2fcafd52e25a94676774091b21740f24e03dd"
-APPROVED_SET_KEY = "cm-finding-set-v1:097963f537b2a32a919d325698ca099889aa8ab08b4dbc8367e1e0684f520f7b"
-
 MANIFEST_COLUMNS = (
     "finding_set_id", "set_key", "persistence_contract_version",
     "finding_set_contract_version", "source_analysis_contract_version",
@@ -81,6 +76,144 @@ REQUIRED_INDEXES = frozenset(
         "competitor_findings_offer_kind_status_last_idx",
         "competitor_findings_finding_set_id_idx",
     }
+)
+
+OBSERVATION_REFERENCE_SQL = """
+SELECT
+    o.observation_id::text,
+    o.observation_ref,
+    o.listing_id::text,
+    o.source_ref,
+    o.raw_ref,
+    r.raw_source_ref,
+    r.offer_id,
+    r.query_text_exact,
+    r.collection_ref,
+    o.ozon_product_id::text
+FROM mcp_read.competitor_snapshot_observations o
+JOIN mcp_read.competitor_snapshot_runs r ON r.search_run_id = o.search_run_id
+WHERE o.observation_id = ANY(%s::uuid[])
+"""
+
+LISTING_REFERENCE_SQL = """
+SELECT DISTINCT
+    listing_id::text,
+    product_family_id::text,
+    ozon_product_id::text,
+    offer_id,
+    membership_status
+FROM mcp_read.competitor_reference_plan_source
+WHERE record_kind = 'MEMBERSHIP_QUERY'
+  AND listing_id = ANY(%s::uuid[])
+  AND valid_from <= %s::timestamptz
+  AND (valid_to IS NULL OR %s::timestamptz < valid_to)
+"""
+
+OFFER_REFERENCE_SQL = """
+SELECT offer_id
+FROM mcp_read.competitor_reference_plan_source
+WHERE record_kind = 'PROFILE'
+"""
+
+WRITER_COUNTS_SQL = """
+SELECT
+    (SELECT count(*) FROM mcp_read.competitor_snapshot_runs) AS search_runs,
+    (SELECT count(*) FROM mcp_read.competitor_snapshot_observations) AS observations,
+    0::bigint AS reviews,
+    (SELECT count(*) FROM mcp_read.competitor_findings) AS findings,
+    (SELECT count(*) FROM mcp_read.competitor_finding_sets_reconciliation) AS finding_sets
+"""
+
+WRITE_TARGET_COLUMNS_SQL = """
+SELECT rel.relname AS table_name, att.attname AS column_name
+FROM pg_catalog.pg_class rel
+JOIN pg_catalog.pg_namespace nsp ON nsp.oid = rel.relnamespace
+JOIN pg_catalog.pg_attribute att ON att.attrelid = rel.oid
+WHERE nsp.nspname = 'public'
+  AND rel.relname IN ('competitor_finding_sets', 'competitor_findings')
+  AND rel.relkind IN ('r', 'p')
+  AND att.attnum > 0
+  AND NOT att.attisdropped
+ORDER BY rel.relname, att.attnum
+"""
+
+WRITE_TARGET_CONSTRAINTS_SQL = """
+SELECT con.conname
+FROM pg_catalog.pg_constraint con
+JOIN pg_catalog.pg_class rel ON rel.oid = con.conrelid
+JOIN pg_catalog.pg_namespace nsp ON nsp.oid = rel.relnamespace
+WHERE nsp.nspname = 'public'
+  AND rel.relname IN ('competitor_finding_sets', 'competitor_findings')
+"""
+
+WRITE_TARGET_INDEXES_SQL = """
+SELECT idx.relname AS indexname
+FROM pg_catalog.pg_index link
+JOIN pg_catalog.pg_class rel ON rel.oid = link.indrelid
+JOIN pg_catalog.pg_namespace nsp ON nsp.oid = rel.relnamespace
+JOIN pg_catalog.pg_class idx ON idx.oid = link.indexrelid
+WHERE nsp.nspname = 'public'
+  AND rel.relname IN ('competitor_finding_sets', 'competitor_findings')
+"""
+
+FINDING_SET_RECONCILIATION_SQL = """
+SELECT
+    finding_set_id::text,
+    set_key,
+    persistence_contract_version,
+    finding_set_contract_version,
+    source_analysis_contract_version,
+    source_findings_sha256,
+    source_findings_semantic_sha256,
+    source_analysis_sha256,
+    previous_source_kind,
+    previous_derived_batch_id,
+    previous_reference_at,
+    previous_captured_through,
+    current_source_kind,
+    current_derived_batch_id,
+    current_reference_at,
+    current_captured_through,
+    expected_findings_count
+FROM mcp_read.competitor_finding_sets_reconciliation
+"""
+
+PERSISTED_FINDINGS_SQL = """
+SELECT
+    finding_id::text,
+    finding_set_id::text,
+    finding_kind,
+    offer_id,
+    product_family_id::text,
+    listing_id::text,
+    old_observation_id::text,
+    new_observation_id::text,
+    topic,
+    metric,
+    severity,
+    confidence,
+    status,
+    evidence,
+    details,
+    finding_key,
+    first_detected_at,
+    last_detected_at
+FROM mcp_read.competitor_findings
+WHERE finding_set_id = %s OR finding_key = ANY(%s::text[])
+"""
+
+APPROVED_READ_SQL = (
+    OBSERVATION_REFERENCE_SQL,
+    LISTING_REFERENCE_SQL,
+    OFFER_REFERENCE_SQL,
+    WRITER_COUNTS_SQL,
+    FINDING_SET_RECONCILIATION_SQL,
+    PERSISTED_FINDINGS_SQL,
+)
+CATALOG_METADATA_SQL = (
+    WRITE_TARGET_COLUMNS_SQL,
+    WRITE_TARGET_CONSTRAINTS_SQL,
+    WRITE_TARGET_INDEXES_SQL,
 )
 
 
@@ -280,25 +413,28 @@ def _validate_report(report: Mapping[str, Any]) -> None:
         raise InputContractError("Finding summary total mismatch")
 
 
+def _validate_sha256(value: str, label: str) -> str:
+    normalized = value.lower()
+    if len(normalized) != 64 or any(character not in "0123456789abcdef" for character in normalized):
+        raise InputContractError(f"{label} must be a SHA-256 digest")
+    return normalized
+
+
 def load_artifact(path: Path, findings_sha256_gate: str, analysis_sha256_gate: str) -> ArtifactBundle:
     raw = path.read_bytes()
     raw_digest = hashlib.sha256(raw).hexdigest()
-    if findings_sha256_gate.lower() != APPROVED_FINDINGS_SHA256 or raw_digest != findings_sha256_gate.lower():
+    findings_gate = _validate_sha256(findings_sha256_gate, "Finding artifact hash")
+    analysis_gate = _validate_sha256(analysis_sha256_gate, "Analysis hash")
+    if raw_digest != findings_gate:
         raise InputContractError("Finding artifact SHA-256 mismatch")
-    if analysis_sha256_gate.lower() != APPROVED_ANALYSIS_SHA256:
-        raise InputContractError("Canonical analysis SHA-256 gate mismatch")
     try:
         report = json.loads(raw)
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
         raise InputContractError("Finding artifact is not readable UTF-8 JSON") from error
     _validate_report(report)
-    if report["source_analysis_sha256"] != analysis_sha256_gate.lower():
+    if report["source_analysis_sha256"] != analysis_gate:
         raise InputContractError("Finding artifact analysis SHA-256 mismatch")
     semantic_digest = semantic_sha256(report)
-    if semantic_digest != APPROVED_SEMANTIC_SHA256:
-        raise InputContractError("Finding-set semantic SHA-256 mismatch")
-    if build_set_key(report, semantic_digest) != APPROVED_SET_KEY:
-        raise InputContractError("Finding-set identity assertion mismatch")
     return ArtifactBundle(report, raw_digest, semantic_digest, report["source_analysis_sha256"])
 
 
@@ -311,9 +447,15 @@ def _query_map(rows: Sequence[Mapping[str, Any]], label: str) -> dict[str, Mappi
 
 def _validate_observation(
     expected: Mapping[str, Any], actual: Mapping[str, Any], *, side: str,
-    finding: Mapping[str, Any], query: str,
+    source_kind: str, finding: Mapping[str, Any], query: str,
 ) -> None:
-    prefix = "cm-baseline-v1:run:" if side == "previous" else "cm-snapshot-v1:run:"
+    prefixes = {
+        "BASELINE_V1": "cm-baseline-v1:run:",
+        "SNAPSHOT_V1": "cm-snapshot-v1:run:",
+    }
+    prefix = prefixes.get(str(source_kind))
+    if prefix is None:
+        raise InputContractError(f"Unsupported {side} snapshot source kind")
     checks = {
         "observation_id": expected[f"{side}_observation_id"],
         "observation_ref": expected[f"{side}_observation_ref"],
@@ -436,7 +578,14 @@ def build_plan(bundle: ArtifactBundle, snapshot: ProductionSnapshot) -> Persiste
                 actual = snapshot.observations.get(observation_id)
                 if actual is None:
                     raise ReferenceConflictError(f"Observation {side} is missing")
-                _validate_observation(expected, actual, side=side, finding=finding, query=query)
+                _validate_observation(
+                    expected,
+                    actual,
+                    side=side,
+                    source_kind=str(report[f"{side}_snapshot"]["source_kind"]),
+                    finding=finding,
+                    query=query,
+                )
                 side_evidence = evidence[side]
                 for field, actual_field in (
                     ("source_ref", "source_ref"), ("raw_ref", "raw_ref"),
@@ -555,53 +704,23 @@ def read_reference_snapshot(connection: Any, report: Mapping[str, Any]) -> Produ
         with connection.cursor() as cursor:
             observations = _fetch_dicts(
                 cursor,
-                """SELECT o.observation_id::text,o.observation_ref,o.listing_id::text,
-                          o.source_ref,o.raw_ref,r.raw_source_ref,r.offer_id,
-                          r.query_text_exact,r.collection_ref,l.ozon_product_id::text
-                     FROM public.competitor_observations o
-                     JOIN public.competitor_search_runs r ON r.search_run_id=o.search_run_id
-                     JOIN public.competitor_listings l ON l.listing_id=o.listing_id
-                    WHERE o.observation_id=ANY(%s::uuid[])""",
+                OBSERVATION_REFERENCE_SQL,
                 (observation_ids,),
             )
             listings = _fetch_dicts(
                 cursor,
-                """SELECT l.listing_id::text,l.product_family_id::text,
-                          l.ozon_product_id::text,m.offer_id,m.membership_status
-                     FROM public.competitor_listings l
-                     JOIN public.competitor_watchlist_memberships m ON m.listing_id=l.listing_id
-                    WHERE l.listing_id=ANY(%s::uuid[])""",
-                (listing_ids,),
+                LISTING_REFERENCE_SQL,
+                (
+                    listing_ids,
+                    report["current_snapshot"]["reference_at"],
+                    report["current_snapshot"]["reference_at"],
+                ),
             )
-            offers = _fetch_dicts(cursor, "SELECT offer_id FROM public.products")
-            columns = _fetch_dicts(
-                cursor,
-                """SELECT table_name,column_name FROM information_schema.columns
-                    WHERE table_schema='public'
-                      AND table_name IN ('competitor_finding_sets','competitor_findings')""",
-            )
-            constraints = _fetch_dicts(
-                cursor,
-                """SELECT con.conname FROM pg_constraint con
-                     JOIN pg_class rel ON rel.oid=con.conrelid
-                     JOIN pg_namespace nsp ON nsp.oid=rel.relnamespace
-                    WHERE nsp.nspname='public'
-                      AND rel.relname IN ('competitor_finding_sets','competitor_findings')""",
-            )
-            indexes = _fetch_dicts(
-                cursor,
-                """SELECT indexname FROM pg_indexes WHERE schemaname='public'
-                      AND tablename IN ('competitor_finding_sets','competitor_findings')""",
-            )
-            counts = _fetch_dicts(
-                cursor,
-                """SELECT
-                    (SELECT count(*) FROM public.competitor_search_runs) search_runs,
-                    (SELECT count(*) FROM public.competitor_observations) observations,
-                    (SELECT count(*) FROM public.competitor_reviews) reviews,
-                    (SELECT count(*) FROM public.competitor_findings) findings,
-                    (SELECT count(*) FROM public.competitor_finding_sets) finding_sets""",
-            )[0]
+            offers = _fetch_dicts(cursor, OFFER_REFERENCE_SQL)
+            columns = _fetch_dicts(cursor, WRITE_TARGET_COLUMNS_SQL)
+            constraints = _fetch_dicts(cursor, WRITE_TARGET_CONSTRAINTS_SQL)
+            indexes = _fetch_dicts(cursor, WRITE_TARGET_INDEXES_SQL)
+            counts = _fetch_dicts(cursor, WRITER_COUNTS_SQL)[0]
     except Exception as error:
         raise DatabaseError("Read-only production reconciliation failed") from error
     schema: dict[str, set[str]] = {"competitor_finding_sets": set(), "competitor_findings": set()}
@@ -623,36 +742,10 @@ def read_history(connection: Any, plan: PersistencePlan, base: ProductionSnapsho
     manifest = plan.manifest
     try:
         with connection.cursor() as cursor:
-            manifests = _fetch_dicts(
-                cursor,
-                """SELECT finding_set_id::text,set_key,persistence_contract_version,
-                          finding_set_contract_version,source_analysis_contract_version,
-                          source_findings_sha256,source_findings_semantic_sha256,
-                          source_analysis_sha256,previous_source_kind,
-                          previous_derived_batch_id,previous_reference_at,
-                          previous_captured_through,current_source_kind,
-                          current_derived_batch_id,current_reference_at,
-                          current_captured_through,expected_findings_count
-                     FROM public.competitor_finding_sets
-                    WHERE set_key=%s OR (
-                      finding_set_contract_version=%s AND previous_source_kind=%s
-                      AND previous_derived_batch_id=%s AND current_source_kind=%s
-                      AND current_derived_batch_id=%s)""",
-                (
-                    manifest["set_key"], manifest["finding_set_contract_version"],
-                    manifest["previous_source_kind"], manifest["previous_derived_batch_id"],
-                    manifest["current_source_kind"], manifest["current_derived_batch_id"],
-                ),
-            )
+            manifests = _fetch_dicts(cursor, FINDING_SET_RECONCILIATION_SQL)
             findings = _fetch_dicts(
                 cursor,
-                """SELECT finding_id::text,finding_set_id::text,finding_kind,offer_id,
-                          product_family_id::text,listing_id::text,
-                          old_observation_id::text,new_observation_id::text,topic,metric,
-                          severity,confidence,status,evidence,details,finding_key,
-                          first_detected_at,last_detected_at
-                     FROM public.competitor_findings
-                    WHERE finding_set_id=%s OR finding_key=ANY(%s::text[])""",
+                PERSISTED_FINDINGS_SQL,
                 (str(manifest["finding_set_id"]), keys),
             )
     except Exception as error:
