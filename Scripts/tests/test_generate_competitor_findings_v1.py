@@ -5,6 +5,7 @@ import re
 import sys
 import unittest
 from pathlib import Path
+from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -382,6 +383,70 @@ class SafetyAndContractTests(unittest.TestCase):
 
     def test_37_no_on_conflict(self) -> None:
         self.assertNotIn("ON CONFLICT", self.source().upper())
+
+    def test_38_business_reads_use_only_approved_mcp_surfaces(self) -> None:
+        approved = "\n".join(engine.APPROVED_READ_SQL)
+        self.assertIn("mcp_read.competitor_snapshot_runs", approved)
+        self.assertIn("mcp_read.competitor_snapshot_observations", approved)
+        self.assertNotIn("mcp_read.competitor_findings", approved)
+        self.assertIn("0::bigint AS findings", engine.COUNTS_QUERY)
+        self.assertNotRegex(approved, r"(?i)\b(?:FROM|JOIN)\s+public\.competitor_")
+
+    def test_39_resolution_query_uses_view_identity_fields(self) -> None:
+        self.assertIn("o.listing_id::text", engine.RESOLUTION_QUERY)
+        self.assertIn("o.ozon_product_id::text", engine.RESOLUTION_QUERY)
+        self.assertIn("o.membership_status", engine.RESOLUTION_QUERY)
+        self.assertNotIn("competitor_listings", engine.RESOLUTION_QUERY)
+        self.assertNotIn("competitor_watchlist_memberships", engine.RESOLUTION_QUERY)
+
+    def test_40_zero_finding_analysis_remains_valid(self) -> None:
+        report = generate([comparison()])
+        self.assertEqual([], report["findings"])
+        self.assertEqual(0, report["summary"]["findings_total"])
+
+    def test_41_approved_counts_failure_is_sanitized_and_fail_closed(self) -> None:
+        connection = FailingConnection("sensitive database driver detail")
+        with self.assertRaises(engine.EvidenceResolutionError) as raised:
+            engine.read_counts(connection)
+        self.assertEqual(
+            "Approved mcp_read operational counts query failed", str(raised.exception)
+        )
+        self.assertNotIn("sensitive", str(raised.exception))
+        self.assertEqual([engine.COUNTS_QUERY], connection.queries)
+
+    def test_42_approved_resolution_failure_has_no_raw_fallback(self) -> None:
+        connection = FailingConnection("permission denied for approved view")
+        with self.assertRaises(engine.EvidenceResolutionError) as raised:
+            engine.read_resolution_rows(connection)
+        self.assertEqual(
+            "Approved mcp_read evidence resolution query failed", str(raised.exception)
+        )
+        self.assertEqual([engine.RESOLUTION_QUERY], connection.queries)
+        self.assertNotRegex("\n".join(connection.queries), r"(?i)public\.competitor_")
+
+
+class FailingCursor:
+    def __init__(self, connection: "FailingConnection") -> None:
+        self.connection = connection
+
+    def __enter__(self) -> "FailingCursor":
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        return None
+
+    def execute(self, query: str) -> None:
+        self.connection.queries.append(query)
+        raise RuntimeError(self.connection.driver_detail)
+
+
+class FailingConnection:
+    def __init__(self, driver_detail: str) -> None:
+        self.driver_detail = driver_detail
+        self.queries: list[str] = []
+
+    def cursor(self) -> Any:
+        return FailingCursor(self)
 
 
 if __name__ == "__main__":

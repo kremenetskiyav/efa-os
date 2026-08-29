@@ -44,8 +44,8 @@ SELECT
     r.raw_source_ref,
     o.observation_id::text,
     o.listing_id::text,
-    l.ozon_product_id::text,
-    m.membership_status,
+    o.ozon_product_id::text,
+    o.membership_status,
     o.captured_at,
     o.currency,
     o.reviews_scope,
@@ -54,26 +54,24 @@ SELECT
     o.source_ref,
     o.raw_ref,
     o.observation_ref
-FROM public.competitor_search_runs AS r
-JOIN public.competitor_observations AS o
+FROM mcp_read.competitor_snapshot_runs AS r
+JOIN mcp_read.competitor_snapshot_observations AS o
   ON o.search_run_id = r.search_run_id
-JOIN public.competitor_listings AS l
-  ON l.listing_id = o.listing_id
-LEFT JOIN public.competitor_watchlist_memberships AS m
-  ON m.membership_id = o.membership_id
 WHERE r.collection_ref LIKE 'cm-baseline-v1:run:%'
    OR r.collection_ref LIKE 'cm-snapshot-v1:run:%'
 ORDER BY r.captured_at, r.collection_ref, r.offer_id,
-         r.query_text_exact, l.ozon_product_id
+         r.query_text_exact, o.ozon_product_id
 """
 
 COUNTS_QUERY = """
 SELECT
-  (SELECT count(*) FROM public.competitor_search_runs) AS search_runs,
-  (SELECT count(*) FROM public.competitor_observations) AS observations,
-  (SELECT count(*) FROM public.competitor_reviews) AS reviews,
-  (SELECT count(*) FROM public.competitor_findings) AS findings
+  (SELECT count(*) FROM mcp_read.competitor_snapshot_runs) AS search_runs,
+  (SELECT count(*) FROM mcp_read.competitor_snapshot_observations) AS observations,
+  0::bigint AS reviews,
+  0::bigint AS findings
 """
+
+APPROVED_READ_SQL = (RESOLUTION_QUERY, COUNTS_QUERY)
 
 
 class FindingEngineError(RuntimeError):
@@ -751,14 +749,24 @@ def _fetch_dicts(cursor: Any, query: str) -> list[dict[str, Any]]:
 
 
 def read_counts(connection: Any) -> dict[str, int]:
-    with connection.cursor() as cursor:
-        row = _fetch_dicts(cursor, COUNTS_QUERY)[0]
+    try:
+        with connection.cursor() as cursor:
+            row = _fetch_dicts(cursor, COUNTS_QUERY)[0]
+    except Exception as error:
+        raise EvidenceResolutionError(
+            "Approved mcp_read operational counts query failed"
+        ) from error
     return {name: int(value) for name, value in row.items()}
 
 
 def read_resolution_rows(connection: Any) -> list[dict[str, Any]]:
-    with connection.cursor() as cursor:
-        return _fetch_dicts(cursor, RESOLUTION_QUERY)
+    try:
+        with connection.cursor() as cursor:
+            return _fetch_dicts(cursor, RESOLUTION_QUERY)
+    except Exception as error:
+        raise EvidenceResolutionError(
+            "Approved mcp_read evidence resolution query failed"
+        ) from error
 
 
 def run_engine(
