@@ -14,7 +14,7 @@ from input_resolver import CalculatorSourceRow, InputResolutionError
 D = Decimal
 ROOT = Path(__file__).parents[3]
 CONFIG = load_price_calculator_config(ROOT / "config/ozon_price_calculator_v1.json")
-CALCULATION_AT = datetime(2026, 8, 23, 18, 0, tzinfo=timezone(timedelta(hours=3)))
+CALCULATION_AT = datetime(2026, 8, 29, 9, 0, tzinfo=timezone(timedelta(hours=3)))
 PRODUCT_IDS = {
     "УФ 001Б": 4861934525,
     "УФ 002Б": 4861934526,
@@ -37,7 +37,7 @@ def source_row(offer_id: str) -> CalculatorSourceRow:
         snapshot_offer_id=offer_id,
         observed_at=CALCULATION_AT - timedelta(hours=1),
         run_status="success",
-        sales_percent_fbs=D("44"),
+        sales_percent_fbs=D("47"),
         fbs_deliv_to_customer_amount=D("25"),
         raw_acquiring=D("6.24"),
         direct_flow_min=D("74"),
@@ -65,28 +65,28 @@ class CalculatorShadowTests(unittest.TestCase):
 
         self.assertEqual((report["mode"], report["read_only"]), ("SHADOW", True))
         self.assertEqual(report["calculation_at"], CALCULATION_AT.isoformat())
-        self.assertEqual(report["calculator_config_version"], "v1.0")
+        self.assertEqual(report["calculator_config_version"], "v1.1")
         self.assertEqual(len(report["items"]), 5)
         self.assertEqual(len(calls), 1)
 
         golden = next(item for item in report["items"] if item["offer_id"] == "УФ 001Б")
         self.assertEqual(golden["resolved_inputs"], {
-            "commission_rate": "0.42",
+            "commission_rate": "0.44",
             "acquiring_rate": "0.015",
             "processing_amount": "10",
-            "forward_logistics_amount": "84",
+            "forward_logistics_amount": "95",
             "delivery_to_customer_amount": "25",
-            "return_logistics_amount": "84",
+            "return_logistics_amount": "95",
             "return_processing_amount": "15",
             "buyout_rate": "0.92",
             "tax_rate": "0.06",
             "other_expenses": "0",
         })
-        self.assertEqual(golden["results"]["profit"], "155.59")
-        self.assertTrue(golden["results"]["margin"].startswith("0.170981844242"))
+        self.assertEqual(golden["results"]["profit"], "124.48")
+        self.assertTrue(golden["results"]["margin"].startswith("0.136791686574"))
         self.assertEqual(
             (golden["results"]["p10"], golden["results"]["p12"], golden["results"]["p15"]),
-            ("751", "790", "857"),
+            ("824", "869", "946"),
         )
         self.assertEqual(golden["search"], {
             "search_from": "301",
@@ -100,7 +100,7 @@ class CalculatorShadowTests(unittest.TestCase):
                 uf003["resolved_inputs"]["forward_logistics_amount"],
                 uf003["resolved_inputs"]["return_logistics_amount"],
             ),
-            ("77", "77"),
+            ("88", "88"),
         )
         self._assert_no_float_or_decimal(report)
 

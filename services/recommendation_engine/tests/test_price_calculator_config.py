@@ -37,16 +37,30 @@ class PriceCalculatorConfigTests(unittest.TestCase):
     def test_approved_config_loads_as_exact_immutable_values(self) -> None:
         config = load_price_calculator_config(CONFIG_PATH)
 
-        self.assertEqual(config.version, "v1.0")
+        self.assertEqual(config.version, "v1.1")
         self.assertEqual(
             config.effective_from,
-            datetime(2026, 8, 23, 17, 23, tzinfo=timezone(timedelta(hours=3))),
+            datetime(2026, 8, 28, 0, 0, tzinfo=timezone(timedelta(hours=3))),
         )
-        self.assertEqual(config.logistics_profile.tariff_effective_from, date(2026, 5, 1))
+        self.assertEqual(
+            config.logistics_profile.tariff_version,
+            "2026-08-28-revision-2026-08-24",
+        )
+        self.assertEqual(config.logistics_profile.tariff_effective_from, date(2026, 8, 28))
+        self.assertEqual(config.recommended_slot_adjustment_pp, Decimal("-3"))
         self.assertEqual(set(config.logistics_profile.products), APPROVED_CALCULATOR_OFFER_IDS)
         self.assertEqual(
-            config.logistics_profile.products["УФ 003Б"].forward_logistics_amount,
-            Decimal("77"),
+            {
+                offer_id: product.forward_logistics_amount
+                for offer_id, product in config.logistics_profile.products.items()
+            },
+            {
+                "УФ 001Б": Decimal("95"),
+                "УФ 002Б": Decimal("95"),
+                "УФ 003Б": Decimal("88"),
+                "УФ 004Б": Decimal("95"),
+                "УФ 005Б": Decimal("95"),
+            },
         )
         with self.assertRaises(TypeError):
             config.logistics_profile.products["УФ 006Б"] = config.logistics_profile.products["УФ 001Б"]

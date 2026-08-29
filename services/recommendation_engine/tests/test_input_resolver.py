@@ -17,7 +17,7 @@ from input_resolver import (
 D = Decimal
 ROOT = Path(__file__).parents[3]
 CONFIG = load_price_calculator_config(ROOT / "config/ozon_price_calculator_v1.json")
-CALCULATION_AT = datetime(2026, 8, 23, 18, 0, tzinfo=timezone(timedelta(hours=3)))
+CALCULATION_AT = datetime(2026, 8, 29, 9, 0, tzinfo=timezone(timedelta(hours=3)))
 
 
 def source_row(offer_id: str = "УФ 001Б", **changes) -> CalculatorSourceRow:
@@ -33,7 +33,7 @@ def source_row(offer_id: str = "УФ 001Б", **changes) -> CalculatorSourceRow:
         "snapshot_offer_id": offer_id,
         "observed_at": CALCULATION_AT - timedelta(hours=1),
         "run_status": "success",
-        "sales_percent_fbs": D("44"),
+        "sales_percent_fbs": D("47"),
         "fbs_deliv_to_customer_amount": D("25"),
         "raw_acquiring": D("6.24"),
         "direct_flow_min": D("74"),
@@ -60,25 +60,25 @@ class InputResolverTests(unittest.TestCase):
     def test_golden_resolution_applies_policy_once_and_ignores_raw_diagnostics(self):
         result = resolve()
 
-        self.assertEqual(result.commission_rate, D("0.42"))
+        self.assertEqual(result.commission_rate, D("0.44"))
         self.assertEqual(result.acquiring_rate, D("0.015"))
         self.assertEqual(result.processing_amount, D("10"))
-        self.assertEqual(result.forward_logistics_amount, D("84"))
+        self.assertEqual(result.forward_logistics_amount, D("95"))
         self.assertEqual(result.delivery_to_customer_amount, D("25"))
-        self.assertEqual(result.return_logistics_amount, D("84"))
+        self.assertEqual(result.return_logistics_amount, D("95"))
         self.assertEqual(result.return_processing_amount, D("15"))
         self.assertEqual(result.buyout_rate, D("0.92"))
         self.assertEqual(result.tax_rate, D("0.06"))
         self.assertEqual(result.other_expenses, D("0"))
-        self.assertEqual(result.calculator_config_version, "v1.0")
-        self.assertEqual(result.tariff_profile_version, "2026-05-01")
+        self.assertEqual(result.calculator_config_version, "v1.1")
+        self.assertEqual(result.tariff_profile_version, "2026-08-28-revision-2026-08-24")
         self.assertEqual(result.taxpayer_config_version, "v0.1")
 
     def test_uf003_uses_approved_forward_for_both_flows(self):
         result = resolve(source_row("УФ 003Б"))
 
-        self.assertEqual(result.forward_logistics_amount, D("77"))
-        self.assertEqual(result.return_logistics_amount, D("77"))
+        self.assertEqual(result.forward_logistics_amount, D("88"))
+        self.assertEqual(result.return_logistics_amount, D("88"))
 
     def test_snapshot_presence_status_identity_and_freshness_fail_closed(self):
         invalid_sources = (
@@ -116,7 +116,7 @@ class InputResolverTests(unittest.TestCase):
             with self.subTest(source=source), self.assertRaises(InputResolutionError):
                 resolve(source)
 
-        invalid_adjustment_config = replace(CONFIG, recommended_slot_adjustment_pp=D("-45"))
+        invalid_adjustment_config = replace(CONFIG, recommended_slot_adjustment_pp=D("-48"))
         with self.assertRaises(InputResolutionError):
             resolve(config=invalid_adjustment_config)
 

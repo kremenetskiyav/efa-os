@@ -1,6 +1,6 @@
 {
-  "version": "v1.0",
-  "effective_from": "2026-08-23T17:23:00+03:00",
+  "version": "v1.1",
+  "effective_from": "2026-08-28T00:00:00+03:00",
   "scheme": "FBS",
   "buyout_rate": "0.92",
   "acquiring_rate": "0.015",
@@ -8,7 +8,7 @@
   "return_processing_amount": "15",
   "other_expenses": "0",
   "handover_status": "recommended_slot",
-  "recommended_slot_adjustment_pp": "-2",
+  "recommended_slot_adjustment_pp": "-3",
   "margin_policy": {
     "hard_floor": "0.10",
     "working_minimum": "0.12",
@@ -16,8 +16,8 @@
   },
   "logistics_profile": {
     "tariff_source": "Ozon official FBO/FBS logistics matrix",
-    "tariff_version": "2026-05-01",
-    "tariff_effective_from": "2026-05-01",
+    "tariff_version": "2026-08-28-revision-2026-08-24",
+    "tariff_effective_from": "2026-08-28",
     "seller_price_band": {
       "lower_exclusive": "300",
       "upper_inclusive": null
@@ -30,23 +30,23 @@
     "products": {
       "УФ 001Б": {
         "volume_l": "1.57248",
-        "forward_logistics_amount": "84"
+        "forward_logistics_amount": "95"
       },
       "УФ 002Б": {
         "volume_l": "2.048256",
-        "forward_logistics_amount": "84"
+        "forward_logistics_amount": "95"
       },
       "УФ 003Б": {
         "volume_l": "0.92344",
-        "forward_logistics_amount": "77"
+        "forward_logistics_amount": "88"
       },
       "УФ 004Б": {
         "volume_l": "1.7907",
-        "forward_logistics_amount": "84"
+        "forward_logistics_amount": "95"
       },
       "УФ 005Б": {
         "volume_l": "1.5219",
-        "forward_logistics_amount": "84"
+        "forward_logistics_amount": "95"
       }
     }
   }
