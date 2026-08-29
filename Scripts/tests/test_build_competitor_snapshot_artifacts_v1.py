@@ -405,6 +405,44 @@ class BuilderContractTests(unittest.TestCase):
             ["100", "101", "999", "200"],
         )
 
+    def test_22_matching_evidence_reference_is_accepted_but_not_projected(self) -> None:
+        evidence, plan = fixture()
+        evidence["batch"]["reference_at"] = importer_tests.REFERENCE_AT
+        payload = builder.build_payload(evidence, evidence_hash(evidence), plan)
+        self.assertNotIn("reference_at", payload["batch"])
+
+    def test_23_conflicting_evidence_reference_is_rejected(self) -> None:
+        evidence, plan = fixture()
+        evidence["batch"]["reference_at"] = importer_tests.SECOND_CAPTURE
+        with self.assertRaisesRegex(
+            builder.EvidenceValidationError, "differs from derived reference_at"
+        ):
+            builder.build_payload(evidence, evidence_hash(evidence), plan)
+
+    def test_24_absent_evidence_reference_remains_valid(self) -> None:
+        evidence, plan = fixture()
+        self.assertNotIn("reference_at", evidence["batch"])
+        payload = builder.build_payload(evidence, evidence_hash(evidence), plan)
+        self.assertNotIn("reference_at", payload["batch"])
+
+    def test_25_evidence_only_batch_fields_are_not_projected(self) -> None:
+        evidence, plan = fixture()
+        evidence["batch"].update(
+            {
+                "reference_at": importer_tests.REFERENCE_AT,
+                "reference_plan_queries": 2,
+                "reference_plan_slots": 3,
+                "found_slots": 2,
+                "not_found_slots": 1,
+                "unique_found_listings": 2,
+            }
+        )
+        payload = builder.build_payload(evidence, evidence_hash(evidence), plan)
+        self.assertEqual(
+            tuple(payload["batch"]),
+            builder.PAYLOAD_BATCH_FIELDS + ("evidence_file_sha256",),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

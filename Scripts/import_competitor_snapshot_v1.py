@@ -35,6 +35,14 @@ KNOWN_OLD_PRICE_STATUSES = COMPLETE_OLD_PRICE_STATUSES | {
     "PRICE_SECTION_FAILED",
 }
 MONITORED_MEMBERSHIP_STATUSES = {"PRIMARY", "RESERVE", "CONTROL"}
+EVIDENCE_ONLY_BATCH_FIELDS = frozenset({
+    "reference_at",
+    "reference_plan_queries",
+    "reference_plan_slots",
+    "found_slots",
+    "not_found_slots",
+    "unique_found_listings",
+})
 
 REFERENCE_PLAN_SQL = """
 SELECT
@@ -660,6 +668,12 @@ def _validate_evidence(evidence: Mapping[str, Any]) -> None:
         <= batch_end,
         "Evidence collection phase timestamps are inconsistent",
     )
+    if "reference_at" in batch:
+        _require(
+            _timestamp(batch.get("reference_at"), "evidence batch reference_at")
+            == min(search_times),
+            "Evidence batch reference_at differs from derived reference_at",
+        )
     _require(
         all(search.get("region_key") == batch.get("region_key") for search in searches)
         and all(
@@ -853,8 +867,22 @@ def _validate_evidence_resolution(payload: Mapping[str, Any], evidence: Mapping[
     )
     evidence_batch = evidence["batch"]
     payload_batch = payload["batch"]
+    projected_evidence_batch = {
+        key: value
+        for key, value in evidence_batch.items()
+        if key not in EVIDENCE_ONLY_BATCH_FIELDS
+    }
     _require(
-        all(payload_batch.get(key) == value for key, value in evidence_batch.items()),
+        all(
+            payload_batch.get(key) == value
+            for key, value in projected_evidence_batch.items()
+        )
+        and all(
+            key == "evidence_file_sha256"
+            or key in evidence_batch
+            and evidence_batch[key] == value
+            for key, value in payload_batch.items()
+        ),
         "Evidence/Payload batch metadata mismatch",
     )
     region = payload.get("region")

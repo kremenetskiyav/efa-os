@@ -24,6 +24,21 @@ EXPECTED_REGION_KEY = "OZON_RU:DISPLAY:ПОЧТА_РОССИИ|ВЕНЁВСКА�
 EXPECTED_LOCATION_LABEL = "Почта России • Венёвская ул., 3а"
 EXPECTED_SOURCE = "OZON_BUYER_WORK"
 EXPECTED_COLLECTION_METHOD = "MANUAL_CONTROLLED_WORK_BROWSER"
+PAYLOAD_BATCH_FIELDS = (
+    "batch_started_at",
+    "batch_finished_at",
+    "search_phase_started_at",
+    "search_phase_finished_at",
+    "enrichment_phase_started_at",
+    "enrichment_phase_finished_at",
+    "region_key",
+    "location_label",
+    "batch_status",
+    "source",
+    "collection_method",
+    "scan_limit",
+    "product_pages_opened",
+)
 
 
 class BuilderError(RuntimeError):
@@ -145,7 +160,18 @@ def validate_evidence(evidence: Mapping[str, Any]) -> datetime:
         for row in searches
     ):
         raise EvidenceValidationError("Evidence contains an incomplete search query")
-    return min(parse_timestamp(row["captured_at"], "search captured_at") for row in searches)
+    reference_at = min(
+        parse_timestamp(row["captured_at"], "search captured_at") for row in searches
+    )
+    if "reference_at" in batch:
+        supplied_reference_at = parse_timestamp(
+            batch["reference_at"], "evidence batch reference_at"
+        )
+        if supplied_reference_at != reference_at:
+            raise EvidenceValidationError(
+                "Evidence batch reference_at differs from derived reference_at"
+            )
+    return reference_at
 
 
 def freeze_reference_plan(
@@ -446,7 +472,12 @@ def build_payload(
             if card is None
             else _found_observation(slot, search, card, enrichment_by_product[product_id])
         )
-    batch = dict(evidence["batch"])
+    projected_batch = {
+        name: evidence["batch"][name]
+        for name in PAYLOAD_BATCH_FIELDS
+        if name in evidence["batch"]
+    }
+    batch = dict(projected_batch)
     batch["evidence_file_sha256"] = evidence_sha256
     payload = {
         "contract_version": PAYLOAD_CONTRACT,

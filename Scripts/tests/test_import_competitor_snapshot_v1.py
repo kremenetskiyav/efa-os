@@ -669,6 +669,29 @@ class ArtifactContractTests(SnapshotImporterTestCase):
         with self.assertRaisesRegex(importer.ArtifactError, "BANK_PRICE"):
             self.load()
 
+    def test_94_matching_evidence_only_batch_metadata_is_accepted(self) -> None:
+        self.evidence["batch"].update(
+            {
+                "reference_at": REFERENCE_AT,
+                "reference_plan_queries": 2,
+                "reference_plan_slots": 3,
+                "found_slots": 2,
+                "not_found_slots": 1,
+                "unique_found_listings": 2,
+            }
+        )
+        bundle = self.load()
+        self.assertTrue(
+            importer.EVIDENCE_ONLY_BATCH_FIELDS.isdisjoint(bundle.payload["batch"])
+        )
+
+    def test_95_conflicting_evidence_reference_at_is_rejected(self) -> None:
+        self.evidence["batch"]["reference_at"] = SECOND_CAPTURE
+        with self.assertRaisesRegex(
+            importer.ArtifactError, "differs from derived reference_at"
+        ):
+            self.load()
+
 
 class ReferenceLayerTests(SnapshotImporterTestCase):
     def test_31_membership_before_valid_from_is_excluded(self) -> None:
