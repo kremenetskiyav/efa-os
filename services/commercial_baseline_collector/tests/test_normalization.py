@@ -7,6 +7,48 @@ from commercial_baseline_collector.normalization import PayloadError, normalize_
 
 
 FIXTURE_PATH = Path(__file__).parent / "fixtures" / "ozon_product_prices_v5_uf001b.json"
+OMITTED = object()
+
+
+def cpc_row(*, sku=1001, orders=OMITTED):
+    row = {
+        "date": "29.08.2026",
+        "sku": str(sku),
+        "views": 0,
+        "clicks": 0,
+        "ctr": "0,00",
+        "avgBid": "0,00",
+        "moneySpent": "0,00",
+        "ordersMoney": "0,00",
+        "drr": "0,0",
+        "general_drr": "0,0",
+        "product_gmv": "0,00",
+        "price": "600,00",
+    }
+    if orders is not OMITTED:
+        row["orders"] = orders
+    return row
+
+
+def cpc_payload(rows):
+    campaigns = []
+    report = {}
+    for offset, row in enumerate(rows):
+        campaign_id = 101 + offset
+        campaigns.append({
+            "id": campaign_id,
+            "state": "CAMPAIGN_STATE_INACTIVE",
+            "advObjectType": "SKU",
+        })
+        report[str(campaign_id)] = {"report": {"rows": [row]}}
+    return {
+        "collection_ref": "cpc-2026-08-29-sanitized",
+        "collected_at": "2026-08-30T04:40:00Z",
+        "business_date": "2026-08-29",
+        "report_uuid": "6a1fd928-6116-4c35-94e7-bbb999e26635",
+        "campaigns": campaigns,
+        "report": report,
+    }
 
 
 def price_item():
@@ -66,6 +108,34 @@ class NormalizationTests(unittest.TestCase):
             "report":{"29798536":{"report":{"rows":[{"date":"14.08.2026","sku":"4671345564","price":"599,00","ctr":"0,00","avgBid":"0,00","moneySpent":"0,00","orders":1,"ordersMoney":"598,00","drr":"0,0","general_drr":"0,0","product_gmv":"599,00"}]}}},
         })
         self.assertEqual((result["rows"][0]["views"], result["rows"][0]["clicks"]), (0, 0))
+
+    def test_cpc_failed_shape_defaults_all_five_omitted_orders_to_zero(self):
+        result = normalize_cpc(cpc_payload([
+            cpc_row(sku=1001),
+            cpc_row(sku=1002),
+            cpc_row(sku=1003),
+            cpc_row(sku=1004),
+            cpc_row(sku=1005),
+        ]))
+        self.assertEqual(len(result["rows"]), 5)
+        self.assertEqual([row["orders"] for row in result["rows"]], [0] * 5)
+
+    def test_cpc_explicit_order_values_preserve_integer_policy(self):
+        for supplied, expected in ((0, 0), (3, 3), ("2", 2)):
+            with self.subTest(supplied=supplied):
+                result = normalize_cpc(cpc_payload([cpc_row(orders=supplied)]))
+                self.assertEqual(result["rows"][0]["orders"], expected)
+
+    def test_cpc_malformed_supplied_orders_are_rejected(self):
+        for supplied in (None, -1, 1.0, 1.5, "abc", True):
+            with self.subTest(supplied=supplied), self.assertRaises(PayloadError):
+                normalize_cpc(cpc_payload([cpc_row(orders=supplied)]))
+
+    def test_cpc_unrelated_required_field_remains_strict(self):
+        row = cpc_row()
+        row.pop("ordersMoney")
+        with self.assertRaises(PayloadError):
+            normalize_cpc(cpc_payload([row]))
 
     def test_prices_confirmed_contract(self):
         result = normalize_prices({"collection_ref":"p1","collected_at":"2026-08-16T00:00:00Z","persist":True,"items":[price_item()]})

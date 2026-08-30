@@ -70,6 +70,20 @@ def _omitted_zero_int(source: dict[str, Any], name: str) -> int:
     return _positive_int(source.get(name, 0), name)
 
 
+def _omitted_zero_cpc_orders(source: dict[str, Any]) -> int:
+    """Ozon omits zero orders; explicit null and malformed values remain invalid."""
+    if "orders" not in source:
+        return 0
+    value = source["orders"]
+    if isinstance(value, bool):
+        raise PayloadError("orders must be integer")
+    if isinstance(value, float):
+        raise PayloadError("orders must be integer")
+    if isinstance(value, Decimal) and value != value.to_integral_value():
+        raise PayloadError("orders must be integer")
+    return _positive_int(value, "orders")
+
+
 def normalize_seller_demand(payload: object) -> dict[str, Any]:
     data = _required(payload, {"collection_ref", "collected_at", "business_date", "rows"})
     if not isinstance(data["rows"], list):
@@ -142,7 +156,7 @@ def normalize_cpc(payload: object) -> dict[str, Any]:
                 "ctr": _decimal(source.get("ctr"), "ctr"),
                 "avg_bid": _decimal(source.get("avgBid"), "avgBid"),
                 "money_spent": _decimal(source.get("moneySpent"), "moneySpent"),
-                "orders": _positive_int(source.get("orders"), "orders"),
+                "orders": _omitted_zero_cpc_orders(source),
                 "orders_money": _decimal(source.get("ordersMoney"), "ordersMoney"),
                 "drr": _decimal(source.get("drr"), "drr"),
                 "general_drr": _decimal(source.get("general_drr"), "general_drr"),
