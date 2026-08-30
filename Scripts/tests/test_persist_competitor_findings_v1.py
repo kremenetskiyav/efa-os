@@ -7,17 +7,27 @@ import sys
 import unittest
 import uuid
 from dataclasses import replace
+from datetime import timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from types import MappingProxyType
 from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPTS = ROOT / "Scripts"
-if str(SCRIPTS) not in sys.path:
-    sys.path.insert(0, str(SCRIPTS))
+TESTS = SCRIPTS / "tests"
+for path in (SCRIPTS, TESTS):
+    if str(path) not in sys.path:
+        sys.path.insert(0, str(path))
 
+import analyze_competitor_snapshots_v1 as analyzer
+import build_competitor_snapshot_artifacts_v1 as builder
+import import_competitor_snapshot_v1 as snapshot_importer
 import persist_competitor_findings_v1 as writer
+import run_competitor_daily_cycle_v1 as cycle
+import test_build_competitor_snapshot_artifacts_v1 as builder_tests
+import test_import_competitor_snapshot_v1 as importer_tests
 
 
 ARTIFACT = (
@@ -107,6 +117,181 @@ def persisted_snapshot(
         for row in plan.findings
     )
     return replace(snapshot, manifests=(manifest,), finding_rows=rows)
+
+
+def canonical_source_inputs(
+    folder: str,
+) -> tuple[
+    snapshot_importer.ArtifactBundle,
+    snapshot_importer.ImportPlan,
+    snapshot_importer.ProductionSnapshot,
+    analyzer.SnapshotBatch,
+]:
+    evidence, reference_plan = builder_tests.fixture()
+    evidence_sha = builder_tests.evidence_hash(evidence)
+    payload = builder.build_payload(evidence, evidence_sha, reference_plan)
+    snapshot = importer_tests.reference_snapshot()
+    evidence_path = Path(folder) / "evidence.json"
+    payload_path = Path(folder) / "payload.json"
+    evidence_path.write_bytes(builder.canonical_pretty_bytes(evidence))
+    payload_bytes, payload_sha, _ = builder.payload_identity(payload, evidence_sha)
+    payload_path.write_bytes(payload_bytes)
+    artifact = snapshot_importer.load_and_validate_artifacts(
+        payload_path, evidence_path, payload_sha, evidence_sha
+    )
+    import_plan = snapshot_importer.build_import_plan(artifact, snapshot)
+    current_rows = cycle.planned_current_history_rows(import_plan, snapshot)
+    current = analyzer.resolve_snapshot_batches(
+        current_rows,
+        expected_runs=import_plan.expected_query_count,
+        expected_queries_at=lambda _at: tuple(
+            (str(row["offer_id"]), str(row["query_text_exact"]))
+            for row in import_plan.search_rows
+        ),
+    )[0]
+    return artifact, import_plan, snapshot, current
+
+
+def new_batch_boundary_fixture(
+    *,
+    duplicate_current: bool = False,
+    identity_mismatch: bool = False,
+    batch_mismatch: bool = False,
+) -> tuple[
+    writer.ArtifactBundle,
+    writer.ProductionSnapshot,
+    writer.ValidatedCurrentObservationSource,
+]:
+    with TemporaryDirectory() as folder:
+        artifact, import_plan, snapshot, current = canonical_source_inputs(folder)
+        if batch_mismatch:
+            import_plan = replace(import_plan, batch_ref="cm-snapshot-v1:batch:mismatch")
+        if duplicate_current:
+            import_plan = replace(
+                import_plan,
+                observation_rows=(
+                    *import_plan.observation_rows,
+                    import_plan.observation_rows[0],
+                ),
+            )
+        if identity_mismatch:
+            current = replace(
+                current,
+                rows=(
+                    {**current.rows[0], "listing_id": str(uuid.uuid4())},
+                    *current.rows[1:],
+                ),
+            )
+        source = writer.build_validated_current_observation_source(
+            artifact, import_plan, snapshot, current
+        )
+
+    current_row = current.rows[0]
+    membership = next(
+        row
+        for row in snapshot.memberships
+        if row.listing_id == current_row["listing_id"]
+    )
+    previous_at = import_plan.reference_at - timedelta(days=1)
+    previous_observation_id = str(uuid.uuid5(uuid.NAMESPACE_URL, "previous-observation"))
+    previous_observation_ref = "cm-baseline-v1:observation:previous"
+    previous_row = {
+        "observation_id": previous_observation_id,
+        "observation_ref": previous_observation_ref,
+        "listing_id": str(current_row["listing_id"]),
+        "source_ref": "fixture:previous-source",
+        "raw_ref": "fixture:previous-raw",
+        "raw_source_ref": "fixture:previous-search",
+        "offer_id": current_row["offer_id"],
+        "query_text_exact": current_row["query_text_exact"],
+        "collection_ref": "cm-baseline-v1:run:previous",
+        "ozon_product_id": str(current_row["ozon_product_id"]),
+    }
+    finding_type = "COMPETITOR_PRICE_DECREASED"
+    finding = {
+        "finding_type": finding_type,
+        "finding_kind": "SIGNAL",
+        "offer_id": current_row["offer_id"],
+        "listing_id": str(current_row["listing_id"]),
+        "ozon_product_id": str(current_row["ozon_product_id"]),
+        "membership_status": membership.membership_status,
+        "query_context": [{"query_text_exact": current_row["query_text_exact"]}],
+        "observation_refs": [
+            {
+                "query_text_exact": current_row["query_text_exact"],
+                "previous_observation_id": previous_observation_id,
+                "previous_observation_ref": previous_observation_ref,
+                "current_observation_id": current_row["observation_id"],
+                "current_observation_ref": current_row["observation_ref"],
+            }
+        ],
+        "evidence_refs": [
+            {
+                "query_text_exact": current_row["query_text_exact"],
+                "previous": {
+                    "source_ref": previous_row["source_ref"],
+                    "raw_ref": previous_row["raw_ref"],
+                    "raw_source_ref": previous_row["raw_source_ref"],
+                },
+                "current": {
+                    "source_ref": current_row["source_ref"],
+                    "raw_ref": current_row["raw_ref"],
+                    "raw_source_ref": current_row["raw_source_ref"],
+                },
+            }
+        ],
+        "metric": "bank_price",
+        "severity": "INFO",
+        "confidence": "HIGH",
+        "status": "PROPOSED",
+        "summary": "Fixture price comparison.",
+        "dedup_key": (
+            f"{finding_type}|{current_row['offer_id']}|"
+            f"{current_row['ozon_product_id']}"
+        ),
+    }
+    report = {
+        "contract_version": writer.FINDING_SET_CONTRACT,
+        "source_analysis_contract": writer.ANALYSIS_CONTRACT,
+        "source_analysis_sha256": "a" * 64,
+        "previous_snapshot": {
+            "source_kind": "BASELINE_V1",
+            "derived_batch_id": "fixture-previous",
+            "reference_at": previous_at.isoformat().replace("+00:00", "Z"),
+            "captured_through": previous_at.isoformat().replace("+00:00", "Z"),
+            "region_key": builder.EXPECTED_REGION_KEY,
+        },
+        "current_snapshot": current.metadata(),
+        "summary": {"findings_total": 1},
+        "findings": [finding],
+        "suppressed_events": [],
+    }
+    finding_bundle = writer.ArtifactBundle(
+        report=report,
+        findings_sha256="b" * 64,
+        semantic_sha256=writer.semantic_sha256(report),
+        analysis_sha256="a" * 64,
+    )
+    base = writer.ProductionSnapshot(
+        observations={previous_observation_id: previous_row},
+        listings={
+            str(current_row["listing_id"]): {
+                "listing_id": str(current_row["listing_id"]),
+                "product_family_id": membership.product_family_id,
+                "ozon_product_id": membership.ozon_product_id,
+                "offer_id": membership.offer_id,
+                "membership_status": membership.membership_status,
+            }
+        },
+        offers=frozenset({membership.offer_id}),
+        schema_columns={
+            table: frozenset(columns)
+            for table, columns in writer.REQUIRED_SCHEMA_COLUMNS.items()
+        },
+        constraint_names=writer.REQUIRED_CONSTRAINTS,
+        index_names=writer.REQUIRED_INDEXES,
+    )
+    return finding_bundle, base, source
 
 
 class HashAndIdentityTests(unittest.TestCase):
@@ -297,6 +482,322 @@ class PlanTests(unittest.TestCase):
         schema["competitor_findings"] = frozenset()
         with self.assertRaises(writer.ReferenceConflictError):
             writer.build_plan(bundle, replace(snapshot, schema_columns=schema))
+
+
+class ObservationBoundaryTests(unittest.TestCase):
+    def _assert_factory_rejects(self, mutation) -> None:
+        with TemporaryDirectory() as folder:
+            artifact, plan, history, current = canonical_source_inputs(folder)
+            artifact, plan, history, current = mutation(
+                artifact, plan, history, current
+            )
+            with self.assertRaises(writer.ReferenceConflictError):
+                writer.build_validated_current_observation_source(
+                    artifact, plan, history, current
+                )
+
+    @staticmethod
+    def _change_plan_row(plan, attribute: str, **changes):
+        rows = [dict(row) for row in getattr(plan, attribute)]
+        rows[0] = {**rows[0], **changes}
+        return replace(plan, **{attribute: tuple(rows)})
+
+    def test_27a_new_batch_uses_persisted_previous_and_planned_current(self) -> None:
+        bundle, base, source = new_batch_boundary_fixture()
+        resolved = writer._resolve_observation_sources(
+            tuple(base.observations.values()), bundle.report, source
+        )
+        plan = writer.build_plan(bundle, replace(base, observations=resolved))
+        reference = bundle.report["findings"][0]["observation_refs"][0]
+        self.assertIn(reference["previous_observation_id"], resolved)
+        self.assertIn(reference["current_observation_id"], resolved)
+        self.assertEqual(plan.query_contexts, 1)
+        self.assertEqual(plan.observation_sides_resolved, 2)
+
+    def test_27b_missing_current_ref_fails_closed(self) -> None:
+        bundle, base, source = new_batch_boundary_fixture()
+        report = copy.deepcopy(bundle.report)
+        report["findings"][0]["observation_refs"][0][
+            "current_observation_id"
+        ] = str(uuid.uuid4())
+        with self.assertRaisesRegex(
+            writer.ReferenceConflictError, "validated import plan"
+        ):
+            writer._resolve_observation_sources(
+                tuple(base.observations.values()), report, source
+            )
+
+    def test_27c_duplicate_current_identity_fails_closed(self) -> None:
+        with self.assertRaisesRegex(writer.ReferenceConflictError, "canonical Payload plan"):
+            new_batch_boundary_fixture(duplicate_current=True)
+
+    def test_27d_analyzed_current_identity_mismatch_fails_closed(self) -> None:
+        with self.assertRaisesRegex(
+            writer.ReferenceConflictError, "canonical Import Plan"
+        ):
+            new_batch_boundary_fixture(identity_mismatch=True)
+
+    def test_27e_persisted_current_row_fails_new_batch(self) -> None:
+        bundle, base, source = new_batch_boundary_fixture()
+        current_id = bundle.report["findings"][0]["observation_refs"][0][
+            "current_observation_id"
+        ]
+        rows = (*base.observations.values(), source.observations[current_id])
+        with self.assertRaisesRegex(
+            writer.ReferenceConflictError, "incompatible with NEW_BATCH"
+        ):
+            writer._resolve_observation_sources(rows, bundle.report, source)
+
+    def test_27f_cloned_source_with_preserved_stamp_is_rejected(self) -> None:
+        bundle, base, source = new_batch_boundary_fixture()
+        observation_id = next(iter(source.observations))
+        observations = dict(source.observations)
+        observations[observation_id] = MappingProxyType(
+            {**observations[observation_id], "search_run_id": "forged-run"}
+        )
+        untrusted = replace(source, observations=MappingProxyType(observations))
+        with self.assertRaisesRegex(writer.InputContractError, "changed after validation"):
+            writer._resolve_observation_sources(
+                tuple(base.observations.values()), bundle.report, untrusted
+            )
+
+    def test_27g_zero_finding_requires_no_observation_source(self) -> None:
+        bundle, _, _ = new_batch_boundary_fixture()
+        report = copy.deepcopy(bundle.report)
+        report["findings"] = []
+        report["summary"]["findings_total"] = 0
+        self.assertEqual(writer._resolve_observation_sources((), report, None), {})
+
+    def test_27h_missing_previous_ref_fails_closed(self) -> None:
+        bundle, _, source = new_batch_boundary_fixture()
+        with self.assertRaisesRegex(writer.ReferenceConflictError, "previous"):
+            writer._resolve_observation_sources((), bundle.report, source)
+
+    def test_27i_batch_identity_mismatch_fails_closed(self) -> None:
+        with self.assertRaisesRegex(writer.ReferenceConflictError, "batch identity"):
+            new_batch_boundary_fixture(batch_mismatch=True)
+
+    def test_27j_changed_source_payload_sha_is_rejected(self) -> None:
+        bundle, base, source = new_batch_boundary_fixture()
+        changed = replace(source, payload_sha256="0" * 64)
+        with self.assertRaises(writer.InputContractError):
+            writer._resolve_observation_sources(
+                tuple(base.observations.values()), bundle.report, changed
+            )
+
+    def test_27k_changed_source_batch_ref_is_rejected(self) -> None:
+        bundle, base, source = new_batch_boundary_fixture()
+        changed = replace(source, batch_ref="cm-snapshot-v1:batch:forged")
+        with self.assertRaises(writer.InputContractError):
+            writer._resolve_observation_sources(
+                tuple(base.observations.values()), bundle.report, changed
+            )
+
+    def test_27l_changed_source_reference_at_is_rejected(self) -> None:
+        bundle, base, source = new_batch_boundary_fixture()
+        identity = MappingProxyType(
+            {**source.snapshot_identity, "reference_at": "2026-01-01T00:00:00.000Z"}
+        )
+        changed = replace(source, snapshot_identity=identity)
+        with self.assertRaises(writer.InputContractError):
+            writer._resolve_observation_sources(
+                tuple(base.observations.values()), bundle.report, changed
+            )
+
+    def test_27m_changed_derived_batch_id_is_rejected(self) -> None:
+        self._assert_factory_rejects(
+            lambda artifact, plan, history, current: (
+                artifact,
+                plan,
+                history,
+                replace(current, derived_batch_id="cm-analysis-derived-batch:v1:forged"),
+            )
+        )
+
+    def test_27n_changed_search_run_id_is_rejected(self) -> None:
+        self._assert_factory_rejects(
+            lambda artifact, plan, history, current: (
+                artifact,
+                self._change_plan_row(
+                    plan, "observation_rows", search_run_id=str(uuid.uuid4())
+                ),
+                history,
+                current,
+            )
+        )
+
+    def test_27o_changed_observation_id_is_rejected(self) -> None:
+        self._assert_factory_rejects(
+            lambda artifact, plan, history, current: (
+                artifact,
+                self._change_plan_row(
+                    plan, "observation_rows", observation_id=str(uuid.uuid4())
+                ),
+                history,
+                current,
+            )
+        )
+
+    def test_27p_changed_observation_ref_is_rejected(self) -> None:
+        self._assert_factory_rejects(
+            lambda artifact, plan, history, current: (
+                artifact,
+                self._change_plan_row(
+                    plan,
+                    "observation_rows",
+                    observation_ref="cm-snapshot-v1:observation:forged",
+                ),
+                history,
+                current,
+            )
+        )
+
+    def test_27q_changed_listing_id_is_rejected(self) -> None:
+        self._assert_factory_rejects(
+            lambda artifact, plan, history, current: (
+                artifact,
+                self._change_plan_row(
+                    plan, "observation_rows", listing_id=str(uuid.uuid4())
+                ),
+                history,
+                current,
+            )
+        )
+
+    def test_27r_changed_membership_id_is_rejected(self) -> None:
+        self._assert_factory_rejects(
+            lambda artifact, plan, history, current: (
+                artifact,
+                self._change_plan_row(
+                    plan, "observation_rows", membership_id=str(uuid.uuid4())
+                ),
+                history,
+                current,
+            )
+        )
+
+    def test_27s_changed_source_ref_is_rejected(self) -> None:
+        self._assert_factory_rejects(
+            lambda artifact, plan, history, current: (
+                artifact,
+                self._change_plan_row(
+                    plan, "observation_rows", source_ref="forged:source"
+                ),
+                history,
+                current,
+            )
+        )
+
+    def test_27t_changed_raw_ref_is_rejected(self) -> None:
+        self._assert_factory_rejects(
+            lambda artifact, plan, history, current: (
+                artifact,
+                self._change_plan_row(
+                    plan, "observation_rows", raw_ref="forged:raw"
+                ),
+                history,
+                current,
+            )
+        )
+
+    def test_27u_changed_query_context_is_rejected(self) -> None:
+        self._assert_factory_rejects(
+            lambda artifact, plan, history, current: (
+                artifact,
+                self._change_plan_row(
+                    plan, "search_rows", query_text_exact="FORGED_QUERY"
+                ),
+                history,
+                current,
+            )
+        )
+
+    def test_27v_removed_current_observation_is_rejected(self) -> None:
+        self._assert_factory_rejects(
+            lambda artifact, plan, history, current: (
+                artifact,
+                replace(plan, observation_rows=plan.observation_rows[:-1]),
+                history,
+                current,
+            )
+        )
+
+    def test_27w_extra_current_observation_is_rejected(self) -> None:
+        def mutation(artifact, plan, history, current):
+            extra = {
+                **plan.observation_rows[0],
+                "observation_id": str(uuid.uuid4()),
+                "observation_ref": "cm-snapshot-v1:observation:extra",
+            }
+            return (
+                artifact,
+                replace(plan, observation_rows=(*plan.observation_rows, extra)),
+                history,
+                current,
+            )
+
+        self._assert_factory_rejects(mutation)
+
+    def test_27x_import_plan_not_matching_artifact_is_rejected(self) -> None:
+        self._assert_factory_rejects(
+            lambda artifact, plan, history, current: (
+                artifact,
+                replace(plan, found=plan.found + 1),
+                history,
+                current,
+            )
+        )
+
+    def test_27y_snapshot_batch_not_matching_plan_is_rejected(self) -> None:
+        def mutation(artifact, plan, history, current):
+            rows = [dict(row) for row in current.rows]
+            rows[0]["raw_ref"] = "forged:raw"
+            return artifact, plan, history, replace(current, rows=tuple(rows))
+
+        self._assert_factory_rejects(mutation)
+
+    def test_27z_source_lookup_is_immutable(self) -> None:
+        _, _, source = new_batch_boundary_fixture()
+        observation_id = next(iter(source.observations))
+        with self.assertRaises(TypeError):
+            source.observations[observation_id]["source_ref"] = "forged"
+
+    def test_27za_new_batch_to_persisted_exact_lifecycle(self) -> None:
+        with TemporaryDirectory() as folder:
+            artifact, import_plan, import_history, _ = canonical_source_inputs(folder)
+            exact_import_history = replace(
+                import_history,
+                search_rows=import_plan.search_rows,
+                observation_rows=import_plan.observation_rows,
+            )
+            self.assertEqual(
+                snapshot_importer.run_dry_run(
+                    artifact, exact_import_history
+                ).history_state,
+                "EXACT_ALREADY_APPLIED",
+            )
+
+        bundle, base, source = new_batch_boundary_fixture()
+        new_observations = writer._resolve_observation_sources(
+            tuple(base.observations.values()), bundle.report, source
+        )
+        new_base = replace(base, observations=new_observations)
+        new_plan = writer.build_plan(bundle, new_base)
+        self.assertEqual(
+            writer.run_dry_run(bundle, new_base).history_state,
+            "NEW_FINDING_SET",
+        )
+
+        persisted_observations = writer._resolve_observation_sources(
+            tuple(new_observations.values()), bundle.report, None
+        )
+        after_write = persisted_snapshot(
+            replace(base, observations=persisted_observations), new_plan
+        )
+        self.assertEqual(
+            writer.run_dry_run(bundle, after_write).history_state,
+            "EXACT_ALREADY_APPLIED",
+        )
 
 
 class HistoryTests(unittest.TestCase):

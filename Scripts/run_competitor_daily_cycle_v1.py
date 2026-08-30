@@ -172,59 +172,10 @@ def planned_current_history_rows(
     plan: snapshot_importer.ImportPlan,
     snapshot: snapshot_importer.ProductionSnapshot,
 ) -> list[dict[str, Any]]:
-    searches = {str(row["search_run_id"]): row for row in plan.search_rows}
-    memberships = {reference.membership_id: reference for reference in snapshot.memberships}
-    rows: list[dict[str, Any]] = []
-    for observation in plan.observation_rows:
-        search = searches[str(observation["search_run_id"])]
-        membership = memberships[str(observation["membership_id"])]
-        rows.append(
-            {
-                "search_run_id": str(search["search_run_id"]),
-                "offer_id": search["offer_id"],
-                "query_text_exact": search["query_text_exact"],
-                "region_key": search["region_key"],
-                "location_label": search.get("location_label"),
-                "run_captured_at": search["captured_at"],
-                "run_status": search["status"],
-                "collection_ref": search["collection_ref"],
-                "raw_source_ref": search["raw_source_ref"],
-                "observation_id": str(observation["observation_id"]),
-                "observation_ref": observation["observation_ref"],
-                "listing_id": str(observation["listing_id"]),
-                "source_ref": observation["source_ref"],
-                "raw_ref": observation.get("raw_ref"),
-                "ozon_product_id": membership.ozon_product_id,
-                "membership_status": membership.membership_status,
-                "captured_at": observation["captured_at"],
-                "enrichment_captured_at": observation.get("enrichment_captured_at"),
-                "page_number": observation.get("page_number"),
-                "position_on_page": observation.get("position_on_page"),
-                "rank": observation.get("rank"),
-                "ad_flag": observation.get("ad_flag"),
-                "bank_price": observation.get("bank_price"),
-                "other_payment_price": observation.get("other_payment_price"),
-                "old_price": observation.get("old_price"),
-                "currency": observation.get("currency"),
-                "rating": observation.get("rating"),
-                "reviews_count_observed": observation.get("reviews_count_observed"),
-                "reviews_scope": observation.get("reviews_scope"),
-                "purchase_count_observed": observation.get("purchase_count_observed"),
-                "purchase_indicator_raw": observation.get("purchase_indicator_raw"),
-                "availability_status": observation.get("availability_status"),
-                "availability_raw": observation.get("availability_raw"),
-                "observed_oem_raw": observation.get("observed_oem_raw"),
-                "observed_dimensions_raw": observation.get("observed_dimensions_raw"),
-                "observed_length_mm": observation.get("observed_length_mm"),
-                "observed_width_mm": observation.get("observed_width_mm"),
-                "observed_height_mm": observation.get("observed_height_mm"),
-                "carbon_claim_raw": observation.get("carbon_claim_raw"),
-                "origin_raw": observation.get("origin_raw"),
-                "quality_status": observation.get("quality_status"),
-                "quality_flags": observation.get("quality_flags"),
-            }
-        )
-    return rows
+    return [
+        dict(row)
+        for row in finding_writer.canonical_current_history_rows(plan, snapshot)
+    ]
 
 
 deterministic_source_counts = analyzer.deterministic_source_counts
@@ -366,7 +317,19 @@ def run_cycle(
         finding_bundle = finding_writer.load_artifact(
             findings_path, findings_sha256, analysis_sha256
         )
-        base = finding_writer.read_reference_snapshot(connection, finding_bundle.report)
+        current_observation_inputs = None
+        if import_result.history_state == "NEW_BATCH" and finding_set["findings"]:
+            current_observation_inputs = finding_writer.CurrentObservationInputs(
+                artifact=bundle,
+                import_plan=import_plan,
+                import_history=import_history,
+                current_snapshot=current_batch,
+            )
+        base = finding_writer.read_reference_snapshot(
+            connection,
+            finding_bundle.report,
+            current_observation_inputs,
+        )
         persistence_plan = finding_writer.build_plan(finding_bundle, base)
         persisted = finding_writer.read_history(connection, persistence_plan, base)
         persistence_result = finding_writer.run_dry_run(finding_bundle, persisted)

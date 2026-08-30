@@ -7,10 +7,14 @@ import hashlib
 import json
 import os
 import uuid
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any, Callable, Mapping, Sequence
+
+import analyze_competitor_snapshots_v1 as snapshot_analyzer
+import import_competitor_snapshot_v1 as snapshot_importer
 
 
 PERSISTENCE_CONTRACT = "competitor-finding-persistence.v1"
@@ -272,6 +276,27 @@ class ProductionSnapshot:
 
 
 @dataclass(frozen=True)
+class ValidatedCurrentObservationSource:
+    """Importer-validated, immutable current-side observations for NEW_BATCH."""
+
+    payload_sha256: str
+    batch_ref: str
+    snapshot_identity: Mapping[str, Any]
+    observations: Mapping[str, Mapping[str, Any]]
+    canonical_sha256: str
+
+
+@dataclass(frozen=True)
+class CurrentObservationInputs:
+    """Canonical pipeline inputs from which Writer reconstructs current rows."""
+
+    artifact: snapshot_importer.ArtifactBundle
+    import_plan: snapshot_importer.ImportPlan
+    import_history: snapshot_importer.ProductionSnapshot
+    current_snapshot: snapshot_analyzer.SnapshotBatch
+
+
+@dataclass(frozen=True)
 class PersistencePlan:
     manifest: Mapping[str, Any]
     findings: tuple[Mapping[str, Any], ...]
@@ -507,6 +532,363 @@ def _rows_match(planned: Mapping[str, Any], actual: Mapping[str, Any]) -> bool:
     return all(name in actual and _normalise(value) == _normalise(actual[name]) for name, value in planned.items())
 
 
+def _unique_rows(
+    rows: Sequence[Mapping[str, Any]], key: str, label: str
+) -> dict[str, Mapping[str, Any]]:
+    result: dict[str, Mapping[str, Any]] = {}
+    for row in rows:
+        identity = str(row.get(key))
+        if identity == "None" or identity in result:
+            raise ReferenceConflictError(f"{label} identity is missing or duplicated")
+        result[identity] = row
+    return result
+
+
+def canonical_current_history_rows(
+    plan: snapshot_importer.ImportPlan,
+    history: snapshot_importer.ProductionSnapshot,
+) -> tuple[Mapping[str, Any], ...]:
+    searches = _unique_rows(plan.search_rows, "search_run_id", "Current search run")
+    memberships = {
+        str(reference.membership_id): reference for reference in history.memberships
+    }
+    if len(memberships) != len(history.memberships):
+        raise ReferenceConflictError("Current membership identity is duplicated")
+
+    rows: list[Mapping[str, Any]] = []
+    for observation in plan.observation_rows:
+        search = searches.get(str(observation.get("search_run_id")))
+        membership = memberships.get(str(observation.get("membership_id")))
+        if search is None or membership is None:
+            raise ReferenceConflictError("Current observation run or membership is missing")
+        rows.append(
+            {
+                "search_run_id": str(search["search_run_id"]),
+                "offer_id": search["offer_id"],
+                "query_text_exact": search["query_text_exact"],
+                "region_key": search["region_key"],
+                "location_label": search.get("location_label"),
+                "run_captured_at": search["captured_at"],
+                "run_status": search["status"],
+                "collection_ref": search["collection_ref"],
+                "raw_source_ref": search["raw_source_ref"],
+                "observation_id": str(observation["observation_id"]),
+                "observation_ref": observation["observation_ref"],
+                "listing_id": str(observation["listing_id"]),
+                "source_ref": observation["source_ref"],
+                "raw_ref": observation.get("raw_ref"),
+                "ozon_product_id": membership.ozon_product_id,
+                "membership_status": membership.membership_status,
+                "captured_at": observation["captured_at"],
+                "enrichment_captured_at": observation.get("enrichment_captured_at"),
+                "page_number": observation.get("page_number"),
+                "position_on_page": observation.get("position_on_page"),
+                "rank": observation.get("rank"),
+                "ad_flag": observation.get("ad_flag"),
+                "bank_price": observation.get("bank_price"),
+                "other_payment_price": observation.get("other_payment_price"),
+                "old_price": observation.get("old_price"),
+                "currency": observation.get("currency"),
+                "rating": observation.get("rating"),
+                "reviews_count_observed": observation.get("reviews_count_observed"),
+                "reviews_scope": observation.get("reviews_scope"),
+                "purchase_count_observed": observation.get("purchase_count_observed"),
+                "purchase_indicator_raw": observation.get("purchase_indicator_raw"),
+                "availability_status": observation.get("availability_status"),
+                "availability_raw": observation.get("availability_raw"),
+                "observed_oem_raw": observation.get("observed_oem_raw"),
+                "observed_dimensions_raw": observation.get("observed_dimensions_raw"),
+                "observed_length_mm": observation.get("observed_length_mm"),
+                "observed_width_mm": observation.get("observed_width_mm"),
+                "observed_height_mm": observation.get("observed_height_mm"),
+                "carbon_claim_raw": observation.get("carbon_claim_raw"),
+                "origin_raw": observation.get("origin_raw"),
+                "quality_status": observation.get("quality_status"),
+                "quality_flags": observation.get("quality_flags"),
+            }
+        )
+    return tuple(rows)
+
+
+def _current_source_document(
+    payload_sha256: str,
+    batch_ref: str,
+    snapshot_identity: Mapping[str, Any],
+    observations: Mapping[str, Mapping[str, Any]],
+) -> Mapping[str, Any]:
+    return {
+        "payload_sha256": payload_sha256,
+        "batch_ref": batch_ref,
+        "snapshot_identity": snapshot_identity,
+        "observations": observations,
+    }
+
+
+def _current_source_sha256(source: ValidatedCurrentObservationSource) -> str:
+    return _sha256(
+        _normalise(
+            _current_source_document(
+                source.payload_sha256,
+                source.batch_ref,
+                source.snapshot_identity,
+                source.observations,
+            )
+        )
+    )
+
+
+def build_validated_current_observation_source(
+    artifact: snapshot_importer.ArtifactBundle,
+    import_plan: snapshot_importer.ImportPlan,
+    import_history: snapshot_importer.ProductionSnapshot,
+    current_snapshot: snapshot_analyzer.SnapshotBatch,
+) -> ValidatedCurrentObservationSource:
+    """Project the exact validated importer plan into the writer read model."""
+
+    if not isinstance(artifact, snapshot_importer.ArtifactBundle):
+        raise InputContractError("Current observation source lacks validated artifact")
+    if not isinstance(import_plan, snapshot_importer.ImportPlan):
+        raise InputContractError("Current observation source lacks validated import plan")
+    if not isinstance(import_history, snapshot_importer.ProductionSnapshot):
+        raise InputContractError("Current observation source lacks importer history state")
+    if not isinstance(current_snapshot, snapshot_analyzer.SnapshotBatch):
+        raise InputContractError("Current observation source lacks analyzed snapshot")
+
+    for path, expected, label in (
+        (artifact.payload_path, artifact.payload_sha256, "Payload"),
+        (artifact.evidence_path, artifact.evidence_sha256, "Evidence"),
+    ):
+        if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != expected:
+            raise ReferenceConflictError(f"{label} artifact changed after importer validation")
+
+    expected_batch_ref = snapshot_importer.build_batch_ref(
+        artifact.evidence_sha256, artifact.payload_sha256
+    )
+    if import_plan.batch_ref != expected_batch_ref:
+        raise ReferenceConflictError("Current import batch identity mismatch")
+    if import_plan.reference_at != artifact.reference_at:
+        raise ReferenceConflictError("Current import reference timestamp mismatch")
+    if snapshot_importer.determine_history_state(import_plan, import_history) != "NEW_BATCH":
+        raise ReferenceConflictError("Current observation source is not a genuine NEW_BATCH")
+    if import_history.search_rows or import_history.observation_rows:
+        raise ReferenceConflictError("NEW_BATCH already has persisted current rows")
+
+    expected_plan = snapshot_importer.build_import_plan(artifact, import_history)
+    if _normalise(asdict(import_plan)) != _normalise(asdict(expected_plan)):
+        raise ReferenceConflictError("Current import plan differs from canonical Payload plan")
+
+    expected_rows = canonical_current_history_rows(expected_plan, import_history)
+    expected_queries = tuple(
+        (str(row["offer_id"]), str(row["query_text_exact"]))
+        for row in expected_plan.search_rows
+    )
+    try:
+        batches = snapshot_analyzer.resolve_snapshot_batches(
+            expected_rows,
+            expected_runs=expected_plan.expected_query_count,
+            expected_queries_at=lambda _reference_at: expected_queries,
+        )
+    except snapshot_analyzer.AnalyzerError as error:
+        raise ReferenceConflictError("Canonical current snapshot cannot be derived") from error
+    if len(batches) != 1:
+        raise ReferenceConflictError("Canonical current snapshot is not exactly one batch")
+    expected_snapshot = batches[0]
+    if _normalise(asdict(current_snapshot)) != _normalise(asdict(expected_snapshot)):
+        raise ReferenceConflictError("Current SnapshotBatch differs from canonical Import Plan")
+
+    searches = _unique_rows(expected_plan.search_rows, "search_run_id", "Current search run")
+    observations = _unique_rows(
+        expected_plan.observation_rows, "observation_id", "Current observation"
+    )
+    memberships = _unique_rows(
+        tuple(
+            {
+                "membership_id": row.membership_id,
+                "offer_id": row.offer_id,
+                "listing_id": row.listing_id,
+                "ozon_product_id": row.ozon_product_id,
+                "matched_oem_set": row.matched_oem_set,
+            }
+            for row in import_history.memberships
+        ),
+        "membership_id",
+        "Current membership",
+    )
+    if len(searches) != expected_plan.expected_query_count:
+        raise ReferenceConflictError("Current import query count mismatch")
+    if len(observations) != expected_plan.expected_slot_count:
+        raise ReferenceConflictError("Current import observation count mismatch")
+    if expected_plan.found + expected_plan.not_found != len(observations):
+        raise ReferenceConflictError("Current import slot status count mismatch")
+
+    projected: dict[str, Mapping[str, Any]] = {}
+    observation_refs: set[str] = set()
+    for observation_id, observation in observations.items():
+        search = searches.get(str(observation.get("search_run_id")))
+        membership = memberships.get(str(observation.get("membership_id")))
+        if search is None or membership is None:
+            raise ReferenceConflictError("Current observation run or membership is missing")
+        if (
+            str(observation.get("listing_id")) != str(membership["listing_id"])
+            or str(search.get("offer_id")) != str(membership["offer_id"])
+            or str(search.get("query_text_exact")) not in membership["matched_oem_set"]
+        ):
+            raise ReferenceConflictError("Current observation listing or membership mismatch")
+        collection_ref = snapshot_importer.build_collection_ref(
+            expected_plan.batch_ref,
+            str(search["offer_id"]),
+            str(search["query_kind"]),
+            str(search["query_text_exact"]),
+        )
+        if (
+            str(search.get("collection_ref")) != collection_ref
+            or str(search.get("search_run_id"))
+            != snapshot_importer.build_search_run_id(collection_ref)
+        ):
+            raise ReferenceConflictError("Current search run identity mismatch")
+        observation_ref = snapshot_importer.build_observation_ref(
+            collection_ref, str(membership["ozon_product_id"])
+        )
+        if (
+            str(observation.get("observation_ref")) != observation_ref
+            or observation_id != snapshot_importer.build_observation_id(observation_ref)
+            or observation_ref in observation_refs
+        ):
+            raise ReferenceConflictError("Current observation identity mismatch or duplicate")
+        observation_refs.add(observation_ref)
+        projected[observation_id] = MappingProxyType(
+            {
+                "observation_id": observation_id,
+                "observation_ref": observation_ref,
+                "search_run_id": str(search["search_run_id"]),
+                "membership_id": str(observation["membership_id"]),
+                "listing_id": str(observation["listing_id"]),
+                "source_ref": observation.get("source_ref"),
+                "raw_ref": observation.get("raw_ref"),
+                "raw_source_ref": search.get("raw_source_ref"),
+                "offer_id": str(search["offer_id"]),
+                "query_text_exact": str(search["query_text_exact"]),
+                "collection_ref": collection_ref,
+                "ozon_product_id": str(membership["ozon_product_id"]),
+            }
+        )
+
+    analyzed_rows = _unique_rows(
+        expected_snapshot.rows, "observation_id", "Analyzed current observation"
+    )
+    if set(analyzed_rows) != set(projected):
+        raise ReferenceConflictError("Analyzed current observations differ from import plan")
+    identity_fields = (
+        "observation_id",
+        "observation_ref",
+        "listing_id",
+        "source_ref",
+        "raw_ref",
+        "raw_source_ref",
+        "offer_id",
+        "query_text_exact",
+        "collection_ref",
+        "ozon_product_id",
+    )
+    for observation_id, planned in projected.items():
+        analyzed = analyzed_rows[observation_id]
+        if any(
+            _normalise(planned.get(name)) != _normalise(analyzed.get(name))
+            for name in identity_fields
+        ):
+            raise ReferenceConflictError("Analyzed current observation identity mismatch")
+
+    if expected_snapshot.source_kind != "SNAPSHOT_V1":
+        raise ReferenceConflictError("Current observation source kind mismatch")
+    if expected_snapshot.reference_at != expected_plan.reference_at:
+        raise ReferenceConflictError("Current snapshot reference timestamp mismatch")
+    if set(expected_snapshot.run_ids) != set(searches):
+        raise ReferenceConflictError("Current snapshot run identities differ from import plan")
+    if set(expected_snapshot.collection_refs) != {
+        str(row["collection_ref"]) for row in searches.values()
+    }:
+        raise ReferenceConflictError("Current snapshot collections differ from import plan")
+
+    snapshot_identity = MappingProxyType(expected_snapshot.metadata())
+    immutable_observations = MappingProxyType(projected)
+    canonical_sha256 = _sha256(
+        _normalise(
+            _current_source_document(
+                artifact.payload_sha256,
+                expected_plan.batch_ref,
+                snapshot_identity,
+                immutable_observations,
+            )
+        )
+    )
+    return ValidatedCurrentObservationSource(
+        payload_sha256=artifact.payload_sha256,
+        batch_ref=expected_plan.batch_ref,
+        snapshot_identity=snapshot_identity,
+        observations=immutable_observations,
+        canonical_sha256=canonical_sha256,
+    )
+
+
+def _finding_observation_ids(
+    report: Mapping[str, Any], side: str
+) -> set[str]:
+    return {
+        str(reference[f"{side}_observation_id"])
+        for finding in report["findings"]
+        for reference in finding["observation_refs"]
+    }
+
+
+def _resolve_observation_sources(
+    persisted_rows: Sequence[Mapping[str, Any]],
+    report: Mapping[str, Any],
+    current_source: ValidatedCurrentObservationSource | None,
+) -> Mapping[str, Mapping[str, Any]]:
+    persisted = _unique_rows(persisted_rows, "observation_id", "Persisted observation")
+    previous_ids = _finding_observation_ids(report, "previous")
+    current_ids = _finding_observation_ids(report, "current")
+    if previous_ids & current_ids:
+        raise ReferenceConflictError("Previous and current observation identities overlap")
+    missing_previous = previous_ids - set(persisted)
+    if missing_previous:
+        raise ReferenceConflictError("Observation previous is missing")
+
+    if current_source is None:
+        if current_ids - set(persisted):
+            raise ReferenceConflictError("Observation current is missing")
+        return MappingProxyType(persisted)
+    if not isinstance(current_source, ValidatedCurrentObservationSource):
+        raise InputContractError("Current observation source is not factory output")
+    if current_source.canonical_sha256 != _current_source_sha256(current_source):
+        raise InputContractError("Current observation source changed after validation")
+    expected_identity = current_source.snapshot_identity
+    actual_identity = report["current_snapshot"]
+    identity_fields = (
+        "source_kind",
+        "derived_batch_id",
+        "reference_at",
+        "captured_through",
+        "region_key",
+    )
+    if any(
+        _normalise(expected_identity.get(name)) != _normalise(actual_identity.get(name))
+        for name in identity_fields
+    ):
+        raise ReferenceConflictError("Current finding snapshot identity mismatch")
+    if current_ids & set(persisted):
+        raise ReferenceConflictError("Persisted current row is incompatible with NEW_BATCH")
+    missing_current = current_ids - set(current_source.observations)
+    if missing_current:
+        raise ReferenceConflictError("Observation current is missing from validated import plan")
+    merged = dict(persisted)
+    merged.update(
+        (observation_id, current_source.observations[observation_id])
+        for observation_id in current_ids
+    )
+    return MappingProxyType(merged)
+
+
 def validate_schema(snapshot: ProductionSnapshot) -> None:
     for table, required in REQUIRED_SCHEMA_COLUMNS.items():
         if required != snapshot.schema_columns.get(table, frozenset()):
@@ -690,7 +1072,25 @@ def _fetch_dicts(cursor: Any, query: str, parameters: tuple[object, ...] = ()) -
     return [dict(zip(names, row)) for row in cursor.fetchall()]
 
 
-def read_reference_snapshot(connection: Any, report: Mapping[str, Any]) -> ProductionSnapshot:
+def read_reference_snapshot(
+    connection: Any,
+    report: Mapping[str, Any],
+    current_inputs: CurrentObservationInputs | None = None,
+) -> ProductionSnapshot:
+    if current_inputs is not None and not isinstance(
+        current_inputs, CurrentObservationInputs
+    ):
+        raise InputContractError("Current observation inputs are invalid")
+    current_source = (
+        None
+        if current_inputs is None
+        else build_validated_current_observation_source(
+            current_inputs.artifact,
+            current_inputs.import_plan,
+            current_inputs.import_history,
+            current_inputs.current_snapshot,
+        )
+    )
     observation_ids = sorted(
         {
             str(ref[f"{side}_observation_id"])
@@ -727,7 +1127,7 @@ def read_reference_snapshot(connection: Any, report: Mapping[str, Any]) -> Produ
     for row in columns:
         schema[row["table_name"]].add(row["column_name"])
     return ProductionSnapshot(
-        observations={row["observation_id"]: row for row in observations},
+        observations=_resolve_observation_sources(observations, report, current_source),
         listings={row["listing_id"]: row for row in listings},
         offers=frozenset(row["offer_id"] for row in offers),
         schema_columns={key: frozenset(value) for key, value in schema.items()},

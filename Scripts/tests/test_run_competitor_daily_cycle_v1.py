@@ -8,6 +8,7 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 from unittest.mock import patch
 
 
@@ -215,7 +216,9 @@ class DailyCycleTests(unittest.TestCase):
                 patch.object(analyzer, "read_history", return_value=[]),
                 patch.object(analyzer, "resolve_snapshot_pair", return_value=(previous, current)),
                 patch.object(analyzer, "build_analysis", return_value=empty_analysis(previous, current)),
-                patch.object(writer, "read_reference_snapshot", return_value=base_writer),
+                patch.object(
+                    writer, "read_reference_snapshot", return_value=base_writer
+                ) as writer_read,
                 patch.object(writer, "read_history", return_value=base_writer),
                 patch.object(writer, "run_dry_run", wraps=writer.run_dry_run) as writer_dry,
             ):
@@ -224,6 +227,7 @@ class DailyCycleTests(unittest.TestCase):
         self.assertEqual(result["final_status"], cycle.SUCCESS)
         importer_dry.assert_called_once()
         writer_dry.assert_called_once()
+        self.assertIsNone(writer_read.call_args.args[2])
         self.assertEqual(result["finding_count"], 0)
 
     def test_16_same_evidence_semantic_result_is_stable(self) -> None:
@@ -284,6 +288,147 @@ class DailyCycleTests(unittest.TestCase):
     def test_19_superuser_identity_is_rejected(self) -> None:
         with self.assertRaises(snapshot_importer.ConfigurationError):
             cycle.assert_read_only_identity("runtime", is_superuser=True)
+
+    def test_20_new_batch_passes_exact_import_plan_to_writer(self) -> None:
+        evidence, _ = builder_tests.fixture()
+        snapshot = importer_tests.reference_snapshot()
+        product_names = {
+            membership.listing_id: "Fixture " + membership.ozon_product_id
+            for membership in snapshot.memberships
+        }
+        previous = empty_batch("BASELINE_V1", datetime(2026, 8, 25, tzinfo=UTC))
+        current = empty_batch("SNAPSHOT_V1", datetime(2026, 8, 26, tzinfo=UTC))
+        database = Connection()
+        config = snapshot_importer.DatabaseConfig(
+            "localhost", 5432, "efa", "efa_mcp_readonly", "unused"
+        )
+        base_writer = writer_snapshot()
+        finding_set = {
+            "contract_version": "fixture",
+            "findings": [{"fixture": True}],
+        }
+        finding_bundle = writer.ArtifactBundle(
+            report=finding_set,
+            findings_sha256="b" * 64,
+            semantic_sha256="c" * 64,
+            analysis_sha256="a" * 64,
+        )
+        persistence_plan = writer.PersistencePlan(
+            manifest={"set_key": "cm-finding-set-v1:fixture"},
+            findings=({"fixture": True},),
+            query_contexts=1,
+            observation_sides_resolved=2,
+            single_query_findings=1,
+            multi_query_findings=0,
+        )
+        persistence_result = writer.PersistenceResult(
+            "NEW_FINDING_SET", persistence_plan
+        )
+        with TemporaryDirectory() as folder:
+            evidence_path = Path(folder) / "evidence.json"
+            output_dir = Path(folder) / "out"
+            evidence_path.write_bytes(builder.canonical_pretty_bytes(evidence))
+            with (
+                patch.object(snapshot_importer, "load_database_config", return_value=config),
+                patch.object(snapshot_importer, "connect_database", return_value=database),
+                patch.object(cycle, "verify_connection_read_only", return_value="efa_mcp_readonly"),
+                patch.object(snapshot_importer, "read_production_snapshot", return_value=snapshot),
+                patch.object(cycle, "product_names_from_snapshot", return_value=product_names),
+                patch.object(snapshot_importer, "read_batch_history", return_value=snapshot),
+                patch.object(analyzer, "read_history", return_value=[]),
+                patch.object(analyzer, "resolve_snapshot_pair", return_value=(previous, current)),
+                patch.object(analyzer, "build_analysis", return_value=empty_analysis(previous, current)),
+                patch.object(cycle.finding_engine, "build_evidence_index", return_value={}),
+                patch.object(cycle.finding_engine, "generate_finding_set", return_value=finding_set),
+                patch.object(writer, "load_artifact", return_value=finding_bundle),
+                patch.object(writer, "read_reference_snapshot", return_value=base_writer) as writer_read,
+                patch.object(writer, "build_plan", return_value=persistence_plan),
+                patch.object(writer, "read_history", return_value=base_writer),
+                patch.object(writer, "run_dry_run", return_value=persistence_result),
+            ):
+                result, exit_code = cycle.run_cycle(
+                    evidence_path, output_dir, None, {}
+                )
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(result["final_status"], cycle.SUCCESS)
+        inputs = writer_read.call_args.args[2]
+        self.assertIsInstance(inputs, writer.CurrentObservationInputs)
+        self.assertIsInstance(inputs.artifact, snapshot_importer.ArtifactBundle)
+        self.assertIsInstance(inputs.import_plan, snapshot_importer.ImportPlan)
+        self.assertIs(inputs.import_history, snapshot)
+        self.assertIs(inputs.current_snapshot, current)
+
+    def test_21_exact_import_uses_persisted_current_without_inputs(self) -> None:
+        evidence, _ = builder_tests.fixture()
+        snapshot = importer_tests.reference_snapshot()
+        product_names = {
+            membership.listing_id: "Fixture " + membership.ozon_product_id
+            for membership in snapshot.memberships
+        }
+        previous = empty_batch("BASELINE_V1", datetime(2026, 8, 25, tzinfo=UTC))
+        current = empty_batch("SNAPSHOT_V1", datetime(2026, 8, 26, tzinfo=UTC))
+        database = Connection()
+        config = snapshot_importer.DatabaseConfig(
+            "localhost", 5432, "efa", "efa_mcp_readonly", "unused"
+        )
+        base_writer = writer_snapshot()
+        finding_set = {
+            "contract_version": "fixture",
+            "findings": [{"fixture": True}],
+        }
+        finding_bundle = writer.ArtifactBundle(
+            report=finding_set,
+            findings_sha256="b" * 64,
+            semantic_sha256="c" * 64,
+            analysis_sha256="a" * 64,
+        )
+        persistence_plan = writer.PersistencePlan(
+            manifest={"set_key": "cm-finding-set-v1:fixture"},
+            findings=({"fixture": True},),
+            query_contexts=1,
+            observation_sides_resolved=2,
+            single_query_findings=1,
+            multi_query_findings=0,
+        )
+        persistence_result = writer.PersistenceResult(
+            "EXACT_ALREADY_APPLIED", persistence_plan
+        )
+        with TemporaryDirectory() as folder:
+            evidence_path = Path(folder) / "evidence.json"
+            output_dir = Path(folder) / "out"
+            evidence_path.write_bytes(builder.canonical_pretty_bytes(evidence))
+            with (
+                patch.object(snapshot_importer, "load_database_config", return_value=config),
+                patch.object(snapshot_importer, "connect_database", return_value=database),
+                patch.object(cycle, "verify_connection_read_only", return_value="efa_mcp_readonly"),
+                patch.object(snapshot_importer, "read_production_snapshot", return_value=snapshot),
+                patch.object(cycle, "product_names_from_snapshot", return_value=product_names),
+                patch.object(snapshot_importer, "read_batch_history", return_value=snapshot),
+                patch.object(
+                    snapshot_importer,
+                    "run_dry_run",
+                    return_value=SimpleNamespace(history_state="EXACT_ALREADY_APPLIED"),
+                ),
+                patch.object(analyzer, "read_history", return_value=[]),
+                patch.object(analyzer, "resolve_snapshot_pair", return_value=(previous, current)),
+                patch.object(analyzer, "build_analysis", return_value=empty_analysis(previous, current)),
+                patch.object(cycle.finding_engine, "build_evidence_index", return_value={}),
+                patch.object(cycle.finding_engine, "generate_finding_set", return_value=finding_set),
+                patch.object(writer, "load_artifact", return_value=finding_bundle),
+                patch.object(
+                    writer, "read_reference_snapshot", return_value=base_writer
+                ) as writer_read,
+                patch.object(writer, "build_plan", return_value=persistence_plan),
+                patch.object(writer, "read_history", return_value=base_writer),
+                patch.object(writer, "run_dry_run", return_value=persistence_result),
+            ):
+                result, exit_code = cycle.run_cycle(
+                    evidence_path, output_dir, None, {}
+                )
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(result["final_status"], cycle.SUCCESS)
+        self.assertEqual(result["import_state"], "EXACT_ALREADY_APPLIED")
+        self.assertIsNone(writer_read.call_args.args[2])
 
 
 if __name__ == "__main__":
