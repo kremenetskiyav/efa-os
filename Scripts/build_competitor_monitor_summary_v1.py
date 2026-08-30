@@ -34,6 +34,14 @@ PRICE_INCREASED = "COMPETITOR_PRICE_INCREASED"
 PRICE_DECREASED = "COMPETITOR_PRICE_DECREASED"
 
 
+def _required_visibility_transition(topic: object) -> str | None:
+    if topic in VISIBILITY_LOST:
+        return "DROPPED_OUT"
+    if topic in VISIBILITY_RESTORED:
+        return "REAPPEARED"
+    return None
+
+
 LATEST_FINDING_SET_SQL = """
 SELECT finding_set_id::text,set_key,persistence_contract_version,
        finding_set_contract_version,source_analysis_contract_version,
@@ -271,7 +279,14 @@ def _finding_validation_error(
             return True
         if details.get("membership_status") not in ROLE_LABELS:
             return True
-        if not isinstance(details.get("query_context"), list):
+        contexts = details.get("query_context")
+        if not isinstance(contexts, list):
+            return True
+        if finding.get("topic") in VISIBILITY_RESTORED and not any(
+            isinstance(row, Mapping)
+            and row.get("visibility_transition") == "REAPPEARED"
+            for row in contexts
+        ):
             return True
         if finding.get("severity") not in SEVERITY_PRIORITY:
             return True
@@ -299,8 +314,12 @@ def _query_names(rows: Sequence[Mapping[str, Any]]) -> list[str]:
 def _affected_and_remaining(finding: Mapping[str, Any]) -> tuple[list[str], list[str]]:
     contexts = _queries(finding)
     topic = finding["topic"]
-    transition = "DROPPED_OUT" if topic in VISIBILITY_LOST else "APPEARED"
-    affected_rows = [row for row in contexts if row.get("visibility_transition") == transition]
+    transition = _required_visibility_transition(topic)
+    affected_rows = [
+        row
+        for row in contexts
+        if transition is not None and row.get("visibility_transition") == transition
+    ]
     affected = _query_names(affected_rows)
     remaining = _query_names(
         [

@@ -119,16 +119,16 @@ def ten_findings() -> tuple[dict[str, object], ...]:
             "УФ 004Б",
             query_context=contexts(
                 ("5Q0819653", "STILL_VISIBLE", "FOUND"),
-                ("5Q0819669", "APPEARED", "FOUND"),
+                ("5Q0819669", "REAPPEARED", "FOUND"),
             ),
         ),
         finding("03", "COMPETITOR_VISIBILITY_LOST", "INFO", "PRIMARY", "УФ 001Б", query_context=contexts(("80292SLJ013", "DROPPED_OUT", "NOT_FOUND_WITHIN_SCAN_LIMIT"))),
         finding("04", "COMPETITOR_VISIBILITY_LOST", "INFO", "RESERVE", "УФ 001Б", query_context=contexts(("80292SLJ013", "DROPPED_OUT", "NOT_FOUND_WITHIN_SCAN_LIMIT"))),
         finding("05", "COMPETITOR_VISIBILITY_LOST", "INFO", "PRIMARY", "УФ 004Б", query_context=contexts(("5Q0819644A", "DROPPED_OUT", "NOT_FOUND_WITHIN_SCAN_LIMIT"))),
         finding("06", "COMPETITOR_VISIBILITY_LOST", "INFO", "RESERVE", "УФ 005Б", query_context=contexts(("647975", "DROPPED_OUT", "NOT_FOUND_WITHIN_SCAN_LIMIT"))),
-        finding("07", "COMPETITOR_VISIBILITY_RESTORED", "INFO", "PRIMARY", "УФ 001Б", query_context=contexts(("80292SLJ013", "APPEARED", "FOUND"))),
-        finding("08", "COMPETITOR_VISIBILITY_RESTORED", "INFO", "PRIMARY", "УФ 001Б", query_context=contexts(("80292SLJ013", "APPEARED", "FOUND"))),
-        finding("09", "COMPETITOR_VISIBILITY_RESTORED", "INFO", "PRIMARY", "УФ 002Б", query_context=contexts(("6R0820367", "APPEARED", "FOUND"))),
+        finding("07", "COMPETITOR_VISIBILITY_RESTORED", "INFO", "PRIMARY", "УФ 001Б", query_context=contexts(("80292SLJ013", "REAPPEARED", "FOUND"))),
+        finding("08", "COMPETITOR_VISIBILITY_RESTORED", "INFO", "PRIMARY", "УФ 001Б", query_context=contexts(("80292SLJ013", "REAPPEARED", "FOUND"))),
+        finding("09", "COMPETITOR_VISIBILITY_RESTORED", "INFO", "PRIMARY", "УФ 002Б", query_context=contexts(("6R0820367", "REAPPEARED", "FOUND"))),
         finding(
             "10",
             "COMPETITOR_PRICE_INCREASED",
@@ -404,6 +404,224 @@ class SummaryContractTests(unittest.TestCase):
         )
         self.assertEqual(3, len(statements))
         self.assertTrue(all(value.lstrip().upper().startswith("SELECT") for value in statements))
+
+    def assert_restoration_scope(
+        self,
+        *,
+        key: str,
+        topic: str,
+        membership: str,
+        offer_id: str,
+        ozon_product_id: str,
+        query_context: list[dict[str, object]],
+        affected: list[str],
+        remaining: list[str],
+        excluded_from_message: tuple[str, ...],
+    ) -> None:
+        row = finding(
+            key,
+            topic,
+            "INFO",
+            membership,
+            offer_id,
+            query_context=query_context,
+        )
+        row["details"]["ozon_product_id"] = ozon_product_id
+        result = build(source(source_manifest=manifest(1), source_findings=(row,)))
+        self.assertTrue(result["available"])
+        collection = (
+            result["own"]["own_findings"]
+            if membership == "CONTROL"
+            else result["competitors"]["findings"]
+        )
+        actual = collection[0]
+        self.assertEqual(affected, actual["affected_queries"])
+        self.assertEqual(remaining, actual["remaining_queries"])
+        for query in affected:
+            self.assertIn(query, actual["message"])
+        for query in excluded_from_message:
+            self.assertNotIn(query, actual["message"])
+
+    def test_41_t2_regression_3011421926(self) -> None:
+        self.assert_restoration_scope(
+            key="t2-a",
+            topic="COMPETITOR_VISIBILITY_RESTORED",
+            membership="PRIMARY",
+            offer_id="УФ 004Б",
+            ozon_product_id="3011421926",
+            query_context=contexts(
+                ("5Q0819644A", "STILL_NOT_FOUND", "NOT_FOUND_WITHIN_SCAN_LIMIT"),
+                ("5Q0819653", "REAPPEARED", "FOUND"),
+                ("5Q0819669", "REAPPEARED", "FOUND"),
+            ),
+            affected=["5Q0819653", "5Q0819669"],
+            remaining=[],
+            excluded_from_message=("5Q0819644A",),
+        )
+
+    def test_42_t2_regression_2666178947(self) -> None:
+        self.assert_restoration_scope(
+            key="t2-b",
+            topic="COMPETITOR_VISIBILITY_RESTORED",
+            membership="RESERVE",
+            offer_id="УФ 005Б",
+            ozon_product_id="2666178947",
+            query_context=contexts(
+                ("647941", "STILL_NOT_FOUND", "NOT_FOUND_WITHIN_SCAN_LIMIT"),
+                ("647975", "REAPPEARED", "FOUND"),
+                ("6479C2", "STILL_NOT_FOUND", "NOT_FOUND_WITHIN_SCAN_LIMIT"),
+            ),
+            affected=["647975"],
+            remaining=[],
+            excluded_from_message=("647941", "6479C2"),
+        )
+
+    def test_43_t2_regression_658313675(self) -> None:
+        self.assert_restoration_scope(
+            key="t2-c",
+            topic="COMPETITOR_VISIBILITY_RESTORED",
+            membership="RESERVE",
+            offer_id="УФ 005Б",
+            ozon_product_id="658313675",
+            query_context=contexts(
+                ("647941", "STILL_NOT_FOUND", "NOT_FOUND_WITHIN_SCAN_LIMIT"),
+                ("647975", "REAPPEARED", "FOUND"),
+            ),
+            affected=["647975"],
+            remaining=[],
+            excluded_from_message=("647941",),
+        )
+
+    def test_44_t2_regression_own_4642158029(self) -> None:
+        self.assert_restoration_scope(
+            key="t2-d",
+            topic="OWN_SEARCH_VISIBILITY_RESTORED",
+            membership="CONTROL",
+            offer_id="УФ 002Б",
+            ozon_product_id="4642158029",
+            query_context=contexts(
+                ("6R0820367", "REAPPEARED", "FOUND"),
+                ("JZW819653F", "STILL_VISIBLE", "FOUND"),
+            ),
+            affected=["6R0820367"],
+            remaining=["JZW819653F"],
+            excluded_from_message=("JZW819653F",),
+        )
+
+    def test_45_t2_regression_own_4671328307(self) -> None:
+        self.assert_restoration_scope(
+            key="t2-e",
+            topic="OWN_SEARCH_VISIBILITY_RESTORED",
+            membership="CONTROL",
+            offer_id="УФ 005Б",
+            ozon_product_id="4671328307",
+            query_context=contexts(
+                ("647941", "STILL_NOT_FOUND", "NOT_FOUND_WITHIN_SCAN_LIMIT"),
+                ("647975", "STILL_VISIBLE", "FOUND"),
+                ("6479C2", "REAPPEARED", "FOUND"),
+            ),
+            affected=["6479C2"],
+            remaining=["647975"],
+            excluded_from_message=("647941", "647975"),
+        )
+
+    def test_46_single_restored_oem_among_multiple_contexts(self) -> None:
+        self.assert_restoration_scope(
+            key="scope-single",
+            topic="COMPETITOR_VISIBILITY_RESTORED",
+            membership="PRIMARY",
+            offer_id="УФ 002Б",
+            ozon_product_id="scope-single",
+            query_context=contexts(
+                ("OEM-A", "STILL_NOT_FOUND", "NOT_FOUND_WITHIN_SCAN_LIMIT"),
+                ("OEM-B", "REAPPEARED", "FOUND"),
+                ("OEM-C", "STILL_VISIBLE", "FOUND"),
+            ),
+            affected=["OEM-B"],
+            remaining=["OEM-C"],
+            excluded_from_message=("OEM-A", "OEM-C"),
+        )
+
+    def test_47_multiple_restored_oems_among_multiple_contexts(self) -> None:
+        self.assert_restoration_scope(
+            key="scope-multiple",
+            topic="COMPETITOR_VISIBILITY_RESTORED",
+            membership="RESERVE",
+            offer_id="УФ 004Б",
+            ozon_product_id="scope-multiple",
+            query_context=contexts(
+                ("OEM-A", "REAPPEARED", "FOUND"),
+                ("OEM-B", "STILL_NOT_FOUND", "NOT_FOUND_WITHIN_SCAN_LIMIT"),
+                ("OEM-C", "REAPPEARED", "FOUND"),
+            ),
+            affected=["OEM-A", "OEM-C"],
+            remaining=[],
+            excluded_from_message=("OEM-B",),
+        )
+
+    def test_48_all_contexts_restored(self) -> None:
+        self.assert_restoration_scope(
+            key="scope-all",
+            topic="COMPETITOR_VISIBILITY_RESTORED",
+            membership="PRIMARY",
+            offer_id="УФ 001Б",
+            ozon_product_id="scope-all",
+            query_context=contexts(
+                ("OEM-A", "REAPPEARED", "FOUND"),
+                ("OEM-B", "REAPPEARED", "FOUND"),
+            ),
+            affected=["OEM-A", "OEM-B"],
+            remaining=[],
+            excluded_from_message=(),
+        )
+
+    def test_49_no_contexts_restored_is_invalid(self) -> None:
+        row = finding(
+            "scope-none",
+            "COMPETITOR_VISIBILITY_RESTORED",
+            "INFO",
+            "PRIMARY",
+            "УФ 001Б",
+            query_context=contexts(
+                ("OEM-A", "STILL_VISIBLE", "FOUND"),
+                ("OEM-B", "STILL_NOT_FOUND", "NOT_FOUND_WITHIN_SCAN_LIMIT"),
+            ),
+        )
+        result = build(source(source_manifest=manifest(1), source_findings=(row,)))
+        self.assertFalse(result["available"])
+        self.assertEqual("FINDING_SET_INVALID", result["degraded_reason"])
+
+    def test_50_own_restoration_uses_reappeared_context_only(self) -> None:
+        self.assert_restoration_scope(
+            key="scope-own",
+            topic="OWN_SEARCH_VISIBILITY_RESTORED",
+            membership="CONTROL",
+            offer_id="УФ 005Б",
+            ozon_product_id="scope-own",
+            query_context=contexts(
+                ("OEM-A", "REAPPEARED", "FOUND"),
+                ("OEM-B", "STILL_VISIBLE", "FOUND"),
+            ),
+            affected=["OEM-A"],
+            remaining=["OEM-B"],
+            excluded_from_message=("OEM-B",),
+        )
+
+    def test_51_competitor_restoration_uses_reappeared_context_only(self) -> None:
+        self.assert_restoration_scope(
+            key="scope-competitor",
+            topic="COMPETITOR_VISIBILITY_RESTORED",
+            membership="PRIMARY",
+            offer_id="УФ 004Б",
+            ozon_product_id="scope-competitor",
+            query_context=contexts(
+                ("OEM-A", "STILL_NOT_FOUND", "NOT_FOUND_WITHIN_SCAN_LIMIT"),
+                ("OEM-B", "REAPPEARED", "FOUND"),
+            ),
+            affected=["OEM-B"],
+            remaining=[],
+            excluded_from_message=("OEM-A",),
+        )
 
 
 if __name__ == "__main__":
