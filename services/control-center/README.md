@@ -5,6 +5,18 @@ screen, reads the completed AI Analyst report, reads the existing Analyst cron
 schedule and uses the existing `efa_mcp_readonly` PostgreSQL role. It does not
 write to PostgreSQL, n8n, Ozon or collector services.
 
+The static `/capabilities` page is an operator reference built from the
+2026-09-01 READ-ONLY capabilities audit and the canonical Ozon Discount &
+Points Settlement Contract v1. It contains the 30-item maturity catalog and 15
+daily owner commands. It does not query live financial data, recalculate
+economics or expose a write action.
+
+`capabilities.json` is a `STATIC SNAPSHOT` dated 2026-09-01, not a live runtime
+feed or an independent source of truth. Its canonical provenance remains the
+`EFA OS — Current Capabilities & Ready Agents Inventory` audit, runtime evidence,
+repository contracts and
+`docs/contracts/OZON_DISCOUNT_POINTS_SETTLEMENT_CONTRACT_V1.md`.
+
 Runtime inputs:
 
 - `/var/log/efa-os/ai-analyst-latest.txt`

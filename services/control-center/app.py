@@ -573,13 +573,22 @@ class Handler(BaseHTTPRequestHandler):
         path = urlsplit(self.path).path
         if path == "/":
             self._file(STATIC_DIR / "index.html", "text/html; charset=utf-8")
+        elif path == "/capabilities":
+            self._file(STATIC_DIR / "capabilities.html", "text/html; charset=utf-8")
         elif path == "/api/status":
             self._json(build_status())
         elif path == "/healthz":
             self._json({"status": "ok", "service": "efa-control-center"})
-        elif path.startswith("/static/") and path.removeprefix("/static/") in {"styles.css", "app.js"}:
+        elif path.startswith("/static/") and path.removeprefix("/static/") in {
+            "styles.css", "app.js", "capabilities.js", "capabilities.json",
+        }:
             name = path.removeprefix("/static/")
-            content_type = "text/css; charset=utf-8" if name.endswith(".css") else "text/javascript; charset=utf-8"
+            content_types = {
+                ".css": "text/css; charset=utf-8",
+                ".js": "text/javascript; charset=utf-8",
+                ".json": "application/json; charset=utf-8",
+            }
+            content_type = content_types[Path(name).suffix]
             self._file(STATIC_DIR / name, content_type)
         elif path in {"/report", "/prices", "/stocks", "/cpc", "/collectors", "/competitors"}:
             _, report = report_snapshot(REPORT_PATH)

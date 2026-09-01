@@ -1,0 +1,411 @@
+{
+  "schema_version": "efa_capabilities_catalog.v1",
+  "audit_title": "EFA OS — Current Capabilities & Ready Agents Inventory",
+  "audit_date": "2026-09-01",
+  "inventory_snapshot": "2026-09-01",
+  "snapshot_type": "STATIC SNAPSHOT",
+  "runtime_note": "Snapshot, not live runtime",
+  "mode": "READ-ONLY",
+  "provenance": {
+    "canonical_sources": [
+      "EFA OS — Current Capabilities & Ready Agents Inventory",
+      "Runtime evidence reconciled by the audit",
+      "Repository contracts",
+      "docs/contracts/OZON_DISCOUNT_POINTS_SETTLEMENT_CONTRACT_V1.md"
+    ],
+    "catalog_role": "Rendered operator snapshot; capabilities.json is not an independent source of truth."
+  },
+  "summary": {
+    "READY": 16,
+    "CONTROLLED": 7,
+    "PARTIAL": 4,
+    "NOT READY": 3
+  },
+  "safety": {
+    "title": "Settlement-aware Points / Green / Elastic — NOT READY",
+    "message": "Settlement-critical данные не подтверждены: расчёт должен остановиться без догадок.",
+    "details": "Контракт v1.0-draft ожидает empirical validation cases #1–#3. Нельзя считать buyer price выручкой продавца, прибавлять Points поверх seller economic price или представлять legacy-экономику как settled результат.",
+    "fallback": "INSUFFICIENT_SETTLEMENT_DATA",
+    "write_policy": "Ozon write actions запрещены без отдельного явного approval.",
+    "write_policy_details": "Это относится к ценам, акциям, CPC, остаткам и другим изменениям Ozon. В текущем Control Center write-path отсутствует."
+  },
+  "capabilities": [
+    {
+      "id": "product-master",
+      "name": "Product master и себестоимость",
+      "status": "READY",
+      "does": "Хранит утверждённые идентификаторы, активность и себестоимость пяти SKU.",
+      "example_command": "Покажи список активных SKU, их идентификаторы и подтверждённую себестоимость.",
+      "trigger": "По запросу; обновление — отдельный утверждённый ручной процесс",
+      "read_write_scope": "READ из PostgreSQL; изменения master-data только вручную и отдельно от Control Center",
+      "limitations": "Себестоимость поддерживается вручную и не выводится из marketplace-данных."
+    },
+    {
+      "id": "seller-demand-collector",
+      "name": "Seller demand collector",
+      "status": "READY",
+      "does": "Собирает ежедневный спрос продавца по SKU.",
+      "example_command": "Покажи спрос по всем пяти SKU за последние 14 дней.",
+      "trigger": "Ежедневно в 07:10 МСК",
+      "read_write_scope": "Ozon API READ → PostgreSQL WRITE; без изменений в Ozon",
+      "limitations": "Полнота ограничена покрытием доступного Ozon-источника."
+    },
+    {
+      "id": "price-collector",
+      "name": "Price collector",
+      "status": "READY",
+      "does": "Сохраняет наблюдаемые цены и их историю по активным SKU.",
+      "example_command": "Покажи текущие цены всех SKU и изменения за последние 24 часа.",
+      "trigger": "Каждые 6 часов в :20",
+      "read_write_scope": "Ozon API READ → PostgreSQL WRITE; без изменения цен",
+      "limitations": "Наблюдение buyer/seller price не является settlement decomposition."
+    },
+    {
+      "id": "stock-collector",
+      "name": "Stock collector",
+      "status": "READY",
+      "does": "Собирает текущие остатки и историю изменений.",
+      "example_command": "Покажи остатки всех SKU и что изменилось с предыдущего снимка.",
+      "trigger": "Ежедневный operational baseline в 06:00 МСК",
+      "read_write_scope": "Ozon API READ → PostgreSQL WRITE; без закупок и изменения остатков",
+      "limitations": "Нет агента прогноза закупок или автоматического пополнения."
+    },
+    {
+      "id": "operational-finance-collector",
+      "name": "Operational finance collector",
+      "status": "READY",
+      "does": "Собирает postings, returns, finance operations, логистику и расходы.",
+      "example_command": "Покажи подтверждённые операции и финансовые события за последний закрытый день.",
+      "trigger": "Ежедневно в 05:40 МСК",
+      "read_write_scope": "Ozon API READ → PostgreSQL WRITE; без внешних write-actions",
+      "limitations": "Operational facts не заменяют финальный settlement ledger."
+    },
+    {
+      "id": "promotion-collector",
+      "name": "Promotion collector",
+      "status": "READY",
+      "does": "Наблюдает активные акции, кандидатов и изменения promotion state.",
+      "example_command": "Какие акции активны по каждому SKU и что изменилось с предыдущего снимка?",
+      "trigger": "Каждые 6 часов",
+      "read_write_scope": "Ozon API READ → PostgreSQL WRITE; без входа или выхода из акций",
+      "limitations": "Наблюдение не разрешает автоматические promotion changes."
+    },
+    {
+      "id": "cpc-collector",
+      "name": "CPC collector",
+      "status": "READY",
+      "does": "Собирает Performance CPC-отчёты по SKU и account scope.",
+      "example_command": "Покажи CPC за последние 7 дней: расход, клики, продажи и ДРР.",
+      "trigger": "Создание отчёта в 07:30 МСК; poller каждые 10 минут",
+      "read_write_scope": "Performance API READ lifecycle → PostgreSQL WRITE; без изменения ставок или кампаний",
+      "limitations": "Есть один исторический STUCK run; CPO attribution остаётся отдельным контуром."
+    },
+    {
+      "id": "period-economics",
+      "name": "Period economics function",
+      "status": "READY",
+      "does": "Считает period-based revenue, costs и PBT по подтверждённой когорте.",
+      "example_command": "Сравни последние 7 дней с предыдущими 7 по выручке, расходам и PBT.",
+      "trigger": "По запросу Analyst или read-инструмента",
+      "read_write_scope": "PostgreSQL SELECT через mcp_read.product_period_economics; без записи",
+      "limitations": "Economic P&L не равен cash settlement и не должен суммироваться из daily economics."
+    },
+    {
+      "id": "ai-analyst",
+      "name": "AI Analyst v1.3",
+      "status": "READY",
+      "does": "Формирует единый отчёт по пяти SKU, экономике, CPC, акциям, логистике и конкурентам.",
+      "example_command": "Покажи статус всех пяти SKU и что сегодня требует моего внимания.",
+      "trigger": "Ежедневно в 16:00 МСК",
+      "read_write_scope": "READ + PROPOSE; записывает только атомарный локальный report artifact; без Ozon write",
+      "limitations": "Детерминированный advisory; settlement-aware Points/Green/Elastic не моделируются."
+    },
+    {
+      "id": "price-decision-legacy",
+      "name": "Price Decision v1 — legacy advisory",
+      "status": "READY",
+      "does": "Классифицирует CHECK NOW / LEAVE и предлагает ограниченный тест цены.",
+      "example_command": "Оцени, нужно ли менять цену УФ 004Б сегодня. Ничего не применять.",
+      "trigger": "В составе ежедневного AI Analyst",
+      "read_write_scope": "READ + PROPOSE; без применения цены в Ozon",
+      "limitations": "Не является Calculator Phase 3 и не settlement-aware для Points/Green/Elastic."
+    },
+    {
+      "id": "email-delivery",
+      "name": "Email delivery",
+      "status": "READY",
+      "does": "Доставляет единый компактный Analyst payload по email.",
+      "example_command": "Проверь статус email-доставки последнего отчёта Analyst.",
+      "trigger": "Ежедневно в 16:30 МСК",
+      "read_write_scope": "External WRITE только для отправки отчёта; без Ozon write",
+      "limitations": "Webhook ACK не доказывает durable per-channel delivery."
+    },
+    {
+      "id": "telegram-delivery",
+      "name": "Telegram delivery",
+      "status": "READY",
+      "does": "Доставляет тот же компактный Analyst payload в Telegram.",
+      "example_command": "Проверь статус Telegram-доставки последнего отчёта Analyst.",
+      "trigger": "Ежедневно в 16:30 МСК",
+      "read_write_scope": "External WRITE только для отправки отчёта; без Ozon write",
+      "limitations": "Ошибки ветки продолжают workflow; durable confirmation отсутствует."
+    },
+    {
+      "id": "efa-read-mcp",
+      "name": "EFA Read MCP v1",
+      "status": "READY",
+      "does": "Даёт девять bounded read-инструментов и безопасный SELECT по mcp_read.",
+      "example_command": "Покажи цену, остатки и CPC УФ 005Б за последние 14 дней.",
+      "trigger": "По запросу агента или оператора",
+      "read_write_scope": "SELECT-only, AST validation, до 500 строк и timeout 10 секунд",
+      "limitations": "Только localhost; dedicated competitor tools в deployed image отсутствуют."
+    },
+    {
+      "id": "control-center",
+      "name": "Control Center",
+      "status": "READY",
+      "does": "Показывает health, freshness, отчёты, цены, остатки, CPC, collectors и конкурентов.",
+      "example_command": "Проверь здоровье EFA OS и свежесть всех collectors.",
+      "trigger": "Постоянно доступен через authenticated web UI",
+      "read_write_scope": "READ-only UI; новых API write-path нет",
+      "limitations": "Часть экранов использует последний сохранённый report, а не live recalculation."
+    },
+    {
+      "id": "competitor-persistence",
+      "name": "Competitor persistence",
+      "status": "READY",
+      "does": "Хранит контролируемые search runs, observations, immutable finding sets и findings.",
+      "example_command": "Покажи историю подтверждённых competitor snapshots и finding sets.",
+      "trigger": "После явно одобренного operator-controlled цикла",
+      "read_write_scope": "PostgreSQL INSERT через отдельную least-privilege роль; только после approval; без Ozon write",
+      "limitations": "Persistence готов, но сам collection cycle не автономен."
+    },
+    {
+      "id": "competitor-summary",
+      "name": "Competitor summary в Analyst / Control Center",
+      "status": "READY",
+      "does": "Показывает последний persisted набор competitor findings и coverage.",
+      "example_command": "Что изменилось у конкурентов по 001Б, 002Б, 004Б и 005Б?",
+      "trigger": "При запуске Analyst и открытии Control Center",
+      "read_write_scope": "READ из трёх разрешённых mcp_read competitor views; без записи",
+      "limitations": "Coverage 4/5, УФ 003Б HOLD; freshness status остаётся UNKNOWN."
+    },
+    {
+      "id": "calculator-core",
+      "name": "Ozon Price Calculator core v1.1",
+      "status": "CONTROLLED",
+      "does": "Считает legacy unit economics, profit, margin и reverse prices P10/P12/P15.",
+      "example_command": "Рассчитай shadow-экономику всех пяти SKU и цены P10/P12/P15.",
+      "trigger": "Ручной CLI-вызов оператора",
+      "read_write_scope": "READ-only SHADOW; без HTTP ingress, DB write и Ozon write",
+      "limitations": "Не выполняет settlement decomposition для Points/Green/Elastic; не использовать как settled decision."
+    },
+    {
+      "id": "advertising-overlay",
+      "name": "Advertising / CPC shadow overlay",
+      "status": "CONTROLLED",
+      "does": "Накладывает CPC-сценарий на результат Calculator и оценивает ad-cost ceiling.",
+      "example_command": "Проверь, выдержит ли УФ 004Б рекламные расходы 5% без ухода ниже порога.",
+      "trigger": "Ручной shadow-сценарий",
+      "read_write_scope": "READ + SHADOW calculation; без изменения CPC или кампаний",
+      "limitations": "Отдельный слой, не часть core economics и не settlement-aware."
+    },
+    {
+      "id": "sidecar-price-recommendations",
+      "name": "Sidecar price recommendations",
+      "status": "CONTROLLED",
+      "does": "Возвращает private price context и консервативные рекомендации.",
+      "example_command": "Проверь текущий price context всех SKU через recommendation sidecar.",
+      "trigger": "Ручной HTTP-вызов внутри private Docker network",
+      "read_write_scope": "READ + PROPOSE; private network only; без Ozon write",
+      "limitations": "Текущий scheduled Analyst его не вызывает; ответы часто REVIEW_DATA."
+    },
+    {
+      "id": "sidecar-cost-anomaly",
+      "name": "Sidecar cost anomaly tool",
+      "status": "CONTROLLED",
+      "does": "Находит проблемы качества себестоимости и финансовых входов.",
+      "example_command": "Покажи SKU с аномалиями себестоимости или низким качеством данных.",
+      "trigger": "Ручной HTTP-вызов внутри private Docker network",
+      "read_write_scope": "READ-only diagnostics; без изменения себестоимости",
+      "limitations": "Четыре текущих high data-quality flags требуют проверки владельцем."
+    },
+    {
+      "id": "sidecar-promotion-monitoring",
+      "name": "Sidecar promotion monitoring",
+      "status": "CONTROLLED",
+      "does": "Возвращает факты о promotion states для recommendation-контура.",
+      "example_command": "Покажи promotion states и изменения, которые требуют ручной проверки.",
+      "trigger": "Ручной HTTP-вызов внутри private Docker network",
+      "read_write_scope": "READ-only facts; без входа или выхода из акций",
+      "limitations": "Не формирует и не применяет promotion action."
+    },
+    {
+      "id": "competitor-cycle",
+      "name": "Competitor collection и daily cycle",
+      "status": "CONTROLLED",
+      "does": "Собирает browser/Ozon observations, нормализует и готовит controlled persistence.",
+      "example_command": "Собери контролируемый competitor snapshot для активных watchlist SKU.",
+      "trigger": "Ручной browser/operator runbook",
+      "read_write_scope": "External READ; PostgreSQL WRITE только после explicit approval; без Ozon write",
+      "limitations": "Нет production scheduler/service; УФ 003Б остаётся HOLD."
+    },
+    {
+      "id": "finding-engine",
+      "name": "Finding Engine v1",
+      "status": "CONTROLLED",
+      "does": "Создаёт immutable findings по изменениям цены и поисковой видимости.",
+      "example_command": "Покажи последние WATCH/IMPORTANT findings и изменения цен.",
+      "trigger": "После подтверждённого competitor snapshot",
+      "read_write_scope": "Детерминированная обработка; persistence только в controlled cycle",
+      "limitations": "Нет rank, review, product-drift, threat или opportunity taxonomy."
+    },
+    {
+      "id": "tax-engine",
+      "name": "Tax Engine",
+      "status": "PARTIAL",
+      "does": "Импортирует и сверяет tax revenue events для доступных периодов.",
+      "example_command": "Покажи подтверждённые tax events и периоды с неполным покрытием.",
+      "trigger": "Ручной deterministic import / reconciliation",
+      "read_write_scope": "Контролируемый PostgreSQL import; без Ozon write",
+      "limitations": "Два импорта и восемь events; partial periods; не интегрирован в текущий Analyst."
+    },
+    {
+      "id": "snapshot-layer",
+      "name": "Snapshot Layer",
+      "status": "PARTIAL",
+      "does": "Может создавать immutable product snapshots и change events.",
+      "example_command": "Покажи доступные product snapshots и дату последнего snapshot run.",
+      "trigger": "Только ручной importer; активного расписания нет",
+      "read_write_scope": "PostgreSQL snapshot WRITE при ручном запуске; без внешних write-actions",
+      "limitations": "Один run и пять snapshots от 2026-08-14; worker не активен."
+    },
+    {
+      "id": "information-intelligence",
+      "name": "Information Intelligence",
+      "status": "PARTIAL",
+      "does": "Хранит approved sources, checks, snapshots и change events.",
+      "example_command": "Покажи последние подтверждённые информационные события и пробелы покрытия.",
+      "trigger": "Локальная task отключена; production service отсутствует",
+      "read_write_scope": "External READ и controlled persistence при ручном запуске",
+      "limitations": "Persisted data есть, но активный production loop отсутствует."
+    },
+    {
+      "id": "daily-brief",
+      "name": "Daily Brief v1.1",
+      "status": "PARTIAL",
+      "does": "Формирует deterministic commercial brief из read-only источников.",
+      "example_command": "Покажи последнюю доступную сводку старого Daily Brief и её дату.",
+      "trigger": "Текущий n8n workflow неактивен",
+      "read_write_scope": "READ-only generation; текущей внешней доставки нет",
+      "limitations": "Superseded текущим AI Analyst; бывшее расписание 08:15 отключено."
+    },
+    {
+      "id": "settlement-aware-price-decision",
+      "name": "Settlement-aware Price Decision",
+      "status": "NOT READY",
+      "does": "Должен разделять seller-funded, Ozon-funded, Green и Points economics на estimated и settled слои.",
+      "example_command": "Посчитай реальный settlement с Баллами, Green Price и Elastic.",
+      "trigger": "Запрещён до empirical validation cases #1–#3 и approved contract v1.1",
+      "read_write_scope": "Только сбор evidence и reconciliation; production financial patch и Ozon write запрещены",
+      "limitations": "При отсутствии settled evidence вернуть INSUFFICIENT_SETTLEMENT_DATA."
+    },
+    {
+      "id": "autonomous-competitor-collector",
+      "name": "Autonomous competitor browser collector",
+      "status": "NOT READY",
+      "does": "Предполагаемый автономный сбор competitor observations по расписанию.",
+      "example_command": "Запусти полностью автономный ежедневный competitor browser cycle.",
+      "trigger": "Production trigger отсутствует",
+      "read_write_scope": "Нет разрешённого production execution path",
+      "limitations": "Есть только controlled manual flow и untracked local prototype; scheduler/service не развёрнут."
+    },
+    {
+      "id": "review-threat-engine",
+      "name": "Review sentiment и full competitor threat engine",
+      "status": "NOT READY",
+      "does": "Предполагаемый анализ отзывов, rank, product drift, threat и opportunity.",
+      "example_command": "Оцени sentiment отзывов и полный threat score конкурентов.",
+      "trigger": "Trigger отсутствует",
+      "read_write_scope": "Нет production data path или implementation",
+      "limitations": "Ноль persisted competitor reviews; taxonomy и production engine отсутствуют."
+    }
+  ],
+  "daily_commands": [
+    {
+      "title": "Статус магазина",
+      "command": "Покажи статус всех 5 SKU и что сегодня требует моего внимания.",
+      "status": "READY"
+    },
+    {
+      "title": "Экономика по SKU",
+      "command": "Покажи текущую legacy-экономику УФ 001Б: цена, себестоимость, прибыль, маржа, P10/P12/P15. Не применять решения.",
+      "status": "CONTROLLED"
+    },
+    {
+      "title": "Сравнение периодов",
+      "command": "Сравни последние 7 дней с предыдущими 7 днями по продажам, выручке и PBT.",
+      "status": "READY"
+    },
+    {
+      "title": "Цены и остатки",
+      "command": "Покажи текущие цены и остатки всех 5 SKU и что изменилось за последние 24 часа.",
+      "status": "READY"
+    },
+    {
+      "title": "CPC",
+      "command": "Покажи CPC по всем SKU за последние 3 дня: расход, клики, продажи, ДРР и проблемные кампании.",
+      "status": "READY"
+    },
+    {
+      "title": "Допустимый рекламный расход",
+      "command": "Проверь в shadow, выдержит ли УФ 004Б рекламные расходы 5% без ухода ниже допустимой legacy-маржи.",
+      "status": "CONTROLLED"
+    },
+    {
+      "title": "Акции",
+      "command": "Какие акции сейчас активны по каждому SKU и что изменилось с предыдущего снимка? Ничего не менять.",
+      "status": "READY"
+    },
+    {
+      "title": "Конкуренты",
+      "command": "Сравни ЭФА с RAF Filter по 001Б, 002Б, 004Б и 005Б: цены, видимость и изменения.",
+      "status": "READY"
+    },
+    {
+      "title": "Findings",
+      "command": "Покажи последние competitor findings и выдели самые важные изменения.",
+      "status": "READY"
+    },
+    {
+      "title": "Цена",
+      "command": "Оцени, нужно ли менять цену УФ 005Б сегодня. Ничего не применять.",
+      "status": "CONTROLLED"
+    },
+    {
+      "title": "Качество данных",
+      "command": "Проверь свежесть collectors и наличие проблем качества данных или себестоимости.",
+      "status": "CONTROLLED"
+    },
+    {
+      "title": "Production health",
+      "command": "Проверь здоровье EFA OS: collectors, MCP, Control Center, Analyst, n8n и отчётность.",
+      "status": "READY"
+    },
+    {
+      "title": "Полный отчёт по SKU",
+      "command": "Дай полный отчёт по УФ 002Б: цена, остаток, спрос, legacy-экономика, CPC, акции и конкуренты.",
+      "status": "READY"
+    },
+    {
+      "title": "Что не трогать",
+      "command": "Покажи, какие SKU и параметры сегодня лучше не менять и почему.",
+      "status": "READY"
+    },
+    {
+      "title": "Приоритет действий",
+      "command": "Подготовь 3–5 приоритетных действий на сегодня по магазину, но ничего не изменяй.",
+      "status": "READY"
+    }
+  ]
+}

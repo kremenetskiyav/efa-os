@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Возможности и команды — EFA OS</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header class="capability-hero">
+    <div class="capability-hero-copy">
+      <a class="back back-light" href="/">← Control Center</a>
+      <p class="eyebrow">EFA OPERATIONS / READ-ONLY</p>
+      <h1>Возможности и команды</h1>
+      <p class="subtitle">Что EFA OS умеет сегодня, как это вызвать и где проходит граница доверия.</p>
+      <p class="audit-meta" id="audit-meta">Inventory snapshot: 2026-09-01 · STATIC SNAPSHOT · Snapshot, not live runtime</p>
+    </div>
+    <div class="maturity-summary" id="maturity-summary" aria-label="Сводка зрелости"></div>
+  </header>
+
+  <main class="capabilities-page">
+    <section class="safety-banner" aria-labelledby="safety-title">
+      <div class="safety-mark">!</div>
+      <div>
+        <p class="module-kicker">ФИНАНСОВЫЙ GATE</p>
+        <h2 id="safety-title">Settlement-aware Points / Green / Elastic — NOT READY</h2>
+        <p id="safety-message">Settlement-critical данные не подтверждены: расчёт должен остановиться без догадок.</p>
+        <p class="safety-code"><code id="safety-fallback">INSUFFICIENT_SETTLEMENT_DATA</code></p>
+        <p class="safety-write" id="write-policy">Ozon write actions запрещены без отдельного явного approval.</p>
+        <details class="safety-details">
+          <summary>Основание и ограничения</summary>
+          <p id="safety-details">Контракт v1.0-draft ожидает empirical validation cases #1–#3. Нельзя считать buyer price выручкой продавца, прибавлять Points поверх seller economic price или представлять legacy-экономику как settled результат.</p>
+          <p id="write-policy-details">Это относится к ценам, акциям, CPC, остаткам и другим изменениям Ozon. В текущем Control Center write-path отсутствует.</p>
+        </details>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-title"><span>01</span><h2>Каталог возможностей</h2></div>
+      <div class="catalog-toolbar">
+        <div class="status-filters" id="status-filters" aria-label="Фильтр по статусу"></div>
+        <label class="catalog-search">
+          <span>Поиск</span>
+          <input id="catalog-search" type="search" placeholder="Компонент, команда или ограничение" autocomplete="off">
+        </label>
+      </div>
+      <p class="catalog-result" id="catalog-result" aria-live="polite"></p>
+      <div class="capability-list" id="capability-list">
+        <p class="muted">Загрузка каталога…</p>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-title"><span>02</span><h2>Ежедневная шпаргалка владельца</h2></div>
+      <p class="section-intro">Готовые формулировки для ежедневной работы. Кнопка копирует команду без запуска и без изменений в Ozon.</p>
+      <div class="owner-commands" id="owner-commands"></div>
+    </section>
+
+    <div class="readonly-note capability-note">
+      <p><b>Inventory snapshot: 2026-09-01 · STATIC SNAPSHOT · Snapshot, not live runtime.</b></p>
+      <p>Canonical sources: <i>EFA OS — Current Capabilities &amp; Ready Agents Inventory</i>; runtime evidence; repository contracts; <code>docs/contracts/OZON_DISCOUNT_POINTS_SETTLEMENT_CONTRACT_V1.md</code>.</p>
+      <p><code>capabilities.json</code> — представление статического snapshot для UI, а не независимый source of truth. Страница ничего не рассчитывает и не изменяет.</p>
+    </div>
+  </main>
+  <script src="/static/capabilities.js"></script>
+</body>
+</html>

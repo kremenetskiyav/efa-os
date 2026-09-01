@@ -208,6 +208,99 @@ class ControlCenterTests(unittest.TestCase):
             self.assertIn(f'id="{element_id}"', page)
         self.assertNotIn("Последний email-report", page)
 
+    def test_home_links_to_capabilities_catalog(self):
+        page = (STATIC_PATH / "index.html").read_text(encoding="utf-8")
+        self.assertIn('href="/capabilities"', page)
+        self.assertIn("Возможности и команды", page)
+
+    def test_capabilities_catalog_has_exact_audited_maturity_counts(self):
+        catalog = json.loads((STATIC_PATH / "capabilities.json").read_text(encoding="utf-8"))
+        actual = {}
+        for item in catalog["capabilities"]:
+            actual[item["status"]] = actual.get(item["status"], 0) + 1
+        self.assertEqual(30, len(catalog["capabilities"]))
+        self.assertEqual(
+            {"READY": 16, "CONTROLLED": 7, "PARTIAL": 4, "NOT READY": 3},
+            actual,
+        )
+        self.assertEqual(actual, catalog["summary"])
+
+    def test_each_capability_has_required_operator_fields(self):
+        catalog = json.loads((STATIC_PATH / "capabilities.json").read_text(encoding="utf-8"))
+        required = {
+            "id", "name", "status", "does", "example_command", "trigger",
+            "read_write_scope", "limitations",
+        }
+        for item in catalog["capabilities"]:
+            self.assertTrue(required.issubset(item), item.get("name"))
+            self.assertTrue(all(str(item[field]).strip() for field in required), item["name"])
+
+    def test_capabilities_catalog_keeps_settlement_and_write_gate_visible(self):
+        catalog = json.loads((STATIC_PATH / "capabilities.json").read_text(encoding="utf-8"))
+        page = (STATIC_PATH / "capabilities.html").read_text(encoding="utf-8")
+        safety = catalog["safety"]
+        self.assertEqual("INSUFFICIENT_SETTLEMENT_DATA", safety["fallback"])
+        self.assertIn("Points / Green / Elastic", safety["title"])
+        self.assertIn("Ozon write actions запрещены", safety["write_policy"])
+        self.assertIn('id="safety-title"', page)
+        self.assertIn('id="write-policy"', page)
+        self.assertIn("INSUFFICIENT_SETTLEMENT_DATA", page)
+        self.assertIn("Ozon write actions запрещены", page)
+        self.assertIn('<details class="safety-details">', page)
+        self.assertNotIn('<details class="safety-details" open>', page)
+
+    def test_capabilities_catalog_is_explicitly_a_static_derived_snapshot(self):
+        catalog = json.loads((STATIC_PATH / "capabilities.json").read_text(encoding="utf-8"))
+        page = (STATIC_PATH / "capabilities.html").read_text(encoding="utf-8")
+        self.assertEqual("2026-09-01", catalog["inventory_snapshot"])
+        self.assertEqual("STATIC SNAPSHOT", catalog["snapshot_type"])
+        self.assertEqual("Snapshot, not live runtime", catalog["runtime_note"])
+        self.assertIn("not an independent source of truth", catalog["provenance"]["catalog_role"])
+        self.assertEqual(
+            [
+                "EFA OS — Current Capabilities & Ready Agents Inventory",
+                "Runtime evidence reconciled by the audit",
+                "Repository contracts",
+                "docs/contracts/OZON_DISCOUNT_POINTS_SETTLEMENT_CONTRACT_V1.md",
+            ],
+            catalog["provenance"]["canonical_sources"],
+        )
+        for marker in (
+            "Inventory snapshot: 2026-09-01", "STATIC SNAPSHOT",
+            "Snapshot, not live runtime", "capabilities.json",
+            "docs/contracts/OZON_DISCOUNT_POINTS_SETTLEMENT_CONTRACT_V1.md",
+        ):
+            self.assertIn(marker, page)
+
+    def test_owner_cheat_sheet_contains_fifteen_non_executing_commands(self):
+        catalog = json.loads((STATIC_PATH / "capabilities.json").read_text(encoding="utf-8"))
+        commands = catalog["daily_commands"]
+        self.assertEqual(15, len(commands))
+        self.assertTrue(all(item["command"].strip() for item in commands))
+        self.assertTrue(any("ничего не изменяй" in item["command"].lower() for item in commands))
+
+    def test_capabilities_route_and_static_catalog_are_served_read_only(self):
+        server = app.ThreadingHTTPServer(("127.0.0.1", 0), app.Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with urllib.request.urlopen(
+                f"http://127.0.0.1:{server.server_port}/capabilities", timeout=3
+            ) as response:
+                page = response.read().decode("utf-8")
+                self.assertEqual(200, response.status)
+                self.assertIn("Возможности и команды", page)
+            with urllib.request.urlopen(
+                f"http://127.0.0.1:{server.server_port}/static/capabilities.json", timeout=3
+            ) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+                self.assertEqual(200, response.status)
+                self.assertEqual("efa_capabilities_catalog.v1", payload["schema_version"])
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=3)
+
     def test_detail_views_only_present_existing_report_data(self):
         prices = app.render_detail("prices", REPORT)
         cpc = app.render_detail("cpc", REPORT)
