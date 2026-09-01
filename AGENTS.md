@@ -78,6 +78,14 @@
 - Read `docs/TRANSFER_RECOVERY.md` for backup, transfer, and recovery work.
 - Prefer the relevant profile document over duplicating subsystem rules here.
 
+### Ozon Discount & Points Settlement Contract
+
+For any task affecting Ozon Calculator, unit economics, Price Decision, AI Analyst financial logic, pricing, promotions, Elastic Boost, Green Price, «Баллы за скидки», commission, minimum/safe price, or contribution margin, you MUST first read `docs/contracts/OZON_DISCOUNT_POINTS_SETTLEMENT_CONTRACT_V1.md`.
+
+This contract is the canonical financial baseline. If a requested change conflicts with it, `STOP / CONTRACT_CONFLICT`. If settlement-critical data is unavailable, return `INSUFFICIENT_SETTLEMENT_DATA`.
+
+Do not modify production financial logic until the contract passes empirical validation and a later approved version explicitly permits implementation.
+
 ## Stop conditions
 
 - Stop and report when authoritative sources conflict, production scope is ambiguous, required evidence is unavailable, an action may cause irreversible data loss, or the requested action exceeds the authorised scope.

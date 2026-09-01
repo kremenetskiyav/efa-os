@@ -90,6 +90,7 @@ New directories are documented only after they are introduced and reviewed; this
 ## Documentation
 
 - [Architecture](docs/ARCHITECTURE.md)
+- [Ozon Discount & Points Settlement Contract](docs/contracts/OZON_DISCOUNT_POINTS_SETTLEMENT_CONTRACT_V1.md) — Canonical Ozon pricing, discounts, points and settlement contract.
 - [Project status](docs/PROJECT_STATUS.md)
 - [Roadmap](docs/ROADMAP.md)
 - [Changelog](docs/CHANGELOG.md)
