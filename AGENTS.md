@@ -80,13 +80,23 @@
 
 ### Ozon Unit Economics and Settlement prerequisites
 
-For any task affecting Ozon Unit Economics, «Экономику магазина», revenue, profit, margin, Ozon commission, logistics, discounts, points, Green Price, or advertising, you MUST first read `docs/reference/OZON_UNIT_ECONOMICS_OFFICIAL_REFERENCE_V1.md`.
+For any task affecting Ozon Unit Economics, «Экономику магазина», settlement, pricing economics, revenue, profit, margin, Ozon commission, acquiring, logistics, discounts, points, Green Price, advertising, promotions, Elastic Boost, Ozon Calculator, minimum/safe price, contribution margin, Price Decision, or AI Analyst financial logic, you MUST first read, in this order:
 
-For settlement-specific tasks, and any task affecting Ozon Calculator, Price Decision, AI Analyst financial logic, pricing, promotions, Elastic Boost, minimum/safe price, or contribution margin, additionally read `docs/contracts/OZON_DISCOUNT_POINTS_SETTLEMENT_CONTRACT_V1.md`. This contract remains the canonical financial baseline for settlement-specific decisions.
+1. `docs/reference/OZON_UNIT_ECONOMICS_OFFICIAL_REFERENCE_V1.md`;
+2. `docs/contracts/OZON_DISCOUNT_POINTS_SETTLEMENT_CONTRACT_V1_1.md`.
+
+V1.1 is the current canonical draft for settlement semantics. `docs/contracts/OZON_DISCOUNT_POINTS_SETTLEMENT_CONTRACT_V1.md` is a historical predecessor and deprecation source only. Canonical-draft approval is not production implementation authorization.
 
 Before changing financial logic, revalidate the current official Ozon documentation. If official Ozon semantics conflict with the EFA internal contract, `STOP / CONTRACT_CONFLICT`. If settlement-critical evidence is missing, return `INSUFFICIENT_SETTLEMENT_DATA`.
 
-Do not modify production financial logic until the contract passes empirical validation and a later approved version explicitly permits implementation.
+Until every required settlement-critical case has empirical `PASS` and a separate explicit implementation approval is recorded, preserve all gates:
+
+- `NO PRODUCTION CALCULATOR PATCH`;
+- `NO PRICE DECISION UPDATE`;
+- `NO AI ANALYST SETTLEMENT-AWARE CLAIM`;
+- `NO AUTOMATED OZON WRITE`.
+
+Do not modify production financial logic until those requirements are satisfied.
 
 ## Stop conditions
 

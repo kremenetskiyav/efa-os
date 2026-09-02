@@ -90,7 +90,8 @@ New directories are documented only after they are introduced and reviewed; this
 ## Documentation
 
 - [Architecture](docs/ARCHITECTURE.md)
-- [Ozon Discount & Points Settlement Contract](docs/contracts/OZON_DISCOUNT_POINTS_SETTLEMENT_CONTRACT_V1.md) — Canonical Ozon pricing, discounts, points and settlement contract.
+- [Ozon Discount & Points Settlement Contract v1.1](docs/contracts/OZON_DISCOUNT_POINTS_SETTLEMENT_CONTRACT_V1_1.md) — Current canonical draft for settlement semantics; not approved for production implementation.
+- [Ozon Discount & Points Settlement Contract v1](docs/contracts/OZON_DISCOUNT_POINTS_SETTLEMENT_CONTRACT_V1.md) — Historical predecessor and deprecation reference.
 - [Project status](docs/PROJECT_STATUS.md)
 - [Roadmap](docs/ROADMAP.md)
 - [Changelog](docs/CHANGELOG.md)
