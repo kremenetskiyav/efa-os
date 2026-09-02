@@ -78,11 +78,13 @@
 - Read `docs/TRANSFER_RECOVERY.md` for backup, transfer, and recovery work.
 - Prefer the relevant profile document over duplicating subsystem rules here.
 
-### Ozon Discount & Points Settlement Contract
+### Ozon Unit Economics and Settlement prerequisites
 
-For any task affecting Ozon Calculator, unit economics, Price Decision, AI Analyst financial logic, pricing, promotions, Elastic Boost, Green Price, «Баллы за скидки», commission, minimum/safe price, or contribution margin, you MUST first read `docs/contracts/OZON_DISCOUNT_POINTS_SETTLEMENT_CONTRACT_V1.md`.
+For any task affecting Ozon Unit Economics, «Экономику магазина», revenue, profit, margin, Ozon commission, logistics, discounts, points, Green Price, or advertising, you MUST first read `docs/reference/OZON_UNIT_ECONOMICS_OFFICIAL_REFERENCE_V1.md`.
 
-This contract is the canonical financial baseline. If a requested change conflicts with it, `STOP / CONTRACT_CONFLICT`. If settlement-critical data is unavailable, return `INSUFFICIENT_SETTLEMENT_DATA`.
+For settlement-specific tasks, and any task affecting Ozon Calculator, Price Decision, AI Analyst financial logic, pricing, promotions, Elastic Boost, minimum/safe price, or contribution margin, additionally read `docs/contracts/OZON_DISCOUNT_POINTS_SETTLEMENT_CONTRACT_V1.md`. This contract remains the canonical financial baseline for settlement-specific decisions.
+
+Before changing financial logic, revalidate the current official Ozon documentation. If official Ozon semantics conflict with the EFA internal contract, `STOP / CONTRACT_CONFLICT`. If settlement-critical evidence is missing, return `INSUFFICIENT_SETTLEMENT_DATA`.
 
 Do not modify production financial logic until the contract passes empirical validation and a later approved version explicitly permits implementation.
 
