@@ -90,6 +90,7 @@ New directories are documented only after they are introduced and reviewed; this
 ## Documentation
 
 - [Architecture](docs/ARCHITECTURE.md)
+- [EFA AI Assistants Interaction Architecture v1](docs/architecture/EFA_AI_ASSISTANTS_INTERACTION_ARCHITECTURE_V1.md) — Canonical draft for AI roles, authority, routing, message/status contracts and approval boundaries.
 - [Ozon Discount & Points Settlement Contract v1.1](docs/contracts/OZON_DISCOUNT_POINTS_SETTLEMENT_CONTRACT_V1_1.md) — Current canonical draft for settlement semantics; not approved for production implementation.
 - [Ozon Discount & Points Settlement Contract v1](docs/contracts/OZON_DISCOUNT_POINTS_SETTLEMENT_CONTRACT_V1.md) — Historical predecessor and deprecation reference.
 - [Project status](docs/PROJECT_STATUS.md)

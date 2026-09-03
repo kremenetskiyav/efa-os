@@ -78,6 +78,16 @@
 - Read `docs/TRANSFER_RECOVERY.md` for backup, transfer, and recovery work.
 - Prefer the relevant profile document over duplicating subsystem rules here.
 
+### AI Assistants Architecture prerequisite
+
+For any task affecting AI assistants, Coordinator, routing, agent authority,
+recommendation ownership, Price Decision, inter-agent messages, status
+propagation, future execution, or human approval flow, first read
+`docs/architecture/EFA_AI_ASSISTANTS_INTERACTION_ARCHITECTURE_V1.md`.
+
+This architecture does not override the Ozon Unit Economics and Settlement
+prerequisites or any settlement implementation gate below.
+
 ### Ozon Unit Economics and Settlement prerequisites
 
 For any task affecting Ozon Unit Economics, «Экономику магазина», settlement, pricing economics, revenue, profit, margin, Ozon commission, acquiring, logistics, discounts, points, Green Price, advertising, promotions, Elastic Boost, Ozon Calculator, minimum/safe price, contribution margin, Price Decision, or AI Analyst financial logic, you MUST first read, in this order:
