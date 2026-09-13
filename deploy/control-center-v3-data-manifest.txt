@@ -1,0 +1,51 @@
+CONTROL_CENTER_V3_PRODUCTION_DATA_BUNDLE_V2
+Bundle validation: PASS (four required periods; five SKU each)
+Production: UNCHANGED
+Required code release: ea8d109efe5f38a14d6b176cb3f011938d4f477b
+Target root: /opt/efa-os/
+Verification UTC: 2026-09-13T20:53:21.195232+00:00
+Bundle bytes: 42510
+Bundle SHA256: 7afdd0b292ec89e8bbcac66fe75fe3d23372cc522706765ce30c29171c04013f
+Files: 12
+
+relative path | size bytes | SHA256 | purpose | canonical status/date
+OZON_AI_AGENTS/REPORTS/W06/SNAPSHOTS/CURRENT_FINANCE_SNAPSHOT_V1.json | 76408 | d2911ec62f7fac9629097b3ad48458d7818df15e11302d3b58ba497f5ea09f67 | Finance selector, portfolio and five SKU: YESTERDAY | PARTIAL_VALID / 2026-09-13T11:57:54.037181+00:00
+OZON_AI_AGENTS/REPORTS/W06/SNAPSHOTS/2026-09-13/W06_FINANCE_SNAPSHOT_20260913T140009808173Z_LAST_7_DAYS.json | 88057 | 302e63dca5b50b6289556f3da51f400da4e8a6c51291c34b76d7f80ab3ab50ad | Finance selector, portfolio and five SKU: LAST_7_DAYS | PARTIAL_VALID / 2026-09-13T14:00:09.808173+00:00
+OZON_AI_AGENTS/REPORTS/W06/SNAPSHOTS/2026-09-13/W06_FINANCE_SNAPSHOT_20260913T140011065801Z_CURRENT_MONTH.json | 88203 | 1809d6c83fc857d1ac3cf67924da5309dae1d9c11f2da55d434b70697b6393c2 | Finance selector, portfolio and five SKU: CURRENT_MONTH | PARTIAL_VALID / 2026-09-13T14:00:11.065801+00:00
+OZON_AI_AGENTS/REPORTS/W06/SNAPSHOTS/2026-09-12/W06_FINANCE_SNAPSHOT_AUGUST_2026_V1.json | 86280 | d1156af63340b9489accc838189d742e61daf2b9b504b9dabf927364c533d344 | Finance selector, portfolio and five SKU: AUGUST_2026 | PARTIAL_VALID / 2026-09-12T21:42:55.033181+00:00
+OZON_AI_AGENTS/REPORTS/W04/AUDIT/2026-09-12/W04_EFA_001_002_003_005_CONTENT_RATING_AUDIT_V1.md | 18668 | b7b1a2e777f353b3455e448d8ccfd446621c317a8c07535e66bf7f039b56b1c9 | Observed content ratings for remaining SKU; UF003 superseded by publication reconciliation | CANONICAL_LATEST_OBSERVATION_IN_RUNTIME_SCOPE / 2026-09-12
+OZON_AI_AGENTS/REPORTS/W04/CONTENT/2026-09-10/W04_UF004_CONTENT_V2_PUBLICATION_READBACK.md | 7910 | 8b539e891a3af9cb976b70b744c8079d3a7def031041ee82ae9bb0590e17dc5d | Latest publication/rollback observation for SKU | CANONICAL_LATEST_OBSERVATION_IN_RUNTIME_SCOPE / 2026-09-10
+OZON_AI_AGENTS/REPORTS/W04/CONTENT/2026-09-12/W04_UF001_CONTENT_PUBLISH_V1.md | 5571 | 77e35fa3a664599bffd846234b201b5b86dd576c4ae3f693e0f8a20333d16fea | Latest publication/rollback observation for SKU | CANONICAL_LATEST_OBSERVATION_IN_RUNTIME_SCOPE / 2026-09-12
+OZON_AI_AGENTS/REPORTS/W04/CONTENT/2026-09-12/W04_UF002_CONTENT_PUBLISH_ABORTED_ROLLBACK_V1.md | 1871 | 27250d8825045f07144159d82bfc2b49469eed72ae6acbdf78e45c579fa1bdd8 | Latest publication/rollback observation for SKU | CANONICAL_LATEST_OBSERVATION_IN_RUNTIME_SCOPE / 2026-09-12
+OZON_AI_AGENTS/REPORTS/W04/CONTENT/2026-09-12/W04_UF005_SAFE_STRUCTURED_CLEANUP_AND_PUBLISH_V1.md | 3603 | 6dd68be794f1c05a53f7b665a89b7691c9b427346a941ee293e8aa29dcb93a96 | Latest publication/rollback observation for SKU | CANONICAL_LATEST_OBSERVATION_IN_RUNTIME_SCOPE / 2026-09-12
+OZON_AI_AGENTS/REPORTS/W04/CONTENT/2026-09-13/W04_UF003_PUBLICATION_STATUS_RECONCILIATION_V1.md | 3040 | a8ad05eacd1650a7cd9c8af2d41c30d87786015fdf7698e2bcc0fc002aabe2e8 | Latest publication/rollback observation for SKU | CANONICAL_LATEST_OBSERVATION_IN_RUNTIME_SCOPE / 2026-09-13
+OZON_AI_AGENTS/REPORTS/W08/STRATEGY/2026-09-13/W08_PORTFOLIO_STRATEGY_REFRESH_SEP13_V1.md | 13867 | 54d192d0e39c3ad14ca881b5abe37d9bbc83d7ed9f89e461becf55128d5f0cf8 | Latest W08 recommended roles for five SKU | CANONICAL_LATEST_OBSERVATION_IN_RUNTIME_SCOPE / 2026-09-13
+REPORTS/W01/SEARCH_AUDIT/2026-09-11/W01_EFA_ALL_SKU_CURRENT_SEARCH_POSITION_AUDIT_V1.md | 22073 | 1670a9e5158c5fb62ad633b45abbda49b0ae08a39c07911dadd121fad6f82a8b | Latest bounded W01 search visibility read by portfolio adapter | CANONICAL_LATEST_OBSERVATION_IN_RUNTIME_SCOPE / 2026-09-11
+
+W07 AUDITS:
+YESTERDAY | {"schema": "PASS", "period": "PASS", "freshness": "UNKNOWN", "source_provenance": "PASS", "buyer_price_exclusion": "PASS", "contribution_profit_semantics": "PASS", "contribution_proxy": "NOT_APPLICABLE", "audit_result": "PARTIAL_VALID", "blocker": null, "reconciliation": "INSUFFICIENT_DATA", "financial_mode": "MIXED_OBSERVED_PROXY", "settlement_status": "INSUFFICIENT_SETTLEMENT_DATA", "evidence_truth": "SOURCE_REVIEW_COMPLETED_BY_W06"}
+LAST_7_DAYS | {"schema": "PASS", "period": "PASS", "freshness": "UNKNOWN", "source_provenance": "PASS", "buyer_price_exclusion": "PASS", "contribution_profit_semantics": "PASS", "contribution_proxy": "PASS", "audit_result": "PARTIAL_VALID", "blocker": null, "reconciliation": "INSUFFICIENT_DATA", "financial_mode": "MIXED_OBSERVED_PROXY", "settlement_status": "INSUFFICIENT_SETTLEMENT_DATA", "evidence_truth": "SOURCE_REVIEW_COMPLETED_BY_W06"}
+CURRENT_MONTH | {"schema": "PASS", "period": "PASS", "freshness": "UNKNOWN", "source_provenance": "PASS", "buyer_price_exclusion": "PASS", "contribution_profit_semantics": "PASS", "contribution_proxy": "PASS", "audit_result": "PARTIAL_VALID", "blocker": null, "reconciliation": "INSUFFICIENT_DATA", "financial_mode": "MIXED_OBSERVED_PROXY", "settlement_status": "INSUFFICIENT_SETTLEMENT_DATA", "evidence_truth": "SOURCE_REVIEW_COMPLETED_BY_W06"}
+AUGUST_2026 | {"historical_proxy_bridge": {"profile": "AUGUST_2026_DIRECT_MATCHED_CPC_V1", "contribution_before_ads": "19553.24", "direct_matched_cpc": "972.00", "unallocated_cpc": "929.18", "unallocated_cpo": "129.00", "total_advertising_impact": "2030.18", "other_unallocated": "39.05", "portfolio_contribution": "17484.01", "unexplained_gap_rub": "0.00"}, "schema": "PASS", "period": "PASS", "freshness": "HISTORICAL_REFERENCE", "source_provenance": "PASS", "buyer_price_exclusion": "PASS", "contribution_profit_semantics": "PASS", "contribution_proxy": "PASS", "audit_result": "PARTIAL_VALID", "blocker": null, "reconciliation": "GAP", "financial_mode": "SELLER_SIDE_PROXY", "settlement_status": "INSUFFICIENT_SETTLEMENT_DATA", "evidence_truth": "SOURCE_REVIEW_COMPLETED_BY_W06"}
+
+VALIDATION:
+Release manifest code + extracted bundle only; each member SHA256 verified.
+YESTERDAY 2026-09-12: PASS / five SKU / realization -851 / proxy null.
+LAST_7_DAYS 2026-09-06..12: PASS / five SKU / realization 19264 / proxy -4664.11.
+CURRENT_MONTH 2026-09-01..12: PASS / five SKU / realization 57115 / proxy -5619.14.
+AUGUST_2026 2026-08-01..31: PASS / five SKU / realization 148643 / proxy 17484.01; canonical named snapshot selected.
+UF003: PUBLISHED / MODERATION_COMPLETE / rating 68.5 / PASS.
+W04 latest per-SKU status, W08 roles, W01 search visibility and August source drill-down: PASS.
+No Scripts or legacy finance adapter loaded.
+
+LIMITATIONS:
+Current-period freshness remains UNKNOWN; W06 validity is not approved. No fabricated freshness or settlement claim.
+All four snapshots retain INSUFFICIENT_SETTLEMENT_DATA. August unexplained gap 0.00; explained SKU/portfolio gap remains -1097.23.
+W01 is latest available evidence from 2026-09-11, not a new search observation.
+Rolling period inputs apply only to the exact dates above; revalidate dates/freshness before later deployment.
+Report text and snapshot bytes preserved. No financial values changed.
+Other dashboard areas requiring daily reports, governance, execution state or additional feeds may show unknown: these inputs are outside this minimal bundle.
+
+EXCLUDED:
+Old August snapshots (including superseded source), older strategy reports, draft and failed snapshots, daily reports, raw XLSX/Ozon exports, browser artifacts, screenshots, tokens, credentials, customer personal data, unrelated reports and all code.
+No Git commit/push and no production upload/deployment performed.
