@@ -1,0 +1,82 @@
+{
+  "schema": "efa_control_center_deploy_manifest.v1",
+  "scope": "Control Center V3 read-only consumer; no production operation authorized by this manifest",
+  "runtime_files": [
+    "services/control-center/app.py",
+    "services/control-center/current_finance.py",
+    "services/control-center/finance_model.py",
+    "services/control-center/read_model.py",
+    "services/control-center/w06_snapshot.py",
+    "services/control-center/static/app.js",
+    "services/control-center/static/index.html",
+    "services/control-center/static/styles.css"
+  ],
+  "contract_files": [
+    "docs/contracts/EFA_W06_FINANCE_SNAPSHOT_V1.md",
+    "docs/contracts/efa_w06_finance_snapshot.v1.schema.json"
+  ],
+  "runtime_python_dependencies": "Python 3.11+ standard library; active routes do not import Scripts or finance_source",
+  "data_root": {
+    "environment_variable": "EFA_OZON_AGENTS_ROOT",
+    "default": "<repository>/OZON_AI_AGENTS",
+    "adjacent_reports": "<data_root>/../REPORTS"
+  },
+  "data_policy": "Read existing owner-managed files. Do not deploy local financial reports, snapshots, workbooks or publication evidence through this Git release. Fresh snapshots must be delivered independently by W06. Absent or mismatched inputs remain unknown/null.",
+  "input_patterns_relative_to_data_root": [
+    "INDEX.md",
+    "PROJECT_MAP.md",
+    "OZON_AI_AGENTS_WORK_CONTRACT_CROSSWALK_V1.md",
+    "W03_BOUNDED_AD_EXECUTION_POLICY_V2.md",
+    "CONTROL_CENTER_READ_MODEL_V2.json",
+    "REPORTS/W04/**/W04_CONTENT_REPORT*.md",
+    "REPORTS/W05/**/W05_VISUAL_REPORT*.md",
+    "REPORTS/W06/**/*.md",
+    "REPORTS/W08/STRATEGY/*/*PORTFOLIO*STRATEGY*.md",
+    "REPORTS/W04/AUDIT/*/*CONTENT_RATING*.md",
+    "REPORTS/W03/EXECUTION/*/*.md",
+    "REPORTS/W04/CONTENT/*/*PUBLISH*.md",
+    "REPORTS/W04/CONTENT/*/*PUBLICATION_READBACK*.md",
+    "REPORTS/W04/CONTENT/*/*PUBLICATION_STATUS_RECONCILIATION*.md",
+    "REPORTS/W02/ANALYSIS/*/*RETURN_ROOT_CAUSE_ANALYSIS*.md",
+    "REPORTS/W06/SNAPSHOTS/CURRENT_FINANCE_SNAPSHOT_V1.json",
+    "REPORTS/W06/SNAPSHOTS/????-??-??/W06_FINANCE_SNAPSHOT_*.json",
+    "../REPORTS/W01/SEARCH_AUDIT/*/*CURRENT_SEARCH_POSITION_AUDIT*.md",
+    "../REPORTS/W06/AUDIT/*/W06_EFA_ALL_SKU_AUGUST_UNIT_ECONOMICS_AUDIT_*.md",
+    "REPORTS/W00/DAILY/*/W00_OWNER_BRIEF.md",
+    "REPORTS/W01/DAILY/*/W01_MARKET_REPORT.md",
+    "REPORTS/W02/DAILY/*/W02_CUSTOMER_REPORT.md",
+    "REPORTS/W03/DAILY/*/W03_PROMOTION_REPORT.md",
+    "REPORTS/W04/DAILY/*/W04_CONTENT_REPORT.md",
+    "REPORTS/W05/DAILY/*/W05_VISUAL_REPORT.md",
+    "REPORTS/W06/DAILY/*/W06_FINANCE_STATUS.md",
+    "REPORTS/W07/DAILY/*/W07_CONTROL_REPORT.md",
+    "REPORTS/W08/DAILY/*/W08_COMMERCIAL_REPORT.md",
+    "REPORTS/W00/*/W00_OWNER_BRIEF.md",
+    "REPORTS/W01/*/W01_MARKET_REPORT.md",
+    "REPORTS/W02/*/W02_CUSTOMER_REPORT.md",
+    "REPORTS/W03/*/W03_PROMOTION_REPORT.md",
+    "REPORTS/W04/*/W04_CONTENT_REPORT.md",
+    "REPORTS/W05/*/W05_VISUAL_REPORT.md",
+    "REPORTS/W06/*/W06_FINANCE_STATUS.md",
+    "REPORTS/W07/*/W07_CONTROL_REPORT.md",
+    "REPORTS/W08/*/W08_COMMERCIAL_REPORT.md"
+  ],
+  "legacy_optional_dependencies": {
+    "files": [
+      "Scripts/format_ai_analyst_email.py",
+      "Scripts/build_competitor_monitor_summary_v1.py",
+      "services/control-center/finance_source.py",
+      "services/control-center/static/capabilities.html",
+      "services/control-center/static/capabilities.js",
+      "services/control-center/static/capabilities.json"
+    ],
+    "policy": "Retained compatibility helpers and archived detail routes; not part of active V3 deploy allowlist. Preserve existing baseline Scripts if archived detail routes are required. Compatibility tests use the tracked baseline helpers. No n8n workflows or schedules deployed."
+  },
+  "deployment_preflight": [
+    "Back up exactly the target files before an independently authorized deployment.",
+    "Transfer only runtime_files and contract_files from the release Git commit, preserving repository layout.",
+    "Check owner-managed data availability and exact period/freshness at deployment time; this commit does not establish production data availability.",
+    "Smoke-test /, /api/status, /api/finance and source drill-down; retain existing authentication and service configuration.",
+    "Rollback by restoring the backed-up target files; preserve owner data and snapshots."
+  ]
+}

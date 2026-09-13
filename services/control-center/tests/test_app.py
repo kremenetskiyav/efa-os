@@ -199,19 +199,20 @@ class ControlCenterTests(unittest.TestCase):
             status = app.delivery_configuration(delivery_path, old_brief_path)
         self.assertEqual(status, {"email_on": True, "telegram_on": True, "old_brief_on": False})
 
-    def test_system_timeline_contains_current_delivery_fields(self):
+    def test_system_timeline_contains_w06_and_agent_reports(self):
         page = (STATIC_PATH / "index.html").read_text(encoding="utf-8")
-        for element_id in (
-            "analyst-last", "analyst-next", "delivery-next", "delivery-last",
-            "delivery-email", "delivery-telegram", "old-brief",
-        ):
-            self.assertIn(f'id="{element_id}"', page)
-        self.assertNotIn("Последний email-report", page)
+        script = (STATIC_PATH / "app.js").read_text(encoding="utf-8")
+        self.assertIn('id="system-timeline"', page)
+        for field in ("Финансовый отчёт W06", "Последний цикл агентов", "Отчёты W00–W08"):
+            self.assertIn(field, script)
+        self.assertNotIn('s.n8n', script)
+        self.assertNotIn('s.collectors_ok', script)
+        self.assertNotIn('id="old-brief"', page)
 
     def test_home_links_to_capabilities_catalog(self):
         page = (STATIC_PATH / "index.html").read_text(encoding="utf-8")
         self.assertIn('href="/capabilities"', page)
-        self.assertIn("Возможности и команды", page)
+        self.assertIn("Архив возможностей · 01.09.2026", page)
 
     def test_capabilities_catalog_has_exact_audited_maturity_counts(self):
         catalog = json.loads((STATIC_PATH / "capabilities.json").read_text(encoding="utf-8"))
@@ -320,6 +321,12 @@ class ControlCenterTests(unittest.TestCase):
         self.assertTrue(demand["ok"])
         self.assertEqual(demand["status"], "OK")
 
+    def test_missing_asyncpg_degrades_database_health_without_breaking_status(self):
+        with mock.patch.dict(sys.modules, {"asyncpg": None}):
+            online, row = app.asyncio.run(app.read_database())
+        self.assertFalse(online)
+        self.assertEqual({}, row)
+
     def test_return_only_future_date_does_not_replace_latest_demand_snapshot(self):
         now = datetime(2026, 8, 25, 12, 0, tzinfo=timezone.utc)
         row = self.collector_row(now - timedelta(hours=5), ["valid"])
@@ -357,7 +364,7 @@ class ControlCenterTests(unittest.TestCase):
         with mock.patch.object(
             app, "read_database", new=mock.AsyncMock(return_value=(False, {}))
         ), mock.patch.object(app, "load_competitor_summary", return_value=competitor_summary()):
-            payload = app.build_status()
+            payload = app.build_legacy_status()
         for key in (
             "generated_at", "system", "collectors", "last_data_update",
             "analyst", "delivery", "attention", "competitor_monitor",
@@ -459,7 +466,7 @@ class ControlCenterTests(unittest.TestCase):
                 available=False, reason="CONTROL_CENTER_COMPETITOR_READ_ERROR"
             ),
         ):
-            payload = app.build_status()
+            payload = app.build_legacy_status()
         self.assertTrue(payload["system"]["collectors_ok"])
         self.assertFalse(payload["competitor_monitor"]["available"])
 
@@ -595,9 +602,10 @@ class ControlCenterTests(unittest.TestCase):
         self.assertEqual("CONTROL", decoded["details"]["membership_status"])
 
     def test_no_raw_table_fallback_or_database_write_path(self):
+        from Scripts import build_competitor_monitor_summary_v1 as legacy_queries
         source = MODULE_PATH.read_text(encoding="utf-8")
         runtime_sql = "\n".join((
-            app.LATEST_FINDING_SET_SQL, app.FINDINGS_SQL, app.COVERAGE_SQL,
+            legacy_queries.LATEST_FINDING_SET_SQL, legacy_queries.FINDINGS_SQL, legacy_queries.COVERAGE_SQL,
         ))
         self.assertNotIn("public.competitor_", runtime_sql)
         for forbidden in ("INSERT ", "UPDATE ", "DELETE ", "ON CONFLICT"):
@@ -613,28 +621,147 @@ class ControlCenterTests(unittest.TestCase):
 
     def test_dashboard_has_competitor_block_and_detail_link(self):
         page = (STATIC_PATH / "index.html").read_text(encoding="utf-8")
-        for element_id in (
-            "competitor-panel", "competitor-status", "competitor-snapshot",
-            "competitor-headline", "competitor-coverage", "competitor-own",
-            "competitor-visibility", "competitor-prices", "competitor-important",
-            "competitor-watch", "competitor-info",
-        ):
-            self.assertIn(f'id="{element_id}"', page)
         self.assertIn('href="/competitors"', page)
+        self.assertIn('id="watchlist"', page)
 
     def test_ui_uses_text_content_for_competitor_values(self):
         script = (STATIC_PATH / "app.js").read_text(encoding="utf-8")
-        for element_id in (
-            "competitor-headline", "competitor-coverage", "competitor-own",
-            "competitor-visibility", "competitor-prices",
-        ):
-            self.assertIn(f"getElementById('{element_id}').textContent", script)
+        self.assertIn("textContent", script)
+        self.assertNotIn("innerHTML", script)
+        self.assertNotIn("insertAdjacentHTML", script)
 
     def test_responsive_rules_cover_tablet_and_mobile(self):
         styles = (STATIC_PATH / "styles.css").read_text(encoding="utf-8")
         self.assertIn("@media(max-width:850px)", styles)
         self.assertIn("@media(max-width:560px)", styles)
         self.assertIn(".competitor-metrics{grid-template-columns:1fr}", styles)
+
+    def test_operational_dashboard_contains_required_read_only_sections(self):
+        page = (STATIC_PATH / "index.html").read_text(encoding="utf-8")
+        for marker in ("Система", "Агенты", "Требует внимания", "Товары", "Финансы",
+                       "Продажи и продвижение", "Управление действиями", "Подробности внимания"):
+            self.assertIn(marker, page)
+        self.assertEqual(8, page.count("<section "))
+        self.assertNotIn("approval-button", page)
+        self.assertNotIn("execute-button", page)
+
+    def test_owner_ui_localizes_labels_and_preserves_machine_codes(self):
+        page = (STATIC_PATH / "index.html").read_text(encoding="utf-8")
+        script = (STATIC_PATH / "app.js").read_text(encoding="utf-8")
+        for marker in ("Видимость", "Причина", "Координатор EFA", "Коммерческий аналитик"):
+            self.assertIn(marker, page + script)
+        for work in app.WORK_METADATA:
+            self.assertIn(work, script)
+        self.assertIn("machine-code", page + script)
+        self.assertIn("NOT_EMITTED", script)
+        self.assertIn("canonical_status", script)
+
+    def test_ui_distinguishes_incomplete_demand_from_zero(self):
+        script = (STATIC_PATH / "app.js").read_text(encoding="utf-8")
+        self.assertIn("EFA_DEMAND_INCOMPLETE", script)
+        self.assertIn("Нет полных данных", script)
+        self.assertIn("Не распределена по SKU", script)
+        self.assertIn("Расчётный маржинальный доход после рекламы", script)
+
+    def test_dashboard_rejects_post_without_mutation_route(self):
+        server = app.ThreadingHTTPServer(("127.0.0.1", 0), app.Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{server.server_port}/api/status", data=b'{}', method='POST')
+            with self.assertRaises(urllib.error.HTTPError) as error:
+                urllib.request.urlopen(request, timeout=3)
+            self.assertEqual(501, error.exception.code)
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=3)
+
+    def test_operating_layer_uses_reports_and_keeps_dual_grain_separate(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            reports = root / "REPORTS"
+            fixtures = {
+                "W00/DAILY/2026-09-07/W00_OWNER_BRIEF.md": """# W00 DAILY OWNER BRIEF — 2026-09-07
+| Run status | `COMPLETED` |
+## Owner Attention
+Owner attention items: `1`.
+1. **УФ 002Б:** weak visibility.
+## Owner Decisions Required
+Owner decisions required: `0`.
+## Advertising / Commercial Status
+| Confirmed active CPC | `0` | note |
+| Archived CPC | `21` | note |
+| Completed-period spend | `4,688.49 ₽` | note |
+| Campaign grain | `13,515 ₽ / DRR 34.7%` | note |
+| Product grain | `23,349 ₽ / DRR 20.1%` | note |
+| Attribution | `OZON_UNCLEAR` | note |
+| CPO lifecycle | `UNKNOWN` | note |
+## Audit Status
+| Audit outcome | `PASS` |
+| Blockers preserved | `YES — 2/2` |
+""",
+                "W06/ANALYSIS/2026-09-07/W06_ADVERTISING_REVALIDATION_V1.md": """# W06 Advertising Re-validation V1
+**Re-validation status:** `PASS`
+**Input reconciliation status:** `PARTIALLY_RESOLVED`
+| Confirmed numeric CPC/DRR/spend/bid bounds | 0 |
+| Unified attributed sales confirmed | `NO` |
+| Unified DRR confirmed | `NO` |
+## FB-01
+## FB-02
+""",
+                "W08/DAILY/2026-09-07/W08_COMMERCIAL_REPORT.md": """# W08
+Run status: `COMPLETED`
+Commercial diagnosis status: `PARTIAL`
+Commercial test proposals: `3`.
+Active financial blockers: `2`.
+## Active Blockers
+| Blocker | Authority | Status | Blocks |
+|---|---|---|---|
+| FB-01 | W06 / Pricing & Economics | `MODIFY / ACTIVE / OZON_UNCLEAR` | Unified DRR |
+| FB-02 | W06 / Pricing & Economics | `KEEP / ACTIVE / INSUFFICIENT_DATA` | Numeric bounds |
+""",
+            }
+            for relative, content in fixtures.items():
+                path = reports / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(content, encoding="utf-8")
+            (root / "INDEX.md").write_text(
+                "### W04 — Content\n- Current status: `W04_READY_FOR_TEST`\n"
+                "### W05 — Visual\n- Current status: `W05_READY_FOR_TEST`\n",
+                encoding="utf-8",
+            )
+            with mock.patch.object(app, "OZON_AGENTS_ROOT", root), mock.patch.object(
+                app, "OZON_REPORTS_ROOT", reports
+            ):
+                layer = app.build_operating_layer()
+        self.assertEqual("COMPLETED", layer["global"]["daily_cycle"])
+        self.assertEqual("PASS", layer["global"]["audit"])
+        self.assertEqual(0, layer["global"]["owner_decisions_required"])
+        self.assertEqual(2, layer["global"]["active_blockers_count"])
+        self.assertEqual("34.7%", layer["advertising"]["campaign_drr"])
+        self.assertEqual("20.1%", layer["advertising"]["product_drr"])
+        self.assertEqual("OZON_UNCLEAR", layer["advertising"]["attribution"])
+        self.assertEqual("PASS", layer["financial"]["status"])
+        self.assertEqual("READY_FOR_TEST", next(work for work in layer["works"] if work["id"] == "W04")["status"])
+        self.assertEqual("NOT_APPLICABLE", next(work for work in layer["works"] if work["id"] == "W05")["freshness"])
+
+    def test_work_report_route_rejects_unknown_work_id(self):
+        server = app.ThreadingHTTPServer(("127.0.0.1", 0), app.Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with self.assertRaises(urllib.error.HTTPError) as raised:
+                urllib.request.urlopen(
+                    f"http://127.0.0.1:{server.server_port}/work-report?work=W99",
+                    timeout=3,
+                )
+            self.assertEqual(404, raised.exception.code)
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=3)
 
 
 if __name__ == "__main__":

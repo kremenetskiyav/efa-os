@@ -1,106 +1,18 @@
 <!doctype html>
 <html lang="ru">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>EFA OS — Control Center</title>
-  <link rel="stylesheet" href="/static/styles.css">
-</head>
-<body>
-  <header class="topbar">
-    <div>
-      <p class="eyebrow">EFA OPERATIONS</p>
-      <h1>EFA OS — Control Center</h1>
-      <p class="subtitle">Состояние системы и текущие сигналы в одном экране</p>
-    </div>
-    <div class="updated"><span class="pulse"></span><span id="generated-at">Обновление…</span></div>
-  </header>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ЭФА — Центр управления</title><link rel="stylesheet" href="/static/styles.css"></head>
+<body class="control-v2 owner-v3">
+<header class="topbar"><div><p class="eyebrow">ЭФА / ЦЕНТР УПРАВЛЕНИЯ</p><h1>Финансы и товары</h1></div><div class="header-tools"><span class="read-badge">ТОЛЬКО ПРОСМОТР</span><span id="generated-at" role="status">Обновление…</span><button id="refresh" type="button">Обновить</button></div></header>
+<main><div id="load-error" role="alert" hidden></div>
 
-  <main>
-    <section>
-      <div class="section-title"><span>01</span><h2>Система</h2></div>
-      <div class="system-grid">
-        <article class="status-card"><div class="status-icon">DB</div><div><small>PostgreSQL</small><strong id="postgresql">Проверка…</strong></div></article>
-        <article class="status-card"><div class="status-icon">N8</div><div><small>n8n</small><strong id="n8n">Проверка…</strong></div></article>
-        <article class="status-card"><div class="status-icon">MCP</div><div><small>EFA Read MCP</small><strong id="mcp">Проверка…</strong></div></article>
-        <article class="status-card"><div class="status-icon">CL</div><div><small>Collectors</small><strong id="collectors">Проверка…</strong></div></article>
-      </div>
-      <div class="timeline-grid">
-        <div><span>Данные обновлены</span><b id="last-data">—</b></div>
-        <div><span>Последний Analyst</span><b id="analyst-last">—</b></div>
-        <div><span>Следующий Analyst</span><b id="analyst-next">—</b><small id="analyst-schedule"></small></div>
-        <div><span>Следующая доставка</span><b id="delivery-next">—</b><small id="delivery-schedule"></small></div>
-        <div><span>Последняя доставка</span><b id="delivery-last">—</b></div>
-        <div><span>Email</span><b id="delivery-email">—</b></div>
-        <div><span>Telegram</span><b id="delivery-telegram">—</b></div>
-        <div><span>Старый Daily Brief</span><b id="old-brief">—</b></div>
-      </div>
-    </section>
-
-    <section>
-      <div class="section-title"><span>02</span><h2>Требует внимания</h2></div>
-      <div class="attention-layout">
-        <div class="counters">
-          <div class="counter critical"><b id="count-attention">0</b><span>Проверить сейчас</span></div>
-          <div class="counter watch"><b id="count-watch">0</b><span>Наблюдать</span></div>
-          <div class="counter calm"><b id="count-leave">0</b><span>Не трогать</span></div>
-        </div>
-        <div class="signals" id="signals"><p class="muted">Загрузка текущих сигналов…</p></div>
-      </div>
-    </section>
-
-    <section>
-      <div class="section-title"><span>03</span><h2>Конкуренты</h2></div>
-      <article class="competitor-panel" id="competitor-panel">
-        <div class="competitor-head">
-          <div><p class="module-kicker">Competitor Monitor</p><h3 id="competitor-status">Загрузка…</h3></div>
-          <span class="badge" id="competitor-badge">—</span>
-        </div>
-        <p class="competitor-snapshot" id="competitor-snapshot">Последний снимок: —</p>
-        <p class="competitor-headline" id="competitor-headline">Данные мониторинга загружаются.</p>
-        <div class="competitor-content" id="competitor-content">
-          <div class="competitor-metrics">
-            <div><span>Охват</span><b id="competitor-coverage">—</b></div>
-            <div><span>Наша видимость</span><b id="competitor-own">—</b></div>
-            <div><span>Конкуренты</span><b id="competitor-visibility">—</b></div>
-            <div><span>Цены</span><b id="competitor-prices">—</b></div>
-          </div>
-          <div class="competitor-severity"><span>IMPORTANT <b id="competitor-important">—</b></span><span>WATCH <b id="competitor-watch">—</b></span><span>INFO <b id="competitor-info">—</b></span></div>
-        </div>
-        <div class="actions"><a href="/competitors">Подробнее</a></div>
-      </article>
-    </section>
-
-    <section>
-      <div class="section-title"><span>04</span><h2>AI-модули</h2></div>
-      <div class="modules-grid">
-        <article class="module active-module wide">
-          <div class="module-head"><div><p class="module-kicker">Аналитика и решения</p><h3>AI Analyst</h3></div><span class="badge active">Active</span></div>
-          <div class="capabilities"><span>Продажи</span><span>Цены</span><span>Остатки</span><span>Акции</span><span>CPC</span><span>Логистика</span><span>Рекомендации</span></div>
-          <div class="actions"><a href="/report">Последний отчёт</a><a href="/prices">Цены и акции</a><a href="/stocks">Остатки</a><a href="/cpc">CPC</a></div>
-        </article>
-        <article class="module planned"><div class="module-head"><h3>EFA Coordinator</h3><span class="badge">Planned</span></div><p>Единая точка входа и маршрутизация задач между модулями.</p></article>
-        <article class="module planned"><div class="module-head"><h3>AI Content</h3><span class="badge">Planned</span></div><p>Карточки Ozon, SEO, характеристики, контент.</p></article>
-        <article class="module planned"><div class="module-head"><h3>AI Operator</h3><span class="badge">Planned</span></div><p>Ответы на отзывы и вопросы покупателей.</p></article>
-        <article class="module planned"><div class="module-head"><h3>AI Fitment</h3><span class="badge">Planned</span></div><p>VIN/OEM/применяемость.</p></article>
-        <article class="module planned"><div class="module-head"><h3>Executive Assistant</h3><span class="badge">Planned</span></div><p>Документы, письма, таблицы, задачи.</p></article>
-      </div>
-    </section>
-
-    <section>
-      <div class="section-title"><span>05</span><h2>Командное меню</h2></div>
-      <nav class="command-menu">
-        <a href="/capabilities"><b>01</b><span>Возможности и команды</span><i>→</i></a>
-        <a href="/report"><b>02</b><span>Последний отчёт Analyst</span><i>→</i></a>
-        <a href="/prices"><b>03</b><span>Цены и акции</span><i>→</i></a>
-        <a href="/stocks"><b>04</b><span>Остатки</span><i>→</i></a>
-        <a href="/cpc"><b>05</b><span>CPC</span><i>→</i></a>
-        <a href="/collectors"><b>06</b><span>Статус collectors</span><i>→</i></a>
-        <a href="/n8n" target="_blank" rel="noreferrer"><b>07</b><span>n8n</span><i>↗</i></a>
-      </nav>
-      <p class="readonly-note">Только чтение и безопасные переходы. Production write-действий в панели нет.</p>
-    </section>
-  </main>
-  <script src="/static/app.js"></script>
-</body>
-</html>
+<section aria-labelledby="finance-title" class="finance-section"><div class="section-title"><span>01</span><h2 id="finance-title">Финансы</h2><b id="finance-period"></b><span class="section-note">ИТОГО ПО ЭФА</span></div><div id="period-selector" class="period-selector" role="group" aria-label="Финансовый период"></div><div id="finance-kpis" class="finance-kpis"></div><div id="finance-costs" class="finance-costs"></div><p id="finance-warning" class="finance-warning" role="status"></p><details class="compact-details" id="finance-details"><summary>Доходы, расходы и сверка итогов</summary><div class="finance-detail-grid"><div><h3>Состав финансового результата</h3><div id="finance-breakdown"></div></div><div><h3>Сверка товаров с итогом ЭФА</h3><div id="reconciliation"></div><p id="reconciliation-bridge"></p></div></div><ul id="finance-gaps"></ul></details></section>
+<section aria-labelledby="attention-title" class="owner-attention"><div class="section-title"><span>02</span><h2 id="attention-title">Требует внимания</h2><span class="section-note">Решения, обновления карточек и финансовые ограничения</span></div><div id="attention-summary" class="attention-summary"></div><details class="compact-details" id="owner-queue-details"><summary id="queue-title">Требуют решения</summary><p id="queue-coverage"></p><div class="table-wrap"><table class="queue-table"><thead><tr><th>Приоритет</th><th>Агент</th><th>SKU</th><th>Тип решения</th><th>Номер предложения</th><th>Статус</th><th>Причина</th><th>Что нужно сделать</th></tr></thead><tbody id="queue-body"></tbody></table></div><details><summary>Закрытая история</summary><div id="action-history"></div></details></details></section>
+<section aria-labelledby="portfolio-title"><div class="section-title"><span>03</span><h2 id="portfolio-title">Товары</h2><span class="section-note">Нажмите SKU, чтобы увидеть доходы и расходы</span></div><div class="table-wrap"><table class="portfolio-table"><thead><tr><th>SKU / роль</th><th>Видимость<br>в поиске</th><th>Выручка<br>продавца, ₽</th><th>Доход до<br>рекламы, ₽</th><th>Маржа до<br>рекламы, %</th><th>Доход после<br>рекламы, ₽</th><th>Реклама</th><th>CPC / CPO</th><th>Акции</th><th>Контент-<br>рейтинг</th><th>Карточка /<br>модерация</th><th>Возвраты, шт.</th></tr></thead><tbody id="portfolio-body"></tbody><tfoot id="portfolio-total"></tfoot></table></div><p class="v2-footnote">Финансы — за выбранный период. Цены, остатки, реклама и контент — последние наблюдения; дата и источник раскрываются по клику. Витринная цена покупателя не заменяет выручку продавца.</p></section>
+<section aria-labelledby="commercial-title"><div class="section-title"><span>04</span><h2 id="commercial-title">Продажи и продвижение</h2><span class="section-note">Текущее состояние и маржа выбранного периода</span></div><div id="commercial-grid" class="commercial-grid"></div><details class="compact-details"><summary id="financial-summary">Финансовые ограничения</summary><div id="financial-blockers"></div></details></section>
+<section aria-labelledby="agents-title"><div class="section-title"><span>05</span><h2 id="agents-title">Агенты</h2><span class="section-note">Отчёт о работе и причины остановки — в подробностях</span></div><div id="agent-grid" class="agent-grid"></div></section>
+<section aria-labelledby="governance-title"><div class="section-title"><span>06</span><h2 id="governance-title">Управление действиями</h2><span class="section-note">Панель показывает состояние, но не выполняет изменения</span></div><div id="governance-grid" class="governance-grid"></div><details class="compact-details"><summary id="execution-summary">История выполненных действий</summary><div class="table-wrap"><table><thead><tr><th>Время</th><th>SKU</th><th>Действие</th><th>Номер предложения</th><th>Исполнитель</th><th>Результат</th><th>Проверка после изменения</th></tr></thead><tbody id="execution-body"></tbody></table></div></details></section>
+<section aria-labelledby="watch-title"><div class="section-title"><span>07</span><h2 id="watch-title">Подробности внимания</h2></div><details><summary>История наблюдений и источники</summary><div id="watch-filters" class="watch-filters" role="group" aria-label="Категории внимания"></div><div id="watchlist" class="watchlist"></div><details class="compact-details"><summary id="gap-summary">Недостающие данные и источники</summary><ul id="data-gaps"></ul><div id="sources" class="source-list"></div></details></details></section>
+<section class="system-strip" aria-labelledby="system-title"><div class="section-title"><span>08</span><h2 id="system-title">Система</h2></div><div id="system-grid" class="system-inline"></div><details><summary>Обновления данных</summary><div id="system-timeline"></div></details></section>
+<footer class="v2-footer"><span>ЭФА · данные и решения владельца</span><details><summary>Прежние системы · технический архив</summary><nav><a href="/competitors">Прежний монитор конкурентов</a><a href="/collectors">Прежний сбор данных</a><a href="/report">Прежний отчёт аналитика</a><a href="/capabilities">Архив возможностей · 01.09.2026</a></nav></details></footer></main>
+<dialog id="evidence-dialog"><div class="dialog-head"><h2>Источник значения</h2><button id="close-evidence" type="button" aria-label="Закрыть">×</button></div><div id="evidence-content"></div></dialog>
+<script src="/static/app.js"></script></body></html>

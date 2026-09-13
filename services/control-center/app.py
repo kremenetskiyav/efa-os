@@ -16,20 +16,32 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Mapping, Sequence
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
+if str(Path(__file__).parent) not in sys.path:
+    sys.path.insert(0, str(Path(__file__).parent))
 
-from Scripts.format_ai_analyst_email import parse_report  # noqa: E402
-from Scripts.build_competitor_monitor_summary_v1 import (  # noqa: E402
-    COVERAGE_SQL,
-    FINDINGS_SQL,
-    LATEST_FINDING_SET_SQL,
-    SourceData,
-    build_summary,
-)
+import read_model  # noqa: E402
+import current_finance  # noqa: E402
+
+# Archived detail routes load their old helpers only when explicitly visited.
+# The W00-W08/W06 home page can start without the retired collector modules.
+def parse_report(*args, **kwargs):
+    from Scripts.format_ai_analyst_email import parse_report as legacy_parse
+    return legacy_parse(*args, **kwargs)
+
+
+def build_summary(*args, **kwargs):
+    from Scripts.build_competitor_monitor_summary_v1 import build_summary as legacy_build
+    return legacy_build(*args, **kwargs)
+
+
+def SourceData(*args, **kwargs):
+    from Scripts.build_competitor_monitor_summary_v1 import SourceData as legacy_source
+    return legacy_source(*args, **kwargs)
 
 
 MOSCOW = timezone(timedelta(hours=3), name="Europe/Moscow")
@@ -51,6 +63,32 @@ N8N_PORT = int(os.environ.get("EFA_N8N_HEALTH_PORT", "5678"))
 MCP_HOST = os.environ.get("EFA_MCP_HEALTH_HOST", "127.0.0.1")
 MCP_PORT = int(os.environ.get("EFA_MCP_HEALTH_PORT", "8000"))
 N8N_URL = os.environ.get("EFA_N8N_URL", "http://127.0.0.1:5678")
+OZON_AGENTS_ROOT = Path(os.environ.get("EFA_OZON_AGENTS_ROOT", REPO_ROOT / "OZON_AI_AGENTS"))
+OZON_REPORTS_ROOT = OZON_AGENTS_ROOT / "REPORTS"
+
+WORK_METADATA: dict[str, dict[str, str | None]] = {
+    "W00": {"name": "EFA Coordinator", "canonical_role": "EFA Coordinator", "mode": "DAILY"},
+    "W01": {"name": "Market & Competitor Intelligence", "canonical_role": "Competitor Intelligence", "mode": "DAILY"},
+    "W02": {"name": "Customer Service & Compatibility", "canonical_role": None, "mode": "DAILY"},
+    "W03": {"name": "Promotion & Advertising", "canonical_role": None, "mode": "DAILY"},
+    "W04": {"name": "Content & SEO", "canonical_role": None, "mode": "ON DEMAND"},
+    "W05": {"name": "Visual Content", "canonical_role": None, "mode": "ON DEMAND"},
+    "W06": {"name": "Finance & Unit Economics", "canonical_role": "Pricing & Economics", "mode": "CONDITIONAL"},
+    "W07": {"name": "Control & Audit", "canonical_role": None, "mode": "DAILY"},
+    "W08": {"name": "Commercial Analyst", "canonical_role": "Commercial Analyst", "mode": "DAILY"},
+}
+
+REPORT_PATTERNS = {
+    "W00": "W00/DAILY/*/W00_OWNER_BRIEF.md",
+    "W01": "W01/DAILY/*/W01_MARKET_REPORT.md",
+    "W02": "W02/DAILY/*/W02_CUSTOMER_REPORT.md",
+    "W03": "W03/DAILY/*/W03_PROMOTION_REPORT.md",
+    "W04": "W04/**/W04_CONTENT_REPORT*.md",
+    "W05": "W05/**/W05_VISUAL_REPORT*.md",
+    "W06": "W06/**/*.md",
+    "W07": "W07/DAILY/*/W07_CONTROL_REPORT.md",
+    "W08": "W08/DAILY/*/W08_COMMERCIAL_REPORT.md",
+}
 
 
 COLLECTOR_QUERY = """
@@ -201,7 +239,10 @@ def _tcp_online(host: str, port: int) -> bool:
 
 
 async def read_database() -> tuple[bool, dict[str, Any]]:
-    import asyncpg
+    try:
+        import asyncpg
+    except ImportError:
+        return False, {}
 
     dsn = os.environ.get("DATABASE_URL", "").strip()
     if not dsn:
@@ -245,6 +286,7 @@ def _decode_competitor_record(record: Mapping[str, Any]) -> dict[str, Any]:
 
 
 async def read_competitor_summary() -> dict[str, Any]:
+    from Scripts.build_competitor_monitor_summary_v1 import COVERAGE_SQL, FINDINGS_SQL, LATEST_FINDING_SET_SQL
     """Read the approved three-view source using the dedicated runtime role."""
     import asyncpg
 
@@ -338,6 +380,7 @@ def collector_snapshot(row: dict[str, Any], now: datetime) -> tuple[list[dict[st
             "ok": ok,
             "status": "OK" if ok else "Проблема",
             "updated": _fmt_dt(observed),
+            "observed_at": _iso(observed),
             "details": ", ".join(str(value) for value in (statuses or [])) or "Нет данных",
         })
         if observed is not None:
@@ -375,7 +418,292 @@ def report_snapshot(path: Path) -> tuple[dict[str, Any], str]:
     }, report
 
 
-def build_status() -> dict[str, Any]:
+def _read_text(path: Path | None) -> str:
+    if path is None:
+        return ""
+    try:
+        return path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        return ""
+
+
+def _latest_report_path(work_id: str) -> Path | None:
+    pattern = REPORT_PATTERNS.get(work_id)
+    if not pattern or not OZON_REPORTS_ROOT.is_dir():
+        return None
+    candidates = [path for path in OZON_REPORTS_ROOT.glob(pattern) if path.is_file()]
+    return max(candidates, key=lambda path: (path.stat().st_mtime_ns, str(path)), default=None)
+
+
+def _first_match(text: str, *patterns: str, default: str = "NOT AVAILABLE") -> str:
+    for pattern in patterns:
+        match = re.search(pattern, text, re.I | re.M)
+        if match:
+            return match.group(1).strip().strip("`.* ")
+    return default
+
+
+def _int_match(text: str, *patterns: str) -> int | None:
+    value = _first_match(text, *patterns, default="")
+    if not value:
+        return None
+    match = re.search(r"\d+", value.replace(",", ""))
+    return int(match.group()) if match else None
+
+
+def _report_date(path: Path | None) -> str | None:
+    if path is None:
+        return None
+    for part in reversed(path.parts):
+        if re.fullmatch(r"20\d{2}-\d{2}-\d{2}", part):
+            return part
+    return datetime.fromtimestamp(path.stat().st_mtime, MOSCOW).date().isoformat()
+
+
+def _section(text: str, heading: str) -> str:
+    match = re.search(
+        rf"^##\s+{re.escape(heading)}\s*$\n(?P<body>.*?)(?=^##\s|\Z)",
+        text,
+        re.I | re.M | re.S,
+    )
+    return match.group("body") if match else ""
+
+
+def _plain_markdown(value: str) -> str:
+    value = re.sub(r"\[([^]]+)]\([^)]+\)", r"\1", value)
+    value = re.sub(r"[`*]", "", value)
+    return re.sub(r"\s+", " ", value).strip()
+
+
+def _owner_attention(text: str) -> list[str]:
+    body = _section(text, "Owner Attention")
+    items = re.findall(r"^\d+\.\s+(.+)$", body, re.M)
+    return [_plain_markdown(item) for item in items]
+
+
+def _blockers(text: str) -> list[dict[str, str]]:
+    body = _section(text, "Active Blockers")
+    rows = []
+    for line in body.splitlines():
+        if not re.match(r"^\|\s*FB-\d+\s*\|", line):
+            continue
+        cells = [_plain_markdown(cell) for cell in line.strip().strip("|").split("|")]
+        if len(cells) >= 4:
+            rows.append({
+                "id": cells[0],
+                "domain": "Finance / Advertising",
+                "owner": cells[1],
+                "status": cells[2],
+                "reason": cells[3],
+            })
+    return rows
+
+
+def _work_status(work_id: str, text: str) -> str:
+    patterns = {
+        "W00": (r"\|\s*Run status\s*\|\s*`?([^|`]+)",),
+        "W01": (r"Final run status:\s*`?([^`\n]+)", r"\|\s*Run status\s*\|\s*([^|]+)"),
+        "W02": (r"Run status:\s*`([^`]+)`",),
+        "W03": (r"Run status:\s*`([^`]+)`",),
+        "W06": (r"Re-validation status:\*{0,2}\s*`([^`]+)`",),
+        "W07": (r"\|\s*Audit outcome\s*\|\s*`?([^|`]+)",),
+        "W08": (r"Run status:\s*`([^`]+)`",),
+    }
+    return _first_match(text, *patterns.get(work_id, ()), default="NOT AVAILABLE")
+
+
+def _work_freshness(work_id: str, text: str) -> str:
+    if work_id in {"W04", "W05"}:
+        return "NOT_APPLICABLE"
+    patterns = {
+        "W01": (r"Direct-observation freshness\s*\|\s*`?([^|`]+)",),
+        "W02": (r"Freshness:\s*`([^`]+)`",),
+        "W08": (r"Aggregate freshness:\s*`([^`]+)`",),
+    }
+    return _first_match(text, *patterns.get(work_id, ()), default="UNKNOWN")
+
+
+def _count_unique(text: str, pattern: str) -> int | None:
+    values = set(re.findall(pattern, text, re.I | re.M))
+    return len(values) if values else None
+
+
+def _work_metrics(work_id: str, text: str) -> dict[str, int | None]:
+    findings: int | None = None
+    proposals: int | None = None
+    blockers: int | None = None
+    handoffs: int | None = None
+    if work_id == "W00":
+        findings = _int_match(text, r"Owner attention items:\s*`?(\d+)")
+        blockers = _int_match(text, r"Blockers preserved\s*\|\s*`?YES\s*[—-]\s*(\d+)/")
+        handoffs = 0
+    elif work_id == "W01":
+        findings = _int_match(text, r"Significant findings:\s*(\d+)")
+        handoffs = _count_unique(_section(text, "Recommendations / Handoffs"), r"^###\s+(W\d{2})")
+    elif work_id == "W02":
+        findings = _int_match(text, r"Product-data findings:\s*`?(\d+)")
+        handoffs = len(re.findall(r"^\|\s*W\d{2}\s*\|\s*`YES`", _section(text, "Handoffs"), re.M)) or None
+    elif work_id == "W03":
+        findings = _count_unique(text, r"W03-D-A\d+")
+        proposals = _count_unique(text, r"W03-D-P\d+")
+        handoffs = _int_match(text, r"Handoffs required:\s*(\d+)")
+    elif work_id == "W06":
+        blockers = len(re.findall(r"^#{2,3}\s+FB-\d+", text, re.M)) or None
+    elif work_id == "W07":
+        findings = _int_match(text, r"Follow-up findings preserved\s*\|\s*`?YES\s*[—-]\s*(\d+)/")
+        blockers = _int_match(text, r"Blockers checked:\s*`?(\d+)")
+        handoffs = 0 if "W00 DAILY OWNER BRIEF" in _read_text(_latest_report_path("W00")) else 1
+    elif work_id == "W08":
+        findings = _int_match(text, r"SKU requiring commercial attention:\s*`?(\d+)")
+        proposals = _int_match(text, r"Commercial test proposals:\s*`?(\d+)")
+        blockers = _int_match(text, r"Active financial blockers:\s*`?(\d+)")
+        handoffs = 0 if "W00 DAILY OWNER BRIEF" in _read_text(_latest_report_path("W00")) else 1
+    return {"findings": findings, "proposals": proposals, "blockers": blockers, "pending_handoffs": handoffs}
+
+
+def _on_demand_status(work_id: str, index_text: str) -> str:
+    block = re.search(rf"###\s+{work_id}\b(?P<body>.*?)(?=^###\s+W\d{{2}}|\Z)", index_text, re.M | re.S)
+    if not block:
+        return "READY_FOR_TEST"
+    status = _first_match(block.group("body"), r"Current status:\s*`?([^`\n]+)", default="READY_FOR_TEST")
+    return status.removeprefix(f"{work_id}_")
+
+
+def _sku_health(w00: str, w01: str, w02: str) -> list[dict[str, str]]:
+    skus = [f"УФ 00{number}Б" for number in range(1, 6)]
+    result = []
+    for sku in skus:
+        attention = "ATTENTION" if re.search(rf"\|\s*{re.escape(sku)}\s*\|\s*`?(HIGH|MEDIUM)", w00) else "WATCH"
+        visibility = "UNKNOWN"
+        found = re.search(rf"{re.escape(sku)}\s+found in\s+(\d+)/(\d+)", w01, re.I)
+        if found:
+            visibility = "OK" if int(found.group(1)) else "WEAK"
+        seller = "WATCH" if re.search(rf"^\|[^\n]*{re.escape(sku)}[^\n]*\|\s*MULTIPLE_SELLERS\s*\|", w01, re.M) else "OK"
+        customer = "UNKNOWN"
+        if sku == "УФ 003Б" and "CONFLICTING_DATA" in w02:
+            customer = "CONFLICT"
+        elif sku == "УФ 001Б" and "CU 2358" in w02 and "CUK 2358" in w02:
+            customer = "WATCH"
+        advertising = "ATTENTION" if sku in {"УФ 002Б", "УФ 004Б"} and attention == "ATTENTION" else "UNKNOWN"
+        finance = "ATTENTION" if sku == "УФ 002Б" and "financial validation" in w00.lower() else "UNKNOWN"
+        result.append({
+            "sku": sku,
+            "market": "OK" if re.search(r"all five.*available|all five.*Продается", w00, re.I) else "UNKNOWN",
+            "visibility": visibility,
+            "seller_integrity": seller,
+            "customer_compatibility": customer,
+            "advertising": advertising,
+            "finance": finance,
+            "attention": attention,
+        })
+    return result
+
+
+def build_operating_layer() -> dict[str, Any]:
+    paths = {work_id: _latest_report_path(work_id) for work_id in WORK_METADATA}
+    reports = {work_id: _read_text(path) for work_id, path in paths.items()}
+    index_text = _read_text(OZON_AGENTS_ROOT / "INDEX.md")
+    w00, w01, w02, w08, w06 = (reports[key] for key in ("W00", "W01", "W02", "W08", "W06"))
+    report_date = _report_date(paths["W00"]) or max(
+        (value for value in (_report_date(path) for path in paths.values()) if value),
+        default=None,
+    )
+    works = []
+    for work_id, metadata in WORK_METADATA.items():
+        text = reports[work_id]
+        if work_id in {"W04", "W05"} and not text:
+            status = _on_demand_status(work_id, index_text)
+        else:
+            status = _work_status(work_id, text)
+        works.append({
+            "id": work_id,
+            **metadata,
+            "status": status,
+            "last_run": _report_date(paths[work_id]) or "NOT AVAILABLE",
+            "freshness": _work_freshness(work_id, text),
+            **_work_metrics(work_id, text),
+            "external_write": "NONE",
+            "report_available": paths[work_id] is not None,
+            "report_url": f"/work-report?work={work_id}" if paths[work_id] else None,
+        })
+
+    if _work_status("W00", w00) == "COMPLETED":
+        for work in works:
+            if work["mode"] != "ON DEMAND" and work["last_run"] != "NOT AVAILABLE":
+                work["pending_handoffs"] = 0
+
+    blockers = _blockers(w08)
+    owner_attention = _owner_attention(w00)
+    owner_decisions = _int_match(w00, r"Owner decisions required:\s*`?(\d+)")
+    active_blockers = len(blockers) or _int_match(w08, r"Active financial blockers:\s*`?(\d+)") or 0
+    advertising = {
+        "active_cpc": _int_match(w00, r"Confirmed active CPC\s*\|\s*`?(\d+)") ,
+        "archived_cpc": _int_match(w00, r"Archived CPC\s*\|\s*`?(\d+)") ,
+        "spend": _first_match(w00, r"Completed-period spend\s*\|\s*`?([^|`]+)"),
+        "campaign_sales": _first_match(w00, r"Campaign grain\s*\|\s*`?([^/|`]+)"),
+        "campaign_drr": _first_match(w00, r"Campaign grain\s*\|\s*`?[^/|`]+/\s*DRR\s*([^|`]+)"),
+        "product_sales": _first_match(w00, r"Product grain\s*\|\s*`?([^/|`]+)"),
+        "product_drr": _first_match(w00, r"Product grain\s*\|\s*`?[^/|`]+/\s*DRR\s*([^|`]+)"),
+        "attribution": _first_match(w00, r"Attribution\s*\|\s*`?([^|`]+)"),
+        "cpo_state": _first_match(w00, r"CPO lifecycle\s*\|\s*`?([^|`]+)"),
+    }
+    financial = {
+        "status": _work_status("W06", w06),
+        "confirmed_numeric_bounds": _int_match(w06, r"Confirmed numeric (?:CPC/DRR/spend/bid )?bounds\s*\|\s*(\d+)", r"Confirmed numeric bounds:\s*`?(\d+)"),
+        "unified_attributed_sales": _first_match(w06, r"Unified attributed sales confirmed\s*\|\s*`?([^|`]+)", r"Unified attributed sales:\s*`?([^`\n]+)"),
+        "unified_drr": _first_match(w06, r"Unified DRR confirmed\s*\|\s*`?([^|`]+)", r"Unified DRR:\s*`?([^`\n]+)"),
+        "revalidation": _first_match(w06, r"Input reconciliation status:\*{0,2}\s*`([^`]+)`"),
+    }
+    commercial = {
+        "diagnosis": _first_match(w08, r"Commercial diagnosis status:\s*`([^`]+)`"),
+        "sku_attention": _int_match(w08, r"SKU requiring commercial attention:\s*`?(\d+)"),
+        "cpc_restart": _first_match(w08, r"\|\s*CPC restart supported now\s*\|\s*`?([^|`]+)"),
+        "controlled_test": _first_match(w08, r"\|\s*Controlled commercial test warranted\s*\|\s*`?([^|`]+)"),
+        "proposals": _int_match(w08, r"Commercial test proposals:\s*`?(\d+)"),
+        "financial_validation_required": _first_match(w08, r"W06 re-validation required:\s*`?([^`—\n]+)"),
+        "owner_decision": "YES" if (owner_decisions or 0) > 0 else "NO",
+    }
+    report_items = []
+    for work_id in ("W00", "W07", "W08", "W06", "W03", "W02", "W01"):
+        path = paths[work_id]
+        if path:
+            report_items.append({
+                "work": work_id,
+                "name": path.name,
+                "date": _report_date(path),
+                "url": f"/work-report?work={work_id}",
+            })
+    return {
+        "available": bool(w00),
+        "report_date": report_date or "NOT AVAILABLE",
+        "global": {
+            "daily_cycle": _work_status("W00", w00),
+            "audit": _first_match(w00, r"Audit outcome\s*\|\s*`?([^|`]+)"),
+            "owner_decisions_required": owner_decisions if owner_decisions is not None else 0,
+            "owner_attention_count": len(owner_attention),
+            "active_blockers_count": active_blockers,
+            "execution_plane": "NOT READY",
+            "external_write": "DISABLED",
+        },
+        "owner_attention": owner_attention,
+        "blockers": blockers,
+        "works": works,
+        "commercial": commercial,
+        "advertising": advertising,
+        "financial": financial,
+        "sku_health": _sku_health(w00, w01, w02),
+        "daily_flow": {
+            "primary": ["W01", "W02", "W03", "W08", "W06", "W07", "W00"],
+            "on_demand": ["W04", "W05"],
+            "pending_handoffs": [],
+        },
+        "reports": report_items,
+        "sources": ["INDEX.md", "PROJECT_MAP.md", "latest W00–W08 reports"],
+    }
+
+
+def build_legacy_status() -> dict[str, Any]:
+    """Retained legacy diagnostics, never part of the active W00–W08 status path."""
     now = datetime.now(UTC)
     report, _ = report_snapshot(REPORT_PATH)
     try:
@@ -397,6 +725,8 @@ def build_status() -> dict[str, Any]:
         },
         "collectors": collectors,
         "last_data_update": _fmt_dt(latest_data),
+        # Source-row timestamps do not prove completion of a collector run.
+        "last_successful_collection": None,
         "analyst": {
             "last": report.get("modified", "Нет данных"),
             "next": _fmt_dt(next_run),
@@ -410,6 +740,35 @@ def build_status() -> dict[str, Any]:
         },
         "attention": report,
         "competitor_monitor": load_competitor_summary(),
+        "operating_layer": build_operating_layer(),
+        "control_center": read_model.build(OZON_AGENTS_ROOT, WORK_METADATA, now),
+    }
+
+
+def build_status() -> dict[str, Any]:
+    now = datetime.now(UTC)
+    model = read_model.build(OZON_AGENTS_ROOT, WORK_METADATA, now)
+    finance_check = model['finance']['snapshots']['CURRENT_MONTH']['provider_check']
+    # Required local visibility sources only. No legacy DB query or n8n health probe.
+    return {
+        'generated_at': _fmt_dt(now),
+        'system': {'w06_snapshot': finance_check['status'],
+                   'reports': 'AVAILABLE' if any(w['last_run'] for w in model['works']) else 'NO_DATA'},
+        'finance_provider': finance_check,
+        'optional_sources': {
+            'postgresql': {'classification': 'LEGACY_OPTIONAL', 'status': 'NOT_PROBED',
+                           'required_for_control_center': False},
+            'mcp': {'classification': 'LEGACY_OPTIONAL', 'status': 'NOT_PROBED',
+                    'required_for_control_center': False},
+        },
+        'legacy_systems': {'classification': 'LEGACY_UNUSED',
+                          'components': ['n8n', 'OPFINDAILYV1', 'old Daily Brief', 'collector statuses']},
+        # Old API keys remain inert for compatibility; no legacy reads or alerts.
+        'collectors': [], 'last_data_update': None, 'last_successful_collection': None,
+        'analyst': {'last': None, 'next': None, 'schedule': 'LEGACY_UNUSED'},
+        'delivery': {'last': {'label': 'LEGACY_UNUSED'}, 'next': None, 'schedule': 'LEGACY_UNUSED'},
+        'attention': {},
+        'control_center': model,
     }
 
 
@@ -566,17 +925,37 @@ def render_detail(kind: str, report: str) -> str:
 <main class='detail-wrap'><a class='back' href='/'>← Control Center</a><h1>{html.escape(title)}</h1>{content}</main></body></html>"""
 
 
+def render_work_report(work_id: str, filename: str, report: str) -> str:
+    metadata = WORK_METADATA.get(work_id, {"name": "Source evidence"})
+    title = f"{work_id} — {metadata['name']}"
+    return f"""<!doctype html><html lang='ru'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
+<title>{html.escape(title)} — EFA OS</title><link rel='stylesheet' href='/static/styles.css'></head><body>
+<main class='detail-wrap'><a class='back' href='/'>← Control Center</a><p class='detail-snapshot'>{html.escape(filename)}</p><h1>{html.escape(title)}</h1><pre class='report'>{html.escape(report)}</pre></main></body></html>"""
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "EFA-Control-Center/1.0"
 
     def do_GET(self) -> None:  # noqa: N802
-        path = urlsplit(self.path).path
+        request = urlsplit(self.path)
+        path = request.path
         if path == "/":
             self._file(STATIC_DIR / "index.html", "text/html; charset=utf-8")
         elif path == "/capabilities":
             self._file(STATIC_DIR / "capabilities.html", "text/html; charset=utf-8")
         elif path == "/api/status":
             self._json(build_status())
+        elif path == "/api/finance":
+            params = parse_qs(request.query, keep_blank_values=True)
+            period = params.get('period', ['CURRENT_MONTH'])[0]
+            period = current_finance.PRESETS.get(period, period)
+            if set(params) - {'period'} or len(params.get('period', [])) > 1:
+                self._json({'error': 'INVALID_FINANCE_PERIOD'}, HTTPStatus.BAD_REQUEST)
+                return
+            try:
+                self._json(current_finance.get_snapshot(OZON_AGENTS_ROOT, period))
+            except ValueError:
+                self._json({'error': 'INVALID_FINANCE_PERIOD'}, HTTPStatus.BAD_REQUEST)
         elif path == "/healthz":
             self._json({"status": "ok", "service": "efa-control-center"})
         elif path.startswith("/static/") and path.removeprefix("/static/") in {
@@ -593,6 +972,33 @@ class Handler(BaseHTTPRequestHandler):
         elif path in {"/report", "/prices", "/stocks", "/cpc", "/collectors", "/competitors"}:
             _, report = report_snapshot(REPORT_PATH)
             body = render_detail(path.lstrip("/"), report).encode("utf-8")
+            self._send(HTTPStatus.OK, body, "text/html; charset=utf-8")
+        elif path == "/work-report":
+            work_id = parse_qs(request.query).get("work", [""])[0].upper()
+            report_path = _latest_report_path(work_id) if work_id in WORK_METADATA else None
+            report = _read_text(report_path)
+            if not report_path or not report:
+                self._json({"error": "report_unavailable"}, HTTPStatus.NOT_FOUND)
+                return
+            body = render_work_report(work_id, report_path.name, report).encode("utf-8")
+            self._send(HTTPStatus.OK, body, "text/html; charset=utf-8")
+        elif path == "/agent-source":
+            source = parse_qs(request.query).get("path", [""])[0]
+            root = OZON_AGENTS_ROOT.resolve()
+            source_root = (root.parent / "REPORTS").resolve() if source.startswith("repository-reports/") else root
+            relative = source.removeprefix("repository-reports/") if source.startswith("repository-reports/") else source
+            candidate = (source_root / relative).resolve()
+            # Only reports/governance exposed by the projection, never arbitrary files.
+            allowed = set(read_model.build(root, WORK_METADATA)["sources"])
+            snapshot_json = (candidate.suffix == '.json' and
+                             candidate.is_relative_to((root / 'REPORTS/W06/SNAPSHOTS').resolve()))
+            if source not in allowed or not candidate.is_relative_to(source_root) or (candidate.suffix != ".md" and not snapshot_json):
+                self._json({"error": "source_unavailable"}, HTTPStatus.NOT_FOUND)
+                return
+            if snapshot_json:
+                self._file(candidate, 'application/json; charset=utf-8')
+                return
+            body = render_work_report("SOURCE", candidate.name, _read_text(candidate)).encode("utf-8")
             self._send(HTTPStatus.OK, body, "text/html; charset=utf-8")
         elif path == "/n8n":
             self.send_response(HTTPStatus.FOUND)

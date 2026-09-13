@@ -1,0 +1,863 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "efa_w06_finance_snapshot.v1",
+  "type": "object",
+  "required": [
+    "schema",
+    "generated_at",
+    "period",
+    "source_status",
+    "financial_mode",
+    "settlement_status",
+    "freshness",
+    "layers",
+    "source_comparisons",
+    "portfolio",
+    "skus",
+    "reconciliation",
+    "warnings",
+    "evidence"
+  ],
+  "properties": {
+    "schema": {
+      "const": "efa_w06_finance_snapshot.v1"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "period": {
+      "type": "object",
+      "required": [
+        "preset",
+        "from",
+        "to",
+        "timezone"
+      ],
+      "properties": {
+        "preset": {
+          "enum": [
+            "TODAY",
+            "YESTERDAY",
+            "LAST_7_DAYS",
+            "LAST_30_DAYS",
+            "CURRENT_MONTH",
+            "PREVIOUS_MONTH",
+            "AUGUST_2026"
+          ]
+        },
+        "from": {
+          "type": "string",
+          "format": "date"
+        },
+        "to": {
+          "type": "string",
+          "format": "date"
+        },
+        "timezone": {
+          "const": "Europe/Moscow"
+        }
+      },
+      "additionalProperties": false
+    },
+    "source_status": {
+      "enum": [
+        "AVAILABLE",
+        "PARTIAL",
+        "INSUFFICIENT_DATA"
+      ]
+    },
+    "financial_mode": {
+      "enum": [
+        "INSUFFICIENT_DATA",
+        "OBSERVED",
+        "SELLER_SIDE_PROXY",
+        "MIXED_OBSERVED_PROXY",
+        "SETTLEMENT_AWARE"
+      ]
+    },
+    "settlement_status": {
+      "enum": [
+        "INSUFFICIENT_SETTLEMENT_DATA",
+        "CORRECTED_FINAL_SETTLEMENT",
+        "FINAL_SETTLEMENT"
+      ]
+    },
+    "freshness": {
+      "type": "object",
+      "required": [
+        "status",
+        "observed_at",
+        "valid_until"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "FRESH",
+            "STALE",
+            "UNKNOWN",
+            "NO_DATA",
+            "HISTORICAL_REFERENCE"
+          ]
+        },
+        "observed_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "valid_until": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        }
+      },
+      "additionalProperties": false
+    },
+    "layers": {
+      "type": "object",
+      "required": [
+        "demand",
+        "operational_economics",
+        "account_finance",
+        "cost",
+        "settlement"
+      ],
+      "properties": {
+        "demand": { "$ref": "#/$defs/layer" },
+        "operational_economics": { "$ref": "#/$defs/layer" },
+        "account_finance": { "$ref": "#/$defs/layer" },
+        "cost": { "$ref": "#/$defs/layer" },
+        "settlement": { "$ref": "#/$defs/layer" }
+      },
+      "additionalProperties": false
+    },
+    "source_comparisons": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/source_comparison" }
+    },
+    "portfolio": {
+      "$ref": "#/$defs/entity"
+    },
+    "skus": {
+      "type": "array",
+      "minItems": 5,
+      "maxItems": 5,
+      "items": {
+        "$ref": "#/$defs/sku"
+      }
+    },
+    "reconciliation": {
+      "type": "object",
+      "required": [
+        "status",
+        "fields"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "PASS",
+            "GAP",
+            "INSUFFICIENT_DATA"
+          ]
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "field",
+              "portfolio",
+              "sku_sum",
+              "gap",
+              "status"
+            ],
+            "properties": {
+              "field": {
+                "enum": [
+                  "ordered_units",
+                  "delivered_units",
+                  "returned_units",
+                  "buyer_returned_units",
+                  "logistic_return_units",
+                  "ordered_revenue",
+                  "seller_realization",
+                  "cogs",
+                  "ozon_commission",
+                  "logistics",
+                  "last_mile",
+                  "processing",
+                  "acquiring",
+                  "advertising_cpc",
+                  "advertising_cpo",
+                  "advertising_total",
+                  "compensations",
+                  "other_costs",
+                  "contribution_rub",
+                  "contribution_pct",
+                  "profit_rub",
+                  "profit_pct"
+                ]
+              },
+              "portfolio": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "pattern": "^-?\\d+(\\.\\d+)?$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "sku_sum": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "pattern": "^-?\\d+(\\.\\d+)?$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "gap": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "pattern": "^-?\\d+(\\.\\d+)?$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "status": {
+                "enum": [
+                  "PASS",
+                  "GAP",
+                  "INSUFFICIENT_DATA"
+                ]
+              }
+            }
+          }
+        },
+        "reconciliation_gap_rub": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string",
+              "pattern": "^-?\\d+(\\.\\d+)?$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "gap_reasons": {
+          "type": "array"
+        }
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "source",
+          "source_timestamp",
+          "confirmation",
+          "limitation"
+        ],
+        "properties": {
+          "source": {
+            "type": "string",
+            "minLength": 1
+          },
+          "source_timestamp": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "confirmation": {
+            "type": "string"
+          },
+          "limitation": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "layer": {
+      "type": "object",
+      "required": [
+        "source_status",
+        "financial_mode",
+        "freshness",
+        "confidence",
+        "date_basis",
+        "cohort_basis",
+        "source"
+      ],
+      "properties": {
+        "source_status": { "enum": ["AVAILABLE", "PARTIAL", "INCOMPLETE", "INSUFFICIENT_DATA"] },
+        "financial_mode": {
+          "enum": ["INSUFFICIENT_DATA", "OBSERVED", "SELLER_SIDE_PROXY", "MIXED_OBSERVED_PROXY", "SETTLEMENT_AWARE"]
+        },
+        "freshness": { "enum": ["FRESH", "STALE", "UNKNOWN", "NO_DATA", "HISTORICAL_REFERENCE"] },
+        "confidence": { "enum": ["HIGH", "MEDIUM", "LOW", "UNKNOWN"] },
+        "date_basis": { "type": ["string", "null"] },
+        "cohort_basis": { "type": ["string", "null"] },
+        "source": { "type": ["string", "null"] }
+      },
+      "additionalProperties": false
+    },
+    "source_comparison": {
+      "type": "object",
+      "required": [
+        "metric", "source_a", "value_a", "basis_a", "source_b", "value_b",
+        "basis_b", "classification", "unresolved_reason"
+      ],
+      "properties": {
+        "metric": { "type": "string", "minLength": 1 },
+        "source_a": { "type": "string", "minLength": 1 },
+        "value_a": {
+          "anyOf": [
+            { "type": "number" },
+            { "type": "string", "pattern": "^-?\\d+(\\.\\d+)?$" },
+            { "type": "null" }
+          ]
+        },
+        "basis_a": { "$ref": "#/$defs/comparison_basis" },
+        "source_b": { "type": "string", "minLength": 1 },
+        "value_b": {
+          "anyOf": [
+            { "type": "number" },
+            { "type": "string", "pattern": "^-?\\d+(\\.\\d+)?$" },
+            { "type": "null" }
+          ]
+        },
+        "basis_b": { "$ref": "#/$defs/comparison_basis" },
+        "classification": {
+          "enum": ["TRUE_DATA_CONFLICT", "SEMANTIC_SOURCE_DIFFERENCE", "UNRESOLVED_BUT_SEMANTICALLY_EXPLAINABLE"]
+        },
+        "unresolved_reason": { "type": ["string", "null"] }
+      },
+      "additionalProperties": false
+    },
+    "comparison_basis": {
+      "type": "object",
+      "required": ["metric_definition", "date_basis", "cohort_basis", "lifecycle_state"],
+      "properties": {
+        "metric_definition": { "type": "string" },
+        "date_basis": { "type": "string" },
+        "cohort_basis": { "type": "string" },
+        "lifecycle_state": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "entity": {
+      "type": "object",
+      "required": [
+        "ordered_units",
+        "delivered_units",
+        "returned_units",
+        "buyer_returned_units",
+        "logistic_return_units",
+        "ordered_revenue",
+        "seller_realization",
+        "cogs",
+        "ozon_commission",
+        "logistics",
+        "last_mile",
+        "processing",
+        "acquiring",
+        "advertising_cpc",
+        "advertising_cpo",
+        "advertising_total",
+        "compensations",
+        "other_costs",
+        "contribution_rub",
+        "contribution_pct",
+        "profit_rub",
+        "profit_pct",
+        "field_metadata"
+      ],
+      "properties": {
+        "ordered_units": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string",
+              "pattern": "^-?\\d+(\\.\\d+)?$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "delivered_units": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string",
+              "pattern": "^-?\\d+(\\.\\d+)?$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "returned_units": {
+          "type": "null"
+        },
+        "buyer_returned_units": {
+          "anyOf": [
+            { "type": "number" },
+            { "type": "string", "pattern": "^-?\\d+(\\.\\d+)?$" },
+            { "type": "null" }
+          ]
+        },
+        "logistic_return_units": {
+          "anyOf": [
+            { "type": "number" },
+            { "type": "string", "pattern": "^-?\\d+(\\.\\d+)?$" },
+            { "type": "null" }
+          ]
+        },
+        "ordered_revenue": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string",
+              "pattern": "^-?\\d+(\\.\\d+)?$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "seller_realization": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string",
+              "pattern": "^-?\\d+(\\.\\d+)?$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "cogs": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string",
+              "pattern": "^-?\\d+(\\.\\d+)?$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ozon_commission": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string",
+              "pattern": "^-?\\d+(\\.\\d+)?$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "logistics": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string",
+              "pattern": "^-?\\d+(\\.\\d+)?$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "last_mile": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string",
+              "pattern": "^-?\\d+(\\.\\d+)?$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "processing": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string",
+              "pattern": "^-?\\d+(\\.\\d+)?$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "acquiring": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string",
+              "pattern": "^-?\\d+(\\.\\d+)?$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "advertising_cpc": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string",
+              "pattern": "^-?\\d+(\\.\\d+)?$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "advertising_cpo": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string",
+              "pattern": "^-?\\d+(\\.\\d+)?$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "advertising_total": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string",
+              "pattern": "^-?\\d+(\\.\\d+)?$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "compensations": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string",
+              "pattern": "^-?\\d+(\\.\\d+)?$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "other_costs": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string",
+              "pattern": "^-?\\d+(\\.\\d+)?$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "contribution_rub": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string",
+              "pattern": "^-?\\d+(\\.\\d+)?$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "contribution_pct": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string",
+              "pattern": "^-?\\d+(\\.\\d+)?$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "profit_rub": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string",
+              "pattern": "^-?\\d+(\\.\\d+)?$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "profit_pct": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string",
+              "pattern": "^-?\\d+(\\.\\d+)?$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "complete_costs": {
+          "type": "boolean"
+        },
+        "field_metadata": {
+          "type": "object",
+          "required": [
+            "ordered_units",
+            "delivered_units",
+            "returned_units",
+            "buyer_returned_units",
+            "logistic_return_units",
+            "ordered_revenue",
+            "seller_realization",
+            "cogs",
+            "ozon_commission",
+            "logistics",
+            "last_mile",
+            "processing",
+            "acquiring",
+            "advertising_cpc",
+            "advertising_cpo",
+            "advertising_total",
+            "compensations",
+            "other_costs",
+            "contribution_rub",
+            "contribution_pct",
+            "profit_rub",
+            "profit_pct"
+          ],
+          "additionalProperties": {
+            "type": "object",
+            "required": [
+              "source",
+              "semantic",
+              "source_timestamp",
+              "confidence",
+              "financial_mode"
+            ],
+            "properties": {
+              "source": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "source_timestamp": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              },
+              "confidence": {
+                "enum": [
+                  "HIGH",
+                  "MEDIUM",
+                  "LOW",
+                  "UNKNOWN"
+                ]
+              },
+              "financial_mode": {
+                "enum": [
+                  "INSUFFICIENT_DATA",
+                  "OBSERVED",
+                  "SELLER_SIDE_PROXY",
+                  "MIXED_OBSERVED_PROXY",
+                  "SETTLEMENT_AWARE"
+                ]
+              },
+              "semantic": {
+                "enum": [
+                  "ordered_units",
+                  "delivered_units",
+                  "returned_units",
+                  "buyer_returned_units",
+                  "logistic_return_units",
+                  "ordered_revenue",
+                  "seller_realization",
+                  "cogs",
+                  "ozon_commission",
+                  "logistics",
+                  "last_mile",
+                  "processing",
+                  "acquiring",
+                  "advertising_cpc",
+                  "advertising_cpo",
+                  "advertising_total",
+                  "compensations",
+                  "other_costs",
+                  "contribution_rub",
+                  "contribution_pct",
+                  "profit_rub",
+                  "profit_pct"
+                ]
+              },
+              "basis": {
+                "type": "string"
+              },
+              "scope": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "missing_reason": {
+                "type": "string"
+              },
+              "missing_components": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "presentation_metrics": {
+          "type": "object"
+        }
+      }
+    },
+    "sku": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/entity"
+        },
+        {
+          "type": "object",
+          "required": [
+            "efa_sku",
+            "ozon_sku",
+            "commercial_role",
+            "financial_gate"
+          ],
+          "properties": {
+            "efa_sku": {
+              "enum": [
+                "УФ 001Б",
+                "УФ 002Б",
+                "УФ 003Б",
+                "УФ 004Б",
+                "УФ 005Б"
+              ]
+            },
+            "ozon_sku": {
+              "enum": [
+                4601821825,
+                4642158029,
+                4671345564,
+                4642180551,
+                4671328307
+              ]
+            },
+            "commercial_role": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "financial_gate": {
+              "type": "string"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "$comment": "Runtime validation also enforces exact SKU mapping, W06 validity, exact requested period, field provenance, settlement/profit gates and no presentation overrides. Schema validation alone is not financial audit PASS."
+}
