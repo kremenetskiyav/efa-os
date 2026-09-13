@@ -301,6 +301,103 @@ def validate(snapshot, now):
     return snapshot
 
 
+def audit_august_direct_cpc(snapshot):
+    """Exact August 2026 historical profile; verify, never allocate or rewrite."""
+    def require(ok, reason):
+        if not ok:
+            raise ValueError('AUGUST_PROXY_' + reason)
+
+    period = snapshot['period']
+    require(period == {'preset': 'AUGUST_2026', 'from': '2026-08-01',
+                       'to': '2026-08-31', 'timezone': 'Europe/Moscow'}, 'PERIOD')
+    require(snapshot['financial_mode'] == 'SELLER_SIDE_PROXY'
+            and snapshot['settlement_status'] == 'INSUFFICIENT_SETTLEMENT_DATA'
+            and snapshot['source_status'] == 'PARTIAL'
+            and snapshot['freshness']['status'] == 'HISTORICAL_REFERENCE', 'PROFILE')
+    portfolio, skus = snapshot['portfolio'], snapshot['skus']
+    recon = snapshot['reconciliation']
+    require(recon.get('allocation_rule') == 'NO_SYNTHETIC_ALLOCATION', 'ALLOCATION')
+    sources = {e['source'] for e in snapshot['evidence']}
+    def shown(entity, name):
+        meta = entity.get('presentation_metrics', {}).get(name, {})
+        value = number(meta.get('value'))
+        require(value is not None and meta.get('source') in sources
+                and meta.get('observed_at')
+                and meta.get('period') == {'from': period['from'], 'to': period['to']},
+                'PRESENTATION_PROVENANCE_' + name)
+        return value
+
+    before, matched, after = [], [], []
+    expenses = ('ozon_commission', 'acquiring', 'logistics', 'processing',
+                'last_mile', 'other_costs')
+    for entity in [portfolio, *skus]:
+        require(entity['profit_rub'] is None and entity['profit_pct'] is None
+                and entity.get('tax') is None and entity.get('tax_rub') is None
+                and entity.get('complete_costs') is False, 'SETTLEMENT_LIMITS')
+        pm = entity.get('presentation_metrics', {})
+        require(all(pm.get(k, {}).get('value') is None
+                    for k in ('tax', 'profit_before_tax', 'settlement_profit')), 'TAX_PROFIT')
+        for field in ('cogs', 'contribution_rub'):
+            meta = entity['field_metadata'][field]
+            require(meta.get('financial_mode') == 'SELLER_SIDE_PROXY'
+                    and meta.get('source') in sources and meta.get('source_timestamp'), 'PROVENANCE')
+        require({'historical_effective_cogs', 'tax', 'settlement_adjustments'} <=
+                set(entity['field_metadata']['contribution_rub'].get('missing_components', [])),
+                'COGS_LIMITATION')
+        if entity is portfolio:
+            continue
+        cpc = number(entity['advertising_cpc'])
+        require(cpc is not None and cpc >= 0 and entity['advertising_cpo'] is None
+                and number(entity['advertising_total']) == cpc
+                and 'сопоставленный со SKU CPC' in entity['field_metadata']['advertising_cpc'].get('scope', ''),
+                'DIRECT_MATCHED_CPC')
+        costs = [number(entity[f]) for f in expenses]
+        require(all(v is not None and v >= 0 for v in costs), 'COSTS')
+        cost_total = sum(costs, Decimal(0)) + shown(entity, 'return_logistics') + shown(entity, 'return_processing')
+        require(shown(entity, 'ozon_expenses') == cost_total, 'EXPENSES')
+        b = shown(entity, 'contribution_before_ads')
+        require(b == number(entity['seller_realization']) - number(entity['cogs']) - cost_total, 'BEFORE_ADS')
+        a = number(entity['contribution_rub'])
+        require(a == b - cpc and shown(entity, 'proxy_result') == a, 'SKU_CONTRIBUTION')
+        revenue = number(entity['seller_realization'])
+        require(revenue is not None and revenue > 0
+                and abs(number(entity['contribution_pct']) - a / revenue * 100) <= Decimal('0.01'), 'SKU_MARGIN')
+        before.append(b); matched.append(cpc); after.append(a)
+    total_cpc, total_cpo = number(portfolio['advertising_cpc']), number(portfolio['advertising_cpo'])
+    require(total_cpc is not None and total_cpo is not None and total_cpo >= 0, 'AD_TOTALS')
+    unallocated_cpc = total_cpc - sum(matched, Decimal(0))
+    other = number(portfolio['other_costs']) - sum(number(s['other_costs']) for s in skus)
+    require(unallocated_cpc >= 0 and other >= 0, 'NEGATIVE_UNALLOCATED')
+    ads = unallocated_cpc + total_cpo
+    require(number(portfolio['advertising_total']) == total_cpc + total_cpo
+            and shown(portfolio, 'contribution_before_ads') == sum(before, Decimal(0)), 'PORTFOLIO_TOTALS')
+    expected = sum(after, Decimal(0)) - ads - other
+    gap = number(portfolio['contribution_rub']) - expected
+    bridge = recon.get('presentation_bridge', {})
+    reasons = {r['reason']: number(r['amount_rub']) for r in recon.get('gap_reasons', [])}
+    require(len(reasons) == len(recon.get('gap_reasons', []))
+            and set(reasons) == {'UNALLOCATED_ADVERTISING', 'ACCOUNT_LEVEL_CHARGE', 'PREMIUM_EXCLUDED_FROM_CONTRIBUTION'}
+            and reasons['UNALLOCATED_ADVERTISING'] == ads
+            and reasons['ACCOUNT_LEVEL_CHARGE'] == other
+            and reasons['PREMIUM_EXCLUDED_FROM_CONTRIBUTION'] == shown(portfolio, 'premium'), 'GAP_REASONS')
+    require(gap == 0 and number(recon.get('unexplained_gap_rub')) == 0
+            and number(recon.get('reconciliation_gap_rub')) == -ads - other
+            and number(bridge.get('unallocated_advertising')) == ads
+            and number(bridge.get('unallocated_other')) == other
+            and number(bridge.get('unexplained_difference')) == 0
+            and bridge.get('status') == 'PASS', 'BRIDGE')
+    require({'advertising_cpc', 'advertising_total', 'other_costs', 'contribution_rub'} <=
+            {r['field'] for r in recon['fields']}, 'RECONCILIATION_FIELDS')
+    require(shown(portfolio, 'proxy_result') == expected, 'PORTFOLIO_PROXY')
+    return {'profile': 'AUGUST_2026_DIRECT_MATCHED_CPC_V1',
+            'contribution_before_ads': str(sum(before, Decimal(0))),
+            'direct_matched_cpc': str(sum(matched, Decimal(0))),
+            'unallocated_cpc': str(unallocated_cpc), 'unallocated_cpo': str(total_cpo),
+            'total_advertising_impact': str(total_cpc + total_cpo),
+            'other_unallocated': str(other), 'portfolio_contribution': str(expected),
+            'unexplained_gap_rub': str(gap.quantize(Decimal('0.01')))}
+
+
 def audit(snapshot, now):
     """W07 structural/reconciliation audit; never derives business economics."""
     validate(snapshot, now)
@@ -327,7 +424,11 @@ def audit(snapshot, now):
     skus = snapshot['skus']
     proxy_present = portfolio['contribution_rub'] is not None
     proxy_valid = False
-    if proxy_present:
+    historical_bridge = None
+    if proxy_present and snapshot['period']['preset'] == 'AUGUST_2026':
+        historical_bridge = audit_august_direct_cpc(snapshot)
+        proxy_valid = True
+    elif proxy_present:
         expense_fields = ('ozon_commission', 'acquiring', 'logistics',
                           'processing', 'last_mile', 'other_costs')
         before_values = []
@@ -410,7 +511,8 @@ def audit(snapshot, now):
         audit_result = 'SEMANTIC_SOURCE_DIFFERENCE'
     else:
         audit_result = 'PASS'
-    return {'schema': 'PASS', 'period': 'PASS', 'freshness': status,
+    return {**({'historical_proxy_bridge': historical_bridge} if historical_bridge else {}),
+            'schema': 'PASS', 'period': 'PASS', 'freshness': status,
             'source_provenance': 'PASS', 'buyer_price_exclusion': 'PASS',
             'contribution_profit_semantics': 'PASS',
             'contribution_proxy': ('PASS' if proxy_valid else
