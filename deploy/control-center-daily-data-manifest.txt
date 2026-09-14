@@ -1,0 +1,20 @@
+CONTROL_CENTER_V3_DAILY_DATA_BUNDLE_20260914_V1
+Validation: PASS
+Files: 4
+SHA256: 0aea86e6affefe80a95b5216b402fd6f31dc7c30276ee7d0cc5baf3b40a1f661
+Bytes: 20536
+Verified UTC: 2026-09-14T05:21:37.757113+00:00
+Target root: /opt/efa-os/
+
+relative path | size bytes | SHA256 | period | audit status | purpose
+OZON_AI_AGENTS/REPORTS/W06/SNAPSHOTS/2026-09-14/W06_FINANCE_SNAPSHOT_YESTERDAY_V1.json | 91552 | b02c04dd43c73c576621f772033fa4944ca6e212dd51282671299297269b0668 | YESTERDAY 2026-09-13..2026-09-13 | PARTIAL_VALID | Canonical daily W06 YESTERDAY
+OZON_AI_AGENTS/REPORTS/W06/SNAPSHOTS/2026-09-14/W06_FINANCE_SNAPSHOT_LAST_7_DAYS_V1.json | 92583 | a07edb30318576acfce85b1bfdcfc38f31545c213b2d7efdfd1bb9a9d8af2bbd | LAST_7_DAYS 2026-09-07..2026-09-13 | PARTIAL_VALID | Canonical daily W06 LAST_7_DAYS
+OZON_AI_AGENTS/REPORTS/W06/SNAPSHOTS/2026-09-14/W06_FINANCE_SNAPSHOT_CURRENT_MONTH_V1.json | 93015 | e069e428ec123415889aaefe0ba006dfd9c4e5044389ad5f7f428f3e0315ee50 | CURRENT_MONTH 2026-09-01..2026-09-13 | PARTIAL_VALID | Canonical daily W06 CURRENT_MONTH
+OZON_AI_AGENTS/REPORTS/W06/SNAPSHOTS/CURRENT_FINANCE_SNAPSHOT_V1.json | 91552 | b02c04dd43c73c576621f772033fa4944ca6e212dd51282671299297269b0668 | YESTERDAY 2026-09-13..2026-09-13 | PARTIAL_VALID | Current pointer for YESTERDAY
+
+All supplied financial reference checks: PASS. TRUE_DATA_CONFLICT: 0.
+Archive extraction hashes, exact-period reader selection and five SKU: PASS.
+CURRENT equals canonical YESTERDAY 2026-09-13. Source snapshot bytes unchanged.
+Freshness remains UNKNOWN; settlement remains INSUFFICIENT_SETTLEMENT_DATA; profit remains null.
+Only four named JSON snapshots are included. No August, source evidence files, XLSX, W01/W04/W08 reports, application code or credentials.
+Production unchanged. No main change.
