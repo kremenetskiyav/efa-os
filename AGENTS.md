@@ -78,6 +78,14 @@
 - Read `docs/TRANSFER_RECOVERY.md` for backup, transfer, and recovery work.
 - Prefer the relevant profile document over duplicating subsystem rules here.
 
+### Ozon experiment prerequisite
+
+For any deliberate Ozon test intended to measure business impact — including price, CPO/advertising, promotions or boosting, listing content, FBO/FBS, or another controlled marketplace change — first read `docs/marketplace/OZON_EXPERIMENTS.md`.
+
+Use or create one experiment block before execution when practical. Keep one principal controlled change, declare evidence sources and acceptance criteria in advance, and mark material uncontrolled changes as potential confounders.
+
+The experiment spec is not Ozon WRITE approval. All production/external-write rules above still apply.
+
 ### AI Assistants Architecture prerequisite
 
 For any task affecting AI assistants, Coordinator, routing, agent authority,
