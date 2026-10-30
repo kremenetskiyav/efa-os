@@ -1,5 +1,23 @@
 # AGENTS.md
 
+## Current EFA Ozon Cloud — shared rules (Owner 2026-10-30)
+
+**Scope boundary:** This repository contains the legacy EFA OS implementation. Do not assume its VPS, PostgreSQL, n8n, agents, or dashboards are part of the current **EFA Ozon Cloud** workflow. Do not reactivate or expand that architecture for cloud tasks.
+
+**Single canonical instruction set for Work and Codex:** [EFA_CORE_INSTRUCTIONS (Google Drive)](https://docs.google.com/document/d/1K2PLgq_VDQnIWfw-So0YO81Uz3DIBV9gcjpWsuSsZTE/edit). For EFA Ozon Cloud tasks, read and follow its current version; this GitHub file is the Codex entry point and does not establish an independent competing policy. GitHub remains authoritative for versioned code; Google Drive holds the current cloud workflow rules and verified business records. If the canonical document is unavailable, report `NEEDS_VERIFICATION` rather than assuming old instructions remain current. For legacy repository maintenance, keep the applicable repository-specific safeguards below.
+
+**Canonical direct COGS:** [EFA_Себестоимость_закупка_UF001-UF005 (Google Sheets)](https://docs.google.com/spreadsheets/d/16sREkDri9NGY4PeVbXAwr9nHZqOh24ntIDs7xK1EDbA/edit), sheet `Себестоимость`, cells `K7:K11`, with cost breakdown and assumptions on `Расходы`. Only the **actually purchased Series B** for UF001–UF005 is included. Never use virtual Series A, competitor RAF references, historic V6/V7 figures, Seller/customer prices, market prices, or ReStat estimates as a substitute for verified purchase costs. Do not copy the cost workbook or confidential procurement values into this public repository.
+
+**COGS FREEZE:** Do not change purchase prices of filters or consumables, their direct-cost inputs, or the derived COGS in the Google Sheet until a new actual purchase of consumables or filter inventory, supported by its purchase evidence **and explicit Owner approval**. Error corrections likewise need separate Owner approval. Store/maintain historical purchase facts; never silently revalue past inventory or modify the Sheet as a side effect of financial analysis or code changes. This lock does not freeze Ozon *selling* prices, which have their own Owner-approval rule.
+
+**Cost boundaries:** Direct COGS includes paid filters, inbound delivery of the batch, per-item packaging, two thermal labels, and marking cartridge with a **10% ink-loss allowance**. Do not include home rent, electricity, or incidental/walking delivery to the drop-off point, and do not assume VAT refunds or tax deductions for privately paid materials. Ozon marketplace commission, fulfillment/logistics, promotion, tax and Premium overhead are assessed **separately** without double counting. Calculations use the sheet's live formulas, not hard-coded prices.
+
+**Execution boundary:** Default `READ-ONLY`; no Ozon price, ad, listing, stock, promotion, or other changes without explicit Owner approval. For any website access in EFA Ozon Cloud Work/Codex, use only the task's own ChatGPT Cloud Browser; do not substitute a local, connected, or user's browser. Connector access to the verified Google Docs/Sheets is allowed without browsing websites. If Cloud Browser is unavailable, mark the website step `BLOCKED`.
+
+**Keep both stores consistent:** Business and workflow rules are edited in the canonical Google Doc; the GitHub `AGENTS.md` entry point must be reconciled in the same change when its stated boundaries or links change. Do not create a second independent rulebook, or a duplicate cost database.
+
+---
+
 ## Repository identity
 
 - Work only in the Git worktree that contains this file.
