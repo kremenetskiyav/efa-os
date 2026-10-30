@@ -1,5 +1,7 @@
 # efa-os
 
+> **Current EFA Ozon Cloud (2026-10-30):** This repository primarily documents the **legacy EFA OS** stack. Do **not** treat the VPS/PostgreSQL/n8n architecture described below as the current cloud workflow or reactivate it. For current EFA Cloud Work and Codex, the single canonical rulebook is [EFA_CORE_INSTRUCTIONS on Google Drive](https://docs.google.com/document/d/1K2PLgq_VDQnIWfw-So0YO81Uz3DIBV9gcjpWsuSsZTE/edit); [AGENTS.md](AGENTS.md) contains the GitHub/Codex entry-point rules and COGS source link. The architecture below is preserved as legacy project documentation.
+
 EFA OS is the operational system for the EFA automotive cabin air filter brand: OZON marketplace data, PostgreSQL analytics, n8n orchestration, and AI decision support.
 
 ## Business context
